@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LedgerEntryType } from '../models/ngnWallet.js'
 
 export const bankAccountDetailsSchema = z.object({
   accountNumber: z.string().min(10, 'Account number must be 10 digits').max(10, 'Account number must be 10 digits'),
@@ -31,10 +32,12 @@ export const withdrawalHistoryResponseSchema = z.object({
 
 export const ngnBalanceResponseSchema = z.object({
   success: z.boolean().optional(),
-  availableNgn: z.number(),
-  heldNgn: z.number(),
-  totalNgn: z.number(),
+  availableBalanceNgn: z.number(),
+  heldBalanceNgn: z.number(),
+  totalBalanceNgn: z.number(),
 })
+
+export const ledgerEntryTypeSchema = z.nativeEnum(LedgerEntryType)
 
 export const ngnLedgerEntrySchema = z.object({
   id: z.string(),

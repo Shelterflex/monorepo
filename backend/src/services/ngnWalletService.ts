@@ -1,230 +1,318 @@
-import { 
-  WithdrawalRequest, 
-  WithdrawalResponse, 
-  WithdrawalHistoryResponse,
-  NgnBalanceResponse,
-  NgnLedgerResponse,
-  NgnLedgerEntry
+import { randomUUID } from 'node:crypto'
+import {
+  LedgerEntry,
+  LedgerEntryType,
+  NgnWallet,
+  WalletBalance,
+} from '../models/ngnWallet.js'
+import {
+  type WithdrawalRequest,
+  type WithdrawalResponse,
+  type WithdrawalHistoryResponse,
+  type NgnLedgerResponse,
 } from '../schemas/ngnWallet.js'
 import { logger } from '../utils/logger.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 
-export class NgnWalletService {
-  // In-memory storage for demo purposes
-  // In production, this would be replaced with a proper database
-  private withdrawals: WithdrawalResponse[] = []
-  private ledger: NgnLedgerEntry[] = []
-  private balances: Map<string, NgnBalanceResponse> = new Map()
-
-  constructor() {
-    // Initialize with some demo data
-    this.initializeDemoData()
+/**
+ * Returns the available/held balance deltas for a ledger entry.
+ *
+ * amountNgn is the positive magnitude for all types except ADJUSTMENT,
+ * which can be signed. The table below documents each effect:
+ *
+ *   TOPUP_PENDING        held   +amount
+ *   TOPUP_CONFIRMED      avail  +amount
+ *   TOPUP_REVERSED       avail  -amount
+ *   STAKE_RESERVE        avail  -amount  held  +amount
+ *   STAKE_RELEASE        avail  +amount  held  -amount
+ *   CONVERSION_DEBIT     held   -amount
+ *   WITHDRAWAL_PENDING   avail  -amount  held  +amount
+ *   WITHDRAWAL_CONFIRMED held   -amount
+ *   WITHDRAWAL_FAILED    avail  +amount  held  -amount
+ *   ADJUSTMENT           avail  +/-amount (signed)
+ */
+export function computeEffect(
+  type: LedgerEntryType,
+  amountNgn: number,
+): { availableDelta: number; heldDelta: number } {
+  switch (type) {
+    case LedgerEntryType.TOPUP_PENDING:
+      return { availableDelta: 0, heldDelta: +amountNgn }
+    case LedgerEntryType.TOPUP_CONFIRMED:
+      return { availableDelta: +amountNgn, heldDelta: 0 }
+    case LedgerEntryType.TOPUP_REVERSED:
+      return { availableDelta: -amountNgn, heldDelta: 0 }
+    case LedgerEntryType.STAKE_RESERVE:
+      return { availableDelta: -amountNgn, heldDelta: +amountNgn }
+    case LedgerEntryType.STAKE_RELEASE:
+      return { availableDelta: +amountNgn, heldDelta: -amountNgn }
+    case LedgerEntryType.CONVERSION_DEBIT:
+      return { availableDelta: 0, heldDelta: -amountNgn }
+    case LedgerEntryType.WITHDRAWAL_PENDING:
+      return { availableDelta: -amountNgn, heldDelta: +amountNgn }
+    case LedgerEntryType.WITHDRAWAL_CONFIRMED:
+      return { availableDelta: 0, heldDelta: -amountNgn }
+    case LedgerEntryType.WITHDRAWAL_FAILED:
+      return { availableDelta: +amountNgn, heldDelta: -amountNgn }
+    case LedgerEntryType.ADJUSTMENT:
+      return { availableDelta: amountNgn, heldDelta: 0 }
   }
+}
 
-  private initializeDemoData() {
-    // Set up demo user balances
-    this.balances.set('63468761-0500-4dd9-9d75-c30cbc8d42da', {
-      availableNgn: 50000,
-      heldNgn: 5000,
-      totalNgn: 55000
+/** Simple per-key in-memory mutex for serialising wallet writes (MVP). */
+class AsyncMutex {
+  private locked = false
+  private readonly queue: Array<() => void> = []
+
+  acquire(): Promise<() => void> {
+    return new Promise(resolve => {
+      const tryAcquire = () => {
+        if (!this.locked) {
+          this.locked = true
+          resolve(() => this.release())
+        } else {
+          this.queue.push(tryAcquire)
+        }
+      }
+      tryAcquire()
     })
-
-    // Add some demo ledger entries
-    this.ledger = [
-      {
-        id: '1',
-        type: 'top_up',
-        amountNgn: 10000,
-        status: 'confirmed',
-        timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        reference: 'TOPUP-001'
-      },
-      {
-        id: '2', 
-        type: 'withdrawal',
-        amountNgn: -5000,
-        status: 'confirmed',
-        timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        reference: 'WD-001'
-      },
-      {
-        id: '3',
-        type: 'withdrawal',
-        amountNgn: -2000,
-        status: 'pending',
-        timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        reference: 'WD-002'
-      }
-    ]
-
-    // Add some demo withdrawals
-    this.withdrawals = [
-      {
-        id: 'wd-1',
-        amountNgn: 5000,
-        status: 'confirmed',
-        bankAccount: {
-          accountNumber: '1234567890',
-          accountName: 'John Doe',
-          bankName: 'Guaranty Trust Bank'
-        },
-        reference: 'WD-001',
-        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        processedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        failureReason: null
-      },
-      {
-        id: 'wd-2',
-        amountNgn: 2000,
-        status: 'pending',
-        bankAccount: {
-          accountNumber: '0987654321',
-          accountName: 'John Doe',
-          bankName: 'First Bank of Nigeria'
-        },
-        reference: 'WD-002',
-        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        processedAt: null,
-        failureReason: null
-      }
-    ]
   }
 
-  async getBalance(userId: string): Promise<NgnBalanceResponse> {
-    logger.info('Getting NGN balance', { userId })
-    
-    let balance = this.balances.get(userId)
-    if (!balance) {
-      balance = {
-        availableNgn: 50000,
-        heldNgn: 5000,
-        totalNgn: 55000,
-      }
-      this.balances.set(userId, balance)
+  private release() {
+    this.locked = false
+    this.queue.shift()?.()
+  }
+}
+
+interface WithdrawalRecord {
+  id: string
+  walletId: string
+  amountNgn: number
+  bankAccount: { accountNumber: string; accountName: string; bankName: string }
+  reference: string
+  status: WithdrawalResponse['status']
+  createdAt: Date
+  processedAt: Date | null
+  failureReason: string | null
+}
+
+export class NgnWalletService {
+  /** userId → NgnWallet */
+  private readonly wallets = new Map<string, NgnWallet>()
+  /** walletId → ordered ledger entries */
+  private readonly ledgers = new Map<string, LedgerEntry[]>()
+  /** walletId → mutex */
+  private readonly mutexes = new Map<string, AsyncMutex>()
+  /** withdrawalId → record */
+  private readonly withdrawals = new Map<string, WithdrawalRecord>()
+
+  // ── wallet lifecycle ────────────────────────────────────────────────────────
+
+  private getOrCreateWallet(userId: string): NgnWallet {
+    let wallet = this.wallets.get(userId)
+    if (!wallet) {
+      wallet = { walletId: randomUUID(), userId, currency: 'NGN', createdAt: new Date() }
+      this.wallets.set(userId, wallet)
+      this.ledgers.set(wallet.walletId, [])
+      this.mutexes.set(wallet.walletId, new AsyncMutex())
+    }
+    return wallet
+  }
+
+  private getMutex(walletId: string): AsyncMutex {
+    let m = this.mutexes.get(walletId)
+    if (!m) {
+      m = new AsyncMutex()
+      this.mutexes.set(walletId, m)
+    }
+    return m
+  }
+
+  // ── balance computation ─────────────────────────────────────────────────────
+
+  /** Computes balance deterministically from ledger entries. No stored fields. */
+  getWalletBalance(userId: string): WalletBalance {
+    const wallet = this.getOrCreateWallet(userId)
+    const entries = this.ledgers.get(wallet.walletId) ?? []
+
+    let availableBalanceNgn = 0
+    let heldBalanceNgn = 0
+
+    for (const entry of entries) {
+      const { availableDelta, heldDelta } = computeEffect(entry.type, entry.amountNgn)
+      availableBalanceNgn += availableDelta
+      heldBalanceNgn += heldDelta
     }
 
-    return balance
+    return { availableBalanceNgn, heldBalanceNgn, totalBalanceNgn: availableBalanceNgn + heldBalanceNgn }
   }
 
-  async getLedger(userId: string, options: { limit?: number; cursor?: string } = {}): Promise<NgnLedgerResponse> {
-    logger.info('Getting NGN ledger', { userId, options })
-    
-    let entries = [...this.ledger].sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  /** Public alias used by the route handler. */
+  async getBalance(userId: string): Promise<WalletBalance> {
+    return this.getWalletBalance(userId)
+  }
+
+  // ── ledger writes ───────────────────────────────────────────────────────────
+
+  /** Appends a ledger entry under the wallet mutex. */
+  async addEntry(
+    userId: string,
+    type: LedgerEntryType,
+    amountNgn: number,
+    referenceType?: string,
+    referenceId?: string,
+  ): Promise<LedgerEntry> {
+    const wallet = this.getOrCreateWallet(userId)
+    const release = await this.getMutex(wallet.walletId).acquire()
+    try {
+      const entry: LedgerEntry = {
+        entryId: randomUUID(),
+        walletId: wallet.walletId,
+        type,
+        amountNgn,
+        referenceType,
+        referenceId,
+        createdAt: new Date(),
+      }
+      this.ledgers.get(wallet.walletId)!.push(entry)
+      logger.debug('Ledger entry added', { userId, type, amountNgn, entryId: entry.entryId })
+      return entry
+    } finally {
+      release()
+    }
+  }
+
+  // ── ledger reads ────────────────────────────────────────────────────────────
+
+  async getLedger(
+    userId: string,
+    options: { limit?: number; cursor?: string } = {},
+  ): Promise<NgnLedgerResponse> {
+    const wallet = this.getOrCreateWallet(userId)
+    const sorted = [...(this.ledgers.get(wallet.walletId) ?? [])].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     )
 
-    const limit = options.limit || 20
-    entries = entries.slice(0, limit)
+    const limit = options.limit ?? 20
+    const page = sorted.slice(0, limit)
 
     return {
-      entries,
-      nextCursor: null
+      entries: page.map(e => ({
+        id: e.entryId,
+        type: e.type,
+        amountNgn: e.amountNgn,
+        status: 'confirmed' as const,
+        timestamp: e.createdAt.toISOString(),
+        reference: e.referenceId ?? null,
+      })),
+      nextCursor: null,
     }
   }
+
+  // ── withdrawals ─────────────────────────────────────────────────────────────
 
   async initiateWithdrawal(userId: string, request: WithdrawalRequest): Promise<WithdrawalResponse> {
     logger.info('Initiating withdrawal', { userId, amount: request.amountNgn })
 
-    // Check user balance
-    const balance = await this.getBalance(userId)
-    if (request.amountNgn > balance.availableNgn) {
+    const balance = this.getWalletBalance(userId)
+    if (request.amountNgn > balance.availableBalanceNgn) {
       throw new AppError(
-        ErrorCode.VALIDATION_ERROR, 
-        400, 
-        `Insufficient balance. Available: ${balance.availableNgn}, Requested: ${request.amountNgn}`
+        ErrorCode.VALIDATION_ERROR,
+        400,
+        `Insufficient balance. Available: ${balance.availableBalanceNgn}, Requested: ${request.amountNgn}`,
       )
     }
 
-    // Create withdrawal record
-    const withdrawal: WithdrawalResponse = {
-      id: `wd-${Date.now()}`,
+    const withdrawalId = `wd-${randomUUID()}`
+    const reference = `WD-${Date.now()}`
+    const now = new Date()
+
+    await this.addEntry(userId, LedgerEntryType.WITHDRAWAL_PENDING, request.amountNgn, 'withdrawal', withdrawalId)
+
+    const wallet = this.getOrCreateWallet(userId)
+    const record: WithdrawalRecord = {
+      id: withdrawalId,
+      walletId: wallet.walletId,
+      amountNgn: request.amountNgn,
+      bankAccount: request.bankAccount,
+      reference,
+      status: 'pending',
+      createdAt: now,
+      processedAt: null,
+      failureReason: null,
+    }
+    this.withdrawals.set(withdrawalId, record)
+
+    logger.info('Withdrawal initiated', { userId, withdrawalId, amount: request.amountNgn })
+
+    return {
+      id: withdrawalId,
       amountNgn: request.amountNgn,
       status: 'pending',
       bankAccount: request.bankAccount,
-      reference: `WD-${Date.now()}`,
-      createdAt: new Date().toISOString(),
+      reference,
+      createdAt: now.toISOString(),
       processedAt: null,
-      failureReason: null
+      failureReason: null,
     }
-
-    // Update held funds
-    const updatedBalance: NgnBalanceResponse = {
-      availableNgn: balance.availableNgn - request.amountNgn,
-      heldNgn: balance.heldNgn + request.amountNgn,
-      totalNgn: balance.totalNgn
-    }
-    this.balances.set(userId, updatedBalance)
-
-    // Add to withdrawals
-    this.withdrawals.unshift(withdrawal)
-
-    // Add to ledger
-    const ledgerEntry: NgnLedgerEntry = {
-      id: withdrawal.id,
-      type: 'withdrawal',
-      amountNgn: -request.amountNgn,
-      status: 'pending',
-      timestamp: withdrawal.createdAt,
-      reference: withdrawal.reference
-    }
-    this.ledger.unshift(ledgerEntry)
-
-    logger.info('Withdrawal initiated successfully', { 
-      userId, 
-      withdrawalId: withdrawal.id,
-      amount: request.amountNgn 
-    })
-
-    return withdrawal
   }
 
-  async getWithdrawalHistory(userId: string, options: { limit?: number; cursor?: string } = {}): Promise<WithdrawalHistoryResponse> {
-    logger.info('Getting withdrawal history', { userId, options })
+  async getWithdrawalHistory(
+    userId: string,
+    options: { limit?: number; cursor?: string } = {},
+  ): Promise<WithdrawalHistoryResponse> {
+    const wallet = this.getOrCreateWallet(userId)
 
-    let entries = [...this.withdrawals].sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
+    const records = [...this.withdrawals.values()]
+      .filter(w => w.walletId === wallet.walletId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
-    const limit = options.limit || 20
-    entries = entries.slice(0, limit)
+    const limit = options.limit ?? 20
+    const page = records.slice(0, limit)
 
     return {
-      entries,
-      nextCursor: null
+      entries: page.map(w => ({
+        id: w.id,
+        amountNgn: w.amountNgn,
+        status: w.status,
+        bankAccount: w.bankAccount,
+        reference: w.reference,
+        createdAt: w.createdAt.toISOString(),
+        processedAt: w.processedAt?.toISOString() ?? null,
+        failureReason: w.failureReason,
+      })),
+      nextCursor: null,
     }
   }
 
-  // Helper method for testing/demo - simulate withdrawal processing
-  async processWithdrawal(withdrawalId: string, status: 'approved' | 'rejected' | 'confirmed' | 'failed', failureReason?: string): Promise<void> {
-    const withdrawal = this.withdrawals.find(w => w.id === withdrawalId)
-    if (!withdrawal) {
+  /** Process a pending withdrawal (used by admin/webhook handlers). */
+  async processWithdrawal(
+    withdrawalId: string,
+    status: 'approved' | 'rejected' | 'confirmed' | 'failed',
+    failureReason?: string,
+  ): Promise<void> {
+    const record = this.withdrawals.get(withdrawalId)
+    if (!record) {
       throw new AppError(ErrorCode.NOT_FOUND, 404, 'Withdrawal not found')
     }
 
-    withdrawal.status = status
-    withdrawal.processedAt = new Date().toISOString()
-    withdrawal.failureReason = failureReason || null
-
-    // Update ledger entry
-    const ledgerEntry = this.ledger.find(e => e.id === withdrawalId)
-    if (ledgerEntry) {
-      ledgerEntry.status = status
+    // Find the userId for this wallet
+    const userId = [...this.wallets.entries()].find(([, w]) => w.walletId === record.walletId)?.[0]
+    if (!userId) {
+      throw new AppError(ErrorCode.INTERNAL_ERROR, 500, 'Wallet owner not found')
     }
 
-    // If withdrawal is confirmed or failed, update held funds
-    if (status === 'confirmed' || status === 'failed') {
-      const balance = this.balances.get('demo-user')
-      if (balance) {
-        const updatedBalance: NgnBalanceResponse = {
-          availableNgn: balance.availableNgn,
-          heldNgn: Math.max(0, balance.heldNgn - withdrawal.amountNgn),
-          totalNgn: status === 'confirmed' ? balance.totalNgn - withdrawal.amountNgn : balance.totalNgn
-        }
-        this.balances.set('demo-user', updatedBalance)
-      }
+    if (status === 'confirmed') {
+      await this.addEntry(userId, LedgerEntryType.WITHDRAWAL_CONFIRMED, record.amountNgn, 'withdrawal', withdrawalId)
+    } else if (status === 'failed' || status === 'rejected') {
+      await this.addEntry(userId, LedgerEntryType.WITHDRAWAL_FAILED, record.amountNgn, 'withdrawal', withdrawalId)
     }
 
-    logger.info('Withdrawal processed', { withdrawalId, status, failureReason })
+    record.status = status
+    record.processedAt = new Date()
+    record.failureReason = failureReason ?? null
+
+    logger.info('Withdrawal processed', { withdrawalId, status })
   }
 }
