@@ -1,27 +1,15 @@
 export type ConversionStatus = 'pending' | 'completed' | 'failed'
 
-export type ConversionProviderName = 'onramp' | 'offramp' | 'manual_admin'
-
-export interface ConversionRecord {
-  conversionId: string
-  depositId: string
-  userId: string
-  amountNgn: number
-  amountUsdc: string
-  fxRateNgnPerUsdc: number
-  provider: ConversionProviderName
-  providerRef: string
+export interface Conversion {
+  id: string
+  from: 'NGN' | 'USDC'
+  to: 'NGN' | 'USDC'
+  amount: number
   status: ConversionStatus
   createdAt: Date
   updatedAt: Date
-  completedAt: Date | null
-  failedAt: Date | null
-  failureReason: string | null
+  externalRefSource?: string
+  externalRef?: string
 }
 
-export interface CreateConversionInput {
-  depositId: string
-  userId: string
-  amountNgn: number
-  provider: ConversionProviderName
-}
+export type ConversionRecord = Conversion

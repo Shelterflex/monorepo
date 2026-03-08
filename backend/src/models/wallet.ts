@@ -1,31 +1,24 @@
-/**
- * Wallet model and types for custodial wallet implementation
- */
-
 export interface Wallet {
-  userId: string
-  publicKey: string
-  encryptedSecretKey: string // Base64 encoded encrypted secret
-  keyId: string // Identifier for the encryption key used
-  createdAt: Date
+  accountId: string
+  balanceNgn: number
   updatedAt: Date
 }
 
-export interface CreateWalletInput {
-  userId: string
-  publicKey: string
-  encryptedSecretKey: string
-  keyId: string
-}
-
-export interface WalletStore {
-  create(input: CreateWalletInput): Promise<Wallet>
-  getByUserId(userId: string): Promise<Wallet | null>
-  getPublicAddress(userId: string): Promise<string>
-  getEncryptedKey(userId: string): Promise<{ cipherText: string; keyId: string } | null>
-  updateEncryption(
-    userId: string,
-    newEncryptedSecretKey: string,
-    newKeyId: string
-  ): Promise<Wallet>
+export type WalletStore = {
+  setWallet(accountId: string, balanceNgn: number, updatedAt?: Date): Promise<Wallet>
+  listNegative(page?: number, pageSize?: number): Promise<{
+    items: Wallet[]
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+  }>
+  listAll(page?: number, pageSize?: number): Promise<{
+    items: Wallet[]
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+  }>
+  clear(): Promise<void>
 }

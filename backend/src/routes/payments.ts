@@ -4,7 +4,6 @@ import { confirmPaymentSchema } from '../schemas/payment.js'
 import { outboxStore, OutboxSender } from '../outbox/index.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 import { logger } from '../utils/logger.js'
-import { auditWalletSigningUsed } from '../utils/auditLogger.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 
@@ -49,11 +48,13 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
           requestId: req.requestId,
         })
 
-        // Create outbox item (idempotent by source+ref)
+        // Build canonical external ref: lowercase source + raw ref
+        const canonicalExternalRefV1 = `${externalRefSource.toLowerCase()}:${externalRef}`
+
+        // Create outbox item (idempotent by canonicalExternalRefV1)
         const outboxItem = await outboxStore.create({
           txType,
-          source: externalRefSource,
-          ref: externalRef,
+          canonicalExternalRefV1,
           payload: {
             dealId,
             txType,
@@ -70,13 +71,6 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
           txId: outboxItem.txId,
           status: outboxItem.status,
           requestId: req.requestId,
-        })
-
-        // Audit log: wallet signing used for transaction
-        auditWalletSigningUsed(req, {
-          dealId,
-          txType,
-          txId: outboxItem.txId,
         })
 
         // Attempt immediate on-chain write
