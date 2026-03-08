@@ -14,23 +14,13 @@ export class OutboxSender {
    * Returns true if successful, false otherwise
    */
   async send(item: OutboxItem): Promise<boolean> {
-    const MAX_RETRY_COUNT = 10;
     try {
       logger.info('Attempting to send outbox item', {
-        outboxId: item.id,
+        id: item.id,
         txType: item.txType,
         txId: item.txId,
-        retryCount: item.retryCount,
+        attempt: item.attempts + 1,
       })
-
-      if (item.retryCount >= MAX_RETRY_COUNT) {
-        logger.warn('Max retry count reached, not retrying', {
-          outboxId: item.id,
-          txId: item.txId,
-          retryCount: item.retryCount,
-        })
-        return false;
-      }
 
       // Route to appropriate handler based on tx type
       switch (item.txType) {
@@ -38,9 +28,6 @@ export class OutboxSender {
         case TxType.TENANT_REPAYMENT:
         case TxType.LANDLORD_PAYOUT:
         case TxType.WHISTLEBLOWER_REWARD:
-        case TxType.STAKE:
-        case TxType.UNSTAKE:
-        case TxType.STAKE_REWARD_CLAIM:
           await this.sendReceipt(item)
           break
         default:
@@ -48,39 +35,26 @@ export class OutboxSender {
       }
 
       // Mark as sent
-      item.processedAt = new Date();
-      item.retryCount = item.retryCount || 0;
-      item.nextRetryAt = null;
       await outboxStore.updateStatus(item.id, OutboxStatus.SENT)
 
       logger.info('Successfully sent outbox item', {
-        outboxId: item.id,
+        id: item.id,
         txId: item.txId,
-        retryCount: item.retryCount,
       })
 
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      item.retryCount = (item.retryCount || 0) + 1;
-      // Exponential backoff: 2^retryCount * 1000ms, capped at 1 hour
-      const backoffMs = Math.min(Math.pow(2, item.retryCount) * 1000, 60 * 60 * 1000);
-      item.nextRetryAt = new Date(Date.now() + backoffMs);
-      item.processedAt = new Date();
-      item.lastError = errorMessage;
-
+      
       logger.error('Failed to send outbox item', {
-        outboxId: item.id,
+        id: item.id,
         txId: item.txId,
-        retryCount: item.retryCount,
-        lastError: item.lastError,
+        attempt: item.attempts + 1,
+        error: errorMessage,
       })
 
       // Mark as failed
       await outboxStore.updateStatus(item.id, OutboxStatus.FAILED, errorMessage)
-
-      // Persist retry fields (in-memory only)
-      outboxStore.items.set(item.id, item)
 
       return false
     }
@@ -93,39 +67,14 @@ export class OutboxSender {
   private async sendReceipt(item: OutboxItem): Promise<void> {
     const { payload } = item
 
-    // Handle staking transactions differently - they don't require dealId or tokenAddress
-    if (item.txType === TxType.STAKE || item.txType === TxType.UNSTAKE || item.txType === TxType.STAKE_REWARD_CLAIM) {
-      // For staking transactions, we need at least amountUsdc and txType
-      if (!payload.amountUsdc && item.txType !== TxType.STAKE_REWARD_CLAIM) {
-        throw new Error('Invalid staking payload: missing required field amountUsdc')
-      }
-      if (!payload.txType) {
-        throw new Error('Invalid staking payload: missing required field txType')
-      }
-
-      // For staking, we use a default dealId and tokenAddress since they're not relevant
-      await this.adapter.recordReceipt({
-        txId: item.txId,
-        txType: item.txType as import('./types.js').TxType,
-        amountUsdc: payload.amountUsdc ? String(payload.amountUsdc) : '0',
-        tokenAddress: process.env.USDC_TOKEN_ADDRESS || '0x0000000000000000000000000000000000000000',
-        dealId: 'staking-transaction',
-        amountNgn: payload.amountNgn != null ? Number(payload.amountNgn) : undefined,
-        fxRate: payload.fxRateNgnPerUsdc != null ? Number(payload.fxRateNgnPerUsdc) : undefined,
-        fxProvider: payload.fxProvider ? String(payload.fxProvider) : undefined,
-      })
-
-      logger.debug('Staking transaction recorded on-chain', {
-        txId: item.txId,
-        txType: item.txType,
-      })
-      return
-    }
-
-    // Handle regular payment transactions
     if (!payload.dealId || !payload.amountUsdc || !payload.tokenAddress || !payload.txType) {
       throw new Error('Invalid receipt payload: missing required fields (dealId, amountUsdc, tokenAddress, txType)')
     }
+
+    const { createHash } = await import('node:crypto')
+    const externalRefHash = createHash('sha256')
+      .update(item.canonicalExternalRefV1)
+      .digest('hex')
 
     await this.adapter.recordReceipt({
       txId: item.txId,
@@ -134,6 +83,7 @@ export class OutboxSender {
       tokenAddress: String(payload.tokenAddress),
       dealId: String(payload.dealId),
       listingId: payload.listingId ? String(payload.listingId) : undefined,
+      externalRefHash,
       amountNgn: payload.amountNgn != null ? Number(payload.amountNgn) : undefined,
       fxRate: payload.fxRateNgnPerUsdc != null ? Number(payload.fxRateNgnPerUsdc) : undefined,
       fxProvider: payload.fxProvider ? String(payload.fxProvider) : undefined,
