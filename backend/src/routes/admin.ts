@@ -8,6 +8,15 @@ import { validate } from '../middleware/validate.js'
 import { markRewardPaidSchema } from '../schemas/reward.js'
 import { rewardStore } from '../models/rewardStore.js'
 import { RewardStatus } from '../models/reward.js'
+import {
+  depositsQuerySchema,
+  walletsQuerySchema,
+  conversionsQuerySchema,
+  outboxReconQuerySchema,
+} from '../schemas/reconciliation.js'
+import { depositStore } from '../models/depositStore.js'
+import { walletStore } from '../models/walletStore.js'
+import { conversionStore } from '../models/conversionStore.js'
 
 export function createAdminRouter(adapter: SorobanAdapter) {
   const router = Router()
@@ -295,6 +304,165 @@ export function createAdminRouter(adapter: SorobanAdapter) {
           message: sent
             ? 'Reward marked as paid and receipt written to chain'
             : 'Reward marked as paid, receipt queued for retry',
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
+
+  /**
+   * GET /api/admin/reconciliation/deposits
+   * 
+   * List deposits for reconciliation workflows.
+   * Query:
+   *  - status: unmatched | matched | reversed (optional)
+   *  - page, pageSize
+   */
+  router.get(
+    '/reconciliation/deposits',
+    validate(depositsQuerySchema, 'query'),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { status, page, pageSize } = req.query as any
+        const result = await depositStore.listByStatus(status, page, pageSize)
+        res.json({
+          items: result.items.map((d) => ({
+            id: d.id,
+            accountId: d.accountId,
+            externalRef: `${d.externalRefSource}:${d.externalRef}`,
+            amountNgn: d.amountNgn,
+            status: d.status,
+            createdAt: d.createdAt.toISOString(),
+            matchedAt: d.matchedAt?.toISOString(),
+            reversalId: d.reversalId,
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
+
+  /**
+   * GET /api/admin/reconciliation/wallets
+   * 
+   * List wallets, optionally only those with negative balances.
+   * Query:
+   *  - negative: true|false (optional, default false)
+   *  - page, pageSize
+   */
+  router.get(
+    '/reconciliation/wallets',
+    validate(walletsQuerySchema, 'query'),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { negative, page, pageSize } = req.query as any
+        const result = negative
+          ? await walletStore.listNegative(page, pageSize)
+          : await walletStore.listAll(page, pageSize)
+        res.json({
+          items: result.items.map((w) => ({
+            accountId: w.accountId,
+            balanceNgn: w.balanceNgn,
+            updatedAt: w.updatedAt.toISOString(),
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
+
+  /**
+   * GET /api/admin/reconciliation/conversions
+   * 
+   * List currency conversions by status for reconciliation.
+   * Query:
+   *  - status: pending | completed | failed (optional)
+   *  - page, pageSize
+   */
+  router.get(
+    '/reconciliation/conversions',
+    validate(conversionsQuerySchema, 'query'),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { status, page, pageSize } = req.query as any
+        const result = await conversionStore.listByStatus(status, page, pageSize)
+        res.json({
+          items: result.items.map((c) => ({
+            id: c.id,
+            from: c.from,
+            to: c.to,
+            amount: c.amount,
+            status: c.status,
+            createdAt: c.createdAt.toISOString(),
+            updatedAt: c.updatedAt.toISOString(),
+            externalRef: c.externalRefSource && c.externalRef ? `${c.externalRefSource}:${c.externalRef}` : undefined,
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
+
+  /**
+   * GET /api/admin/reconciliation/outbox
+   * 
+   * Read-only list of pending/failed outbox items with limited fields.
+   * Query:
+   *  - status: pending | failed (optional)
+   *  - page, pageSize
+   */
+  router.get(
+    '/reconciliation/outbox',
+    validate(outboxReconQuerySchema, 'query'),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { status, page, pageSize } = req.query as any
+        // Reuse outboxStore and implement pagination client-side since store returns all
+        let items =
+          status === 'failed'
+            ? await outboxStore.listByStatus(OutboxStatus.FAILED)
+            : status === 'pending'
+            ? await outboxStore.listByStatus(OutboxStatus.PENDING)
+            : await outboxStore.listAll(pageSize * page) // fetch enough to paginate deterministically
+
+        // Sort newest first for ops
+        items = items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        const total = items.length
+        const start = (page - 1) * pageSize
+        const pageItems = items.slice(start, start + pageSize)
+
+        res.json({
+          items: pageItems.map((item) => ({
+            id: item.id,
+            txType: item.txType,
+            txId: item.txId,
+            externalRef: item.canonicalExternalRefV1,
+            status: item.status,
+            attempts: item.attempts,
+            lastError: item.lastError,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          })),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 1,
         })
       } catch (error) {
         next(error)

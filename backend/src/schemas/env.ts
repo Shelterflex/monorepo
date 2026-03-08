@@ -15,7 +15,7 @@ export const envSchema = z.object({
   SOROBAN_NETWORK: sorobanNetworkEnum.default('testnet'),
   USDC_TOKEN_ADDRESS: z.string().optional(),
 }).refine((data) => {
-  if (data.NODE_ENV !== 'development' && !data.USDC_TOKEN_ADDRESS) {
+  if (data.NODE_ENV === 'production' && !data.USDC_TOKEN_ADDRESS) {
     return false
   }
   if (data.USDC_TOKEN_ADDRESS && !/^0x[a-fA-F0-9]{40}$/.test(data.USDC_TOKEN_ADDRESS)) {
@@ -23,7 +23,7 @@ export const envSchema = z.object({
   }
   return true
 }, {
-  message: 'USDC_TOKEN_ADDRESS is required in non-development environments and must be a valid Ethereum address (0x followed by 40 hex characters)',
+  message: 'USDC_TOKEN_ADDRESS is required in production and must be a valid Ethereum address (0x followed by 40 hex characters)',
   path: ['USDC_TOKEN_ADDRESS'],
 })
 
