@@ -1,79 +1,46 @@
-import { Wallet, CreateWalletInput, WalletStore } from '../models/wallet.js'
+import type { Wallet } from './wallet.js'
 
-/**
- * In-memory implementation of WalletStore for MVP development
- * In production, this should be replaced with a database implementation
- */
-export class InMemoryWalletStore implements WalletStore {
-  private wallets: Map<string, Wallet> = new Map()
+export interface Paginated<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
 
-  async create(input: CreateWalletInput): Promise<Wallet> {
-    // Check if wallet already exists for this user
-    if (this.wallets.has(input.userId)) {
-      throw new Error(`Wallet already exists for user ${input.userId}`)
-    }
+class WalletStore {
+  private wallets = new Map<string, Wallet>()
 
-    const wallet: Wallet = {
-      ...input,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-
-    this.wallets.set(input.userId, wallet)
+  async setWallet(accountId: string, balanceNgn: number, updatedAt: Date = new Date()): Promise<Wallet> {
+    const wallet: Wallet = { accountId, balanceNgn, updatedAt }
+    this.wallets.set(accountId, wallet)
     return wallet
   }
 
-  async getByUserId(userId: string): Promise<Wallet | null> {
-    return this.wallets.get(userId) || null
+  async listNegative(page = 1, pageSize = 20): Promise<Paginated<Wallet>> {
+    const negatives = Array.from(this.wallets.values())
+      .filter((w) => w.balanceNgn < 0)
+      .sort((a, b) => a.balanceNgn - b.balanceNgn)
+    const total = negatives.length
+    const totalPages = Math.ceil(total / pageSize) || 1
+    const start = (page - 1) * pageSize
+    const items = negatives.slice(start, start + pageSize)
+    return { items, total, page, pageSize, totalPages }
   }
 
-  async getPublicAddress(userId: string): Promise<string> {
-    const wallet = this.wallets.get(userId)
-    if (!wallet) {
-      throw new Error(`Wallet not found for user ${userId}`)
-    }
-    return wallet.publicKey
+  async listAll(page = 1, pageSize = 20): Promise<Paginated<Wallet>> {
+    const all = Array.from(this.wallets.values()).sort((a, b) => a.accountId.localeCompare(b.accountId))
+    const total = all.length
+    const totalPages = Math.ceil(total / pageSize) || 1
+    const start = (page - 1) * pageSize
+    const items = all.slice(start, start + pageSize)
+    return { items, total, page, pageSize, totalPages }
   }
 
-  async getEncryptedKey(userId: string): Promise<{ cipherText: string; keyId: string } | null> {
-    const wallet = this.wallets.get(userId)
-    if (!wallet) {
-      return null
-    }
-    return {
-      cipherText: wallet.encryptedSecretKey,
-      keyId: wallet.keyId,
-    }
-  }
-
-  async updateEncryption(
-    userId: string,
-    newEncryptedSecretKey: string,
-    newKeyId: string
-  ): Promise<Wallet> {
-    const wallet = this.wallets.get(userId)
-    if (!wallet) {
-      throw new Error(`Wallet not found for user ${userId}`)
-    }
-
-    const updatedWallet: Wallet = {
-      ...wallet,
-      encryptedSecretKey: newEncryptedSecretKey,
-      keyId: newKeyId,
-      updatedAt: new Date(),
-    }
-
-    this.wallets.set(userId, updatedWallet)
-    return updatedWallet
-  }
-
-  // Helper method for testing/cleanup
-  clear(): void {
+  async clear(): Promise<void> {
     this.wallets.clear()
   }
-
-  // Helper method to get all wallets (for testing)
-  getAll(): Wallet[] {
-    return Array.from(this.wallets.values())
-  }
 }
+
+export const walletStore = new WalletStore()
+

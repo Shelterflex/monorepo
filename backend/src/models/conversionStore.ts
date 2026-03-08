@@ -1,221 +1,47 @@
 import { randomUUID } from 'node:crypto'
-import { type ConversionRecord } from './conversion.js'
-import { getPool } from '../db.js'
+import type { Conversion, ConversionStatus } from './conversion.js'
 
-function mapRow(row: any): ConversionRecord {
-  return {
-    conversionId: String(row.conversion_id),
-    depositId: String(row.deposit_id),
-    userId: String(row.user_id),
-    amountNgn: Number(row.amount_ngn),
-    amountUsdc: String(row.amount_usdc),
-    fxRateNgnPerUsdc: Number(row.fx_rate_ngn_per_usdc),
-    provider: row.provider,
-    providerRef: String(row.provider_ref ?? ''),
-    status: row.status,
-    createdAt: new Date(row.created_at),
-    updatedAt: new Date(row.updated_at),
-    completedAt: row.completed_at ? new Date(row.completed_at) : null,
-    failedAt: row.failed_at ? new Date(row.failed_at) : null,
-    failureReason: row.failure_reason ?? null,
-  }
+export interface Paginated<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
-/**
- * In-memory conversion store.
- * Enforces once-per-deposit by unique depositId.
- */
 class ConversionStore {
-  private byId = new Map<string, ConversionRecord>()
-  private byDepositId = new Map<string, string>()
+  private conversions = new Map<string, Conversion>()
 
-  private async pool() {
-    const pool = await getPool()
-    return pool
+  async add(input: Omit<Conversion, 'id' | 'createdAt' | 'updatedAt'> & { createdAt?: Date; updatedAt?: Date }): Promise<Conversion> {
+    const id = randomUUID()
+    const now = new Date()
+    const createdAt = input.createdAt ?? now
+    const updatedAt = input.updatedAt ?? now
+    const conv: Conversion = { id, createdAt, updatedAt, ...input }
+    this.conversions.set(id, conv)
+    return conv
   }
 
-  async getByConversionId(conversionId: string): Promise<ConversionRecord | null> {
-    const pool = await this.pool()
-    if (!pool) {
-      return this.byId.get(conversionId) ?? null
-    }
-
-    const { rows } = await pool.query(`SELECT * FROM conversions WHERE conversion_id=$1`, [conversionId])
-    const row = rows[0]
-    return row ? mapRow(row) : null
-  }
-
-  async getByDepositId(depositId: string): Promise<ConversionRecord | null> {
-    const pool = await this.pool()
-    if (!pool) {
-      const id = this.byDepositId.get(depositId)
-      if (!id) return null
-      return this.byId.get(id) ?? null
-    }
-
-    const { rows } = await pool.query(
-      `SELECT * FROM conversions WHERE deposit_id=$1 ORDER BY created_at DESC LIMIT 1`,
-      [depositId],
+  async listByStatus(
+    status: ConversionStatus | undefined,
+    page = 1,
+    pageSize = 20,
+  ): Promise<Paginated<Conversion>> {
+    const all = Array.from(this.conversions.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     )
-    const row = rows[0]
-    return row ? mapRow(row) : null
-  }
-
-  async createPending(input: {
-    depositId: string
-    userId: string
-    amountNgn: number
-    provider: 'onramp' | 'offramp' | 'manual_admin'
-  }): Promise<ConversionRecord> {
-    const pool = await this.pool()
-    if (!pool) {
-      const existing = await this.getByDepositId(input.depositId)
-      if (existing) return existing
-
-      const now = new Date()
-      const record: ConversionRecord = {
-        conversionId: randomUUID(),
-        depositId: input.depositId,
-        userId: input.userId,
-        amountNgn: input.amountNgn,
-        amountUsdc: '0',
-        fxRateNgnPerUsdc: 0,
-        provider: input.provider,
-        providerRef: '',
-        status: 'pending',
-        createdAt: now,
-        updatedAt: now,
-        completedAt: null,
-        failedAt: null,
-        failureReason: null,
-      }
-
-      this.byId.set(record.conversionId, record)
-      this.byDepositId.set(record.depositId, record.conversionId)
-
-      return record
-    }
-
-    // Idempotent: insert if not exists, else return existing row.
-    const { rows } = await pool.query(
-      `INSERT INTO conversions (deposit_id, user_id, amount_ngn, provider)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (deposit_id)
-       DO UPDATE SET updated_at = NOW()
-       RETURNING *`,
-      [input.depositId, input.userId, Math.trunc(input.amountNgn), input.provider],
-    )
-    return mapRow(rows[0])
-  }
-
-  async markCompleted(conversionId: string, data: {
-    amountUsdc: string
-    fxRateNgnPerUsdc: number
-    providerRef: string
-  }): Promise<ConversionRecord | null> {
-    const pool = await this.pool()
-    if (!pool) {
-      const existing = this.byId.get(conversionId)
-      if (!existing) return null
-
-      const now = new Date()
-      const updated: ConversionRecord = {
-        ...existing,
-        amountUsdc: data.amountUsdc,
-        fxRateNgnPerUsdc: data.fxRateNgnPerUsdc,
-        providerRef: data.providerRef,
-        status: 'completed',
-        updatedAt: now,
-        completedAt: now,
-        failedAt: null,
-        failureReason: null,
-      }
-
-      this.byId.set(conversionId, updated)
-      return updated
-    }
-
-    const { rows } = await pool.query(
-      `UPDATE conversions
-       SET amount_usdc=$2,
-           fx_rate_ngn_per_usdc=$3,
-           provider_ref=$4,
-           status='completed',
-           updated_at=NOW(),
-           completed_at=NOW(),
-           failed_at=NULL,
-           failure_reason=NULL
-       WHERE conversion_id=$1
-       RETURNING *`,
-      [conversionId, data.amountUsdc, data.fxRateNgnPerUsdc, data.providerRef],
-    )
-    const row = rows[0]
-    return row ? mapRow(row) : null
-  }
-
-  async markFailed(conversionId: string, reason: string): Promise<ConversionRecord | null> {
-    const pool = await this.pool()
-    if (!pool) {
-      const existing = this.byId.get(conversionId)
-      if (!existing) return null
-
-      const now = new Date()
-      const updated: ConversionRecord = {
-        ...existing,
-        status: 'failed',
-        updatedAt: now,
-        failedAt: now,
-        failureReason: reason,
-      }
-
-      this.byId.set(conversionId, updated)
-      return updated
-    }
-
-    const { rows } = await pool.query(
-      `UPDATE conversions
-       SET status='failed',
-           updated_at=NOW(),
-           failed_at=NOW(),
-           failure_reason=$2
-       WHERE conversion_id=$1
-       RETURNING *`,
-      [conversionId, reason],
-    )
-    const row = rows[0]
-    return row ? mapRow(row) : null
-  }
-
-  async listCompleted(): Promise<ConversionRecord[]> {
-    const pool = await this.pool()
-    if (!pool) {
-      const results: ConversionRecord[] = []
-      for (const record of this.byId.values()) {
-        if (record.status === 'completed') {
-          results.push(record)
-        }
-      }
-      return results.sort(
-        (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-      )
-    }
-
-    const { rows } = await pool.query(`SELECT * FROM conversions WHERE status='completed'`)
-    return rows.map(mapRow).sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-    )
+    const filtered = status ? all.filter((c) => c.status === status) : all
+    const total = filtered.length
+    const totalPages = Math.ceil(total / pageSize) || 1
+    const start = (page - 1) * pageSize
+    const items = filtered.slice(start, start + pageSize)
+    return { items, total, page, pageSize, totalPages }
   }
 
   async clear(): Promise<void> {
-    const pool = await this.pool()
-    if (pool) {
-      await pool.query('DELETE FROM conversions')
-      return
-    }
-
-    this.byId.clear()
-    this.byDepositId.clear()
+    this.conversions.clear()
   }
 }
 
 export const conversionStore = new ConversionStore()
+

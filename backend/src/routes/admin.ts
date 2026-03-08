@@ -14,9 +14,15 @@ import {
 } from '../schemas/listing.js'
 import { rewardStore } from '../models/rewardStore.js'
 import { RewardStatus } from '../models/reward.js'
-import { listingStore } from '../models/listingStore.js'
-import { ListingStatus } from '../models/listing.js'
-import { getActiveMasterKeyVersion, type MasterKeyVersion, type WalletStore } from '../services/walletRotation.js'
+import {
+  depositsQuerySchema,
+  walletsQuerySchema,
+  conversionsQuerySchema,
+  outboxReconQuerySchema,
+} from '../schemas/reconciliation.js'
+import { depositStore } from '../models/depositStore.js'
+import { walletStore } from '../models/walletStore.js'
+import { conversionStore } from '../models/conversionStore.js'
 
 export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletStore) {
   const router = Router()
@@ -430,54 +436,35 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
   )
 
   /**
-   * GET /api/admin/whistleblower/listings
-   *
-   * List whistleblower listings for admin review.
-   * Defaults to status=pending_review when no status is provided.
-   * Query params:
-   *   - status: pending_review | approved | rejected | rented (optional, default: pending_review)
-   *   - page: number (optional, default 1)
-   *   - pageSize: number (optional, default 20, max 100)
+   * GET /api/admin/reconciliation/deposits
+   * 
+   * List deposits for reconciliation workflows.
+   * Query:
+   *  - status: unmatched | matched | reversed (optional)
+   *  - page, pageSize
    */
   router.get(
-    '/whistleblower/listings',
-    validate(adminListingFiltersSchema, 'query'),
+    '/reconciliation/deposits',
+    validate(depositsQuerySchema, 'query'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const filters = req.query
-
-        logger.info('Admin listing moderation queue requested', {
-          filters,
-          requestId: req.requestId,
-        })
-
-        const result = await listingStore.list(filters)
-
+        const { status, page, pageSize } = req.query as any
+        const result = await depositStore.listByStatus(status, page, pageSize)
         res.json({
-          listings: result.listings.map((listing) => ({
-            listingId: listing.listingId,
-            whistleblowerId: listing.whistleblowerId,
-            address: listing.address,
-            city: listing.city,
-            area: listing.area,
-            bedrooms: listing.bedrooms,
-            bathrooms: listing.bathrooms,
-            annualRentNgn: listing.annualRentNgn,
-            description: listing.description,
-            photos: listing.photos,
-            status: listing.status,
-            reviewedBy: listing.reviewedBy,
-            reviewedAt: listing.reviewedAt?.toISOString(),
-            rejectionReason: listing.rejectionReason,
-            createdAt: listing.createdAt.toISOString(),
-            updatedAt: listing.updatedAt.toISOString(),
+          items: result.items.map((d) => ({
+            id: d.id,
+            accountId: d.accountId,
+            externalRef: `${d.externalRefSource}:${d.externalRef}`,
+            amountNgn: d.amountNgn,
+            status: d.status,
+            createdAt: d.createdAt.toISOString(),
+            matchedAt: d.matchedAt?.toISOString(),
+            reversalId: d.reversalId,
           })),
-          pagination: {
-            total: result.total,
-            page: result.page,
-            pageSize: result.pageSize,
-            totalPages: result.totalPages,
-          },
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
         })
       } catch (error) {
         next(error)
@@ -486,49 +473,32 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
   )
 
   /**
-   * POST /api/admin/whistleblower/listings/:id/approve
-   *
-   * Approve a pending_review listing.
-   * Only valid transition: pending_review -> approved.
+   * GET /api/admin/reconciliation/wallets
+   * 
+   * List wallets, optionally only those with negative balances.
+   * Query:
+   *  - negative: true|false (optional, default false)
+   *  - page, pageSize
    */
-  router.post(
-    '/whistleblower/listings/:id/approve',
-    validate(approveListingSchema),
+  router.get(
+    '/reconciliation/wallets',
+    validate(walletsQuerySchema, 'query'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const { id } = req.params
-        const { reviewedBy } = req.body
-
-        const listing = await listingStore.getById(id)
-        if (!listing) {
-          throw notFound(`Listing with ID '${id}'`)
-        }
-
-        if (listing.status !== ListingStatus.PENDING_REVIEW) {
-          throw new AppError(
-            ErrorCode.CONFLICT,
-            409,
-            `Listing cannot be approved. Current status: ${listing.status}`,
-            { currentStatus: listing.status, allowedFrom: ListingStatus.PENDING_REVIEW },
-          )
-        }
-
-        const updated = await listingStore.moderate(id, ListingStatus.APPROVED, reviewedBy)
-
-        logger.info('Listing approved', {
-          listingId: id,
-          reviewedBy,
-          requestId: req.requestId,
-        })
-
+        const { negative, page, pageSize } = req.query as any
+        const result = negative
+          ? await walletStore.listNegative(page, pageSize)
+          : await walletStore.listAll(page, pageSize)
         res.json({
-          listing: {
-            listingId: updated!.listingId,
-            status: updated!.status,
-            reviewedBy: updated!.reviewedBy,
-            reviewedAt: updated!.reviewedAt?.toISOString(),
-            updatedAt: updated!.updatedAt.toISOString(),
-          },
+          items: result.items.map((w) => ({
+            accountId: w.accountId,
+            balanceNgn: w.balanceNgn,
+            updatedAt: w.updatedAt.toISOString(),
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
         })
       } catch (error) {
         next(error)
@@ -537,55 +507,86 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
   )
 
   /**
-   * POST /api/admin/whistleblower/listings/:id/reject
-   *
-   * Reject a pending_review listing with a mandatory reason.
-   * Only valid transition: pending_review -> rejected.
+   * GET /api/admin/reconciliation/conversions
+   * 
+   * List currency conversions by status for reconciliation.
+   * Query:
+   *  - status: pending | completed | failed (optional)
+   *  - page, pageSize
    */
-  router.post(
-    '/whistleblower/listings/:id/reject',
-    validate(rejectListingSchema),
+  router.get(
+    '/reconciliation/conversions',
+    validate(conversionsQuerySchema, 'query'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const { id } = req.params
-        const { reviewedBy, reason } = req.body
-
-        const listing = await listingStore.getById(id)
-        if (!listing) {
-          throw notFound(`Listing with ID '${id}'`)
-        }
-
-        if (listing.status !== ListingStatus.PENDING_REVIEW) {
-          throw new AppError(
-            ErrorCode.CONFLICT,
-            409,
-            `Listing cannot be rejected. Current status: ${listing.status}`,
-            { currentStatus: listing.status, allowedFrom: ListingStatus.PENDING_REVIEW },
-          )
-        }
-
-        const updated = await listingStore.moderate(
-          id,
-          ListingStatus.REJECTED,
-          reviewedBy,
-          reason,
-        )
-
-        logger.info('Listing rejected', {
-          listingId: id,
-          reviewedBy,
-          requestId: req.requestId,
+        const { status, page, pageSize } = req.query as any
+        const result = await conversionStore.listByStatus(status, page, pageSize)
+        res.json({
+          items: result.items.map((c) => ({
+            id: c.id,
+            from: c.from,
+            to: c.to,
+            amount: c.amount,
+            status: c.status,
+            createdAt: c.createdAt.toISOString(),
+            updatedAt: c.updatedAt.toISOString(),
+            externalRef: c.externalRefSource && c.externalRef ? `${c.externalRefSource}:${c.externalRef}` : undefined,
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
         })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
+
+  /**
+   * GET /api/admin/reconciliation/outbox
+   * 
+   * Read-only list of pending/failed outbox items with limited fields.
+   * Query:
+   *  - status: pending | failed (optional)
+   *  - page, pageSize
+   */
+  router.get(
+    '/reconciliation/outbox',
+    validate(outboxReconQuerySchema, 'query'),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { status, page, pageSize } = req.query as any
+        // Reuse outboxStore and implement pagination client-side since store returns all
+        let items =
+          status === 'failed'
+            ? await outboxStore.listByStatus(OutboxStatus.FAILED)
+            : status === 'pending'
+            ? await outboxStore.listByStatus(OutboxStatus.PENDING)
+            : await outboxStore.listAll(pageSize * page) // fetch enough to paginate deterministically
+
+        // Sort newest first for ops
+        items = items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        const total = items.length
+        const start = (page - 1) * pageSize
+        const pageItems = items.slice(start, start + pageSize)
 
         res.json({
-          listing: {
-            listingId: updated!.listingId,
-            status: updated!.status,
-            reviewedBy: updated!.reviewedBy,
-            reviewedAt: updated!.reviewedAt?.toISOString(),
-            rejectionReason: updated!.rejectionReason,
-            updatedAt: updated!.updatedAt.toISOString(),
-          },
+          items: pageItems.map((item) => ({
+            id: item.id,
+            txType: item.txType,
+            txId: item.txId,
+            externalRef: item.canonicalExternalRefV1,
+            status: item.status,
+            attempts: item.attempts,
+            lastError: item.lastError,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          })),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 1,
         })
       } catch (error) {
         next(error)

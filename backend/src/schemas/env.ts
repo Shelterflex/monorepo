@@ -28,7 +28,7 @@ export const envSchema = z.object({
   QUOTE_FEE_PERCENT: z.coerce.number().min(0).max(1).default(0.015),
   QUOTE_SLIPPAGE_PERCENT: z.coerce.number().min(0).max(1).default(0.005),
 }).refine((data) => {
-  if (data.NODE_ENV !== 'development' && data.NODE_ENV !== 'test' && !data.USDC_TOKEN_ADDRESS) {
+  if (data.NODE_ENV === 'production' && !data.USDC_TOKEN_ADDRESS) {
     return false
   }
   if (data.USDC_TOKEN_ADDRESS && !/^0x[a-fA-F0-9]{40}$/.test(data.USDC_TOKEN_ADDRESS)) {
@@ -36,7 +36,7 @@ export const envSchema = z.object({
   }
   return true
 }, {
-  message: 'USDC_TOKEN_ADDRESS is required outside development/test and must be a valid Ethereum address (0x followed by 40 hex characters)',
+  message: 'USDC_TOKEN_ADDRESS is required in production and must be a valid Ethereum address (0x followed by 40 hex characters)',
   path: ['USDC_TOKEN_ADDRESS'],
 })
   .refine((data) => {
