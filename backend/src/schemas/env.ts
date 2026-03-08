@@ -14,6 +14,19 @@ export const envSchema = z.object({
   SOROBAN_CONTRACT_ID: z.string().optional(),
   SOROBAN_NETWORK: sorobanNetworkEnum.default('testnet'),
   USDC_TOKEN_ADDRESS: z.string().optional(),
+  ENCRYPTION_KEY: z.string().min(32, 'Encryption key must be at least 32 characters'),
+  CUSTODIAL_WALLET_MASTER_KEY_V1: z.string().optional(),
+  CUSTODIAL_WALLET_MASTER_KEY_V2: z.string().optional(),
+  CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION: z.coerce.number().default(1),
+  CUSTODIAL_MODE_ENABLED: z.coerce.boolean().default(true),
+  CUSTODIAL_SIGNING_PAUSED: z.coerce.boolean().default(false),
+  WEBHOOK_SIGNATURE_ENABLED: z.coerce.boolean().default(false),
+  WEBHOOK_SECRET: z.string().optional(),
+  FX_RATE_NGN_PER_USDC: z.coerce.number().positive().default(1600),
+  QUOTE_MAX_AMOUNT_NGN: z.coerce.number().positive().default(5_000_000),
+  QUOTE_EXPIRY_MS: z.coerce.number().positive().default(5 * 60_000),
+  QUOTE_FEE_PERCENT: z.coerce.number().min(0).max(1).default(0.015),
+  QUOTE_SLIPPAGE_PERCENT: z.coerce.number().min(0).max(1).default(0.005),
 }).refine((data) => {
   if (data.NODE_ENV === 'production' && !data.USDC_TOKEN_ADDRESS) {
     return false
@@ -26,6 +39,39 @@ export const envSchema = z.object({
   message: 'USDC_TOKEN_ADDRESS is required in production and must be a valid Ethereum address (0x followed by 40 hex characters)',
   path: ['USDC_TOKEN_ADDRESS'],
 })
+  .refine((data) => {
+    if (data.NODE_ENV === 'development' || data.NODE_ENV === 'test') {
+      return true
+    }
+    if (!data.CUSTODIAL_WALLET_MASTER_KEY_V1) {
+      return false
+    }
+    const active = data.CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION
+    if (active === 2 && !data.CUSTODIAL_WALLET_MASTER_KEY_V2) {
+      return false
+    }
+    if (active !== 1 && active !== 2) {
+      return false
+    }
+    return true
+  }, {
+    message: 'Custodial wallet master keys must be configured for active encryption version',
+    path: ['CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION'],
+  })
+  .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.WEBHOOK_SECRET
+  }, {
+    message: 'WEBHOOK_SECRET is required in production to validate webhook signatures',
+    path: ['WEBHOOK_SECRET'],
+  })
+  .refine((data) => {
+    if (!data.WEBHOOK_SIGNATURE_ENABLED) return true
+    return !!data.WEBHOOK_SECRET
+  }, {
+    message: 'WEBHOOK_SECRET is required when WEBHOOK_SIGNATURE_ENABLED is true',
+    path: ['WEBHOOK_SECRET'],
+  })
 
 export type Env = z.infer<typeof envSchema>
 

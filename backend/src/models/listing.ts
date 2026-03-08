@@ -21,10 +21,12 @@ export interface Listing {
   description?: string
   photos: string[]
   status: ListingStatus
-  createdAt: Date
-  updatedAt: Date
+  reviewedBy?: string
+  reviewedAt?: Date
   rejectionReason?: string
   dealId?: string
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface CreateListingInput {

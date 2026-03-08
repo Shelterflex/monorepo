@@ -2,6 +2,8 @@
 
 Shelterflex is an open-source project exploring **rent now, pay later** workflows with a modern web frontend, a Node.js backend, and Soroban smart contracts.
 
+**🔥 New Feature: Wallet Authentication** - Users can now connect their Ethereum wallet for secure, self-custody authentication alongside traditional email/OTP login.
+
 This repository is organized as **three independent projects**:
 
 - `frontend/` - Next.js (React) web app

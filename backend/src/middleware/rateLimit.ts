@@ -19,3 +19,39 @@ export function createPublicRateLimiter(env: Env) {
     },
   })
 }
+
+/**
+ * Rate limiter for authentication endpoints.
+ * More restrictive than public endpoints to prevent brute force attacks.
+ */
+export function createAuthRateLimiter(env: Env) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 10, // 10 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({
+        error: 'Too many authentication attempts. Please try again later.',
+      })
+    },
+  })
+}
+
+/**
+ * Rate limiter for wallet endpoints.
+ * Restricts wallet operations to prevent abuse.
+ */
+export function createWalletRateLimiter(env: Env) {
+  return rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    limit: 30, // 30 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({
+        error: 'Too many wallet operations. Please try again later.',
+      })
+    },
+  })
+}

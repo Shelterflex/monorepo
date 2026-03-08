@@ -75,12 +75,16 @@ Recommended contributor expectations for deployment-related issues:
 
 - `init(admin: Address)`
 - `credit(user: Address, amount: i128)` (admin-auth)
+- `credit_as_operator(user: Address, amount: i128)` (operator-auth)
 - `debit(user: Address, amount: i128)` (admin-auth)
 - `balance(user: Address) -> i128`
 - `set_admin(new_admin: Address)` (admin-auth)
 - `pause()` (admin-auth)
 - `unpause()` (admin-auth)
 - `is_paused() -> bool`
+- `add_operator(operator: Address)` (admin-auth)
+- `remove_operator(operator: Address)` (admin-auth)
+- `is_operator(operator: Address) -> bool`
 
 ### Events
 
@@ -118,6 +122,20 @@ For both events:
     - `()`
   - Emitted when the contract is unpaused by the admin.
 
+- **`add_operator`**
+  - **Topic**
+    - `("add_operator",)`
+  - **Data**
+    - `(operator: Address)`
+  - Emitted when an operator is added by the admin.
+
+- **`remove_operator`**
+  - **Topic**
+    - `("remove_operator",)`
+  - **Data**
+    - `(operator: Address)`
+  - Emitted when an operator is removed by the admin.
+
 ### Pause Functionality
 
 The contract includes a pause mechanism for emergency stops:
@@ -130,6 +148,38 @@ The contract includes a pause mechanism for emergency stops:
 - `credit()` and `debit()` operations will fail with a panic if called while the contract is paused.
 - `balance()` and other read-only operations continue to work normally when paused.
 - Only the admin can pause or unpause the contract.
+
+### Operator Role Model
+
+The contract implements a role-based access control system with three roles:
+
+#### Roles
+- **Admin**: Has full control over the contract, including operator management.
+- **Operator**: Can perform credit operations only (cannot debit or manage other operators).
+- **User**: Any address that can have a balance but has no special permissions.
+
+#### Operator Management
+- **`add_operator(operator: Address)`**: Adds a new operator. Only the admin can call this function.
+- **`remove_operator(operator: Address)`**: Removes an existing operator. Only the admin can call this function.
+- **`is_operator(operator: Address) -> bool`**: Returns `true` if the address is an operator, `false` otherwise.
+
+#### Permission Matrix
+| Function | Admin | Operator | User |
+|----------|-------|----------|------|
+| `credit()` | ✅ | ❌ | ❌ |
+| `credit_as_operator()` | ❌ | ✅ | ❌ |
+| `debit()` | ✅ | ❌ | ❌ |
+| `add_operator()` | ✅ | ❌ | ❌ |
+| `remove_operator()` | ✅ | ❌ | ❌ |
+| `set_admin()` | ✅ | ❌ | ❌ |
+| `pause()` | ✅ | ❌ | ❌ |
+| `unpause()` | ✅ | ❌ | ❌ |
+| `balance()` | ✅ | ✅ | ✅ |
+| `is_paused()` | ✅ | ✅ | ✅ |
+| `is_operator()` | ✅ | ✅ | ✅ |
+
+#### Use Case
+The operator role is designed for delegation scenarios where a property manager or similar role needs to credit tenant accounts (e.g., for security deposits or rent payments) without having full administrative control over the contract.
 
 ### `rent_payments`
 

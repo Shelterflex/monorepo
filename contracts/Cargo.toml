@@ -3,4 +3,9 @@ resolver = "2"
 members = [
   "rent_wallet",
   "rent_payments",
+  "transaction-receipt-contract",
+  "staking_rewards",
+  "staking_pool",
+  "mvp_staking_pool",
+  "whistleblower_rewards",
 ]

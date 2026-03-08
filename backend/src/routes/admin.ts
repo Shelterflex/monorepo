@@ -2,10 +2,16 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { outboxStore, OutboxSender, OutboxStatus, TxType } from '../outbox/index.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 import { logger } from '../utils/logger.js'
-import { AppError } from '../errors/AppError.js'
+import { auditAdminWalletAction } from '../utils/auditLogger.js'
+import { AppError, notFound } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { validate } from '../middleware/validate.js'
 import { markRewardPaidSchema } from '../schemas/reward.js'
+import {
+  adminListingFiltersSchema,
+  approveListingSchema,
+  rejectListingSchema,
+} from '../schemas/listing.js'
 import { rewardStore } from '../models/rewardStore.js'
 import { RewardStatus } from '../models/reward.js'
 import {
@@ -18,9 +24,129 @@ import { depositStore } from '../models/depositStore.js'
 import { walletStore } from '../models/walletStore.js'
 import { conversionStore } from '../models/conversionStore.js'
 
-export function createAdminRouter(adapter: SorobanAdapter) {
+export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletStore) {
   const router = Router()
   const sender = new OutboxSender(adapter)
+
+  router.post(
+    '/wallets/rewrap',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!walletStore) {
+          throw new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            501,
+            'Wallet rotation is not configured on this deployment',
+          )
+        }
+
+        const fromVersion = Number(req.body.fromVersion) as MasterKeyVersion
+        const toVersion = Number(req.body.toVersion) as MasterKeyVersion
+        const batchSize = req.body.batchSize ? Number(req.body.batchSize) : 100
+
+        if (fromVersion !== 1 && fromVersion !== 2) {
+          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'fromVersion must be 1 or 2')
+        }
+        if (toVersion !== 1 && toVersion !== 2) {
+          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'toVersion must be 1 or 2')
+        }
+        if (fromVersion >= toVersion) {
+          throw new AppError(
+            ErrorCode.VALIDATION_ERROR,
+            400,
+            'toVersion must be greater than fromVersion',
+          )
+        }
+        if (!Number.isFinite(batchSize) || batchSize <= 0 || batchSize > 1000) {
+          throw new AppError(
+            ErrorCode.VALIDATION_ERROR,
+            400,
+            'batchSize must be between 1 and 1000',
+          )
+        }
+
+        const activeVersion = getActiveMasterKeyVersion()
+        if (activeVersion !== toVersion) {
+          throw new AppError(
+            ErrorCode.CONFLICT,
+            409,
+            'Active master key version must match toVersion before rotation',
+          )
+        }
+
+        logger.info('Wallet rewrap requested', {
+          fromVersion,
+          toVersion,
+          batchSize,
+          requestId: req.requestId,
+        })
+
+        // Audit log: admin wallet action (rewrap)
+        auditAdminWalletAction(req, {
+          action: 'WALLET_REWRAP',
+          details: {
+            fromVersion,
+            toVersion,
+            batchSize,
+          },
+        })
+
+        const candidates = await walletStore.listByEncryptionVersion(fromVersion, batchSize)
+
+        let processed = 0
+        let updated = 0
+        const failures: { walletId: string; reason: string }[] = []
+
+        for (const wallet of candidates) {
+          processed += 1
+          if (wallet.encryptionVersion !== fromVersion) {
+            continue
+          }
+
+          try {
+            const changed = await walletStore.rewrapWalletDek(wallet.id, fromVersion, toVersion)
+            if (changed) {
+              updated += 1
+            }
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : 'unknown error'
+            failures.push({ walletId: wallet.id, reason })
+            logger.error('Failed to rewrap wallet', {
+              walletId: wallet.id,
+              fromVersion,
+              toVersion,
+              error: reason,
+              requestId: req.requestId,
+            })
+          }
+        }
+
+        const hasMore = candidates.length === batchSize
+
+        logger.info('Wallet rewrap completed', {
+          fromVersion,
+          toVersion,
+          processed,
+          updated,
+          failures: failures.length,
+          hasMore,
+          requestId: req.requestId,
+        })
+
+        res.json({
+          fromVersion,
+          toVersion,
+          processed,
+          updated,
+          skipped: processed - updated,
+          failures,
+          hasMore,
+        })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
 
   /**
    * GET /api/admin/outbox
@@ -218,13 +344,11 @@ export function createAdminRouter(adapter: SorobanAdapter) {
           )
         }
 
-        // Create canonical external reference
-        const canonicalExternalRef = `${externalRefSource.toLowerCase()}:${externalRef}`
-
-        // Create outbox item for on-chain receipt (idempotent)
+        // Create outbox item for on-chain receipt (idempotent by source+ref)
         const outboxItem = await outboxStore.create({
           txType: TxType.WHISTLEBLOWER_REWARD,
-          canonicalExternalRefV1: canonicalExternalRef,
+          source: externalRefSource,
+          ref: externalRef,
           payload: {
             txType: TxType.WHISTLEBLOWER_REWARD,
             dealId: reward.dealId,

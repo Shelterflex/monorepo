@@ -1,0 +1,536 @@
+# OpenAPI documentation for Risk Management & Reversal endpoints
+# Add these paths and schemas to the main openapi.yml file
+
+paths:
+  /api/admin/risk/frozen-users:
+    get:
+      summary: Get all frozen user accounts
+      description: Returns a list of all users with frozen accounts
+      operationId: getFrozenUsers
+      tags:
+        - Admin Risk
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of frozen users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrozenUsersResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/admin/risk/{userId}:
+    get:
+      summary: Get user risk state and balances
+      description: Returns the risk state and current NGN balances for a specific user
+      operationId: getUserRiskState
+      tags:
+        - Admin Risk
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID
+      responses:
+        "200":
+          description: User risk details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRiskDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/admin/risk/{userId}/freeze:
+    post:
+      summary: Freeze user account
+      description: Manually freeze a user account with specified reason
+      operationId: freezeUser
+      tags:
+        - Admin Risk
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreezeUserRequest"
+      responses:
+        "200":
+          description: User account frozen successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  riskState:
+                    $ref: "#/components/schemas/UserRiskState"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/admin/risk/{userId}/unfreeze:
+    post:
+      summary: Unfreeze user account
+      description: Manually unfreeze a user account
+      operationId: unfreezeUser
+      tags:
+        - Admin Risk
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnfreezeUserRequest"
+      responses:
+        "200":
+          description: User account unfrozen successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  riskState:
+                    $ref: "#/components/schemas/UserRiskState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/webhooks/reversals/{provider}:
+    post:
+      summary: Handle deposit reversal webhook
+      description: |
+        Processes deposit reversal/chargeback notifications from payment providers.
+        This endpoint is idempotent based on (provider, providerRef, eventType).
+        
+        When a deposit is reversed:
+        - The wallet balance is debited by the deposit amount
+        - The user account is automatically frozen if balance becomes negative
+        - A reversal ledger entry is created
+        
+        Security: Requires valid webhook signature when WEBHOOK_SIGNATURE_ENABLED=true
+      operationId: handleDepositReversal
+      tags:
+        - Webhooks
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [onramp, offramp]
+          description: Payment provider identifier
+        - name: x-webhook-signature
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Webhook signature for verification (required if signature validation is enabled)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositReversalWebhook"
+      responses:
+        "200":
+          description: Reversal processed successfully (or deposit not found)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Reversal processed"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/wallet/ngn/withdraw/initiate:
+    post:
+      summary: Initiate NGN withdrawal
+      description: |
+        Initiates a withdrawal request from the user's NGN wallet.
+        
+        **Restrictions:**
+        - User account must not be frozen (returns 403 ACCOUNT_FROZEN if frozen)
+        - Sufficient available balance required
+        
+        **Frozen Account Scenarios:**
+        - Negative balance due to deposit reversal
+        - Manual freeze by admin
+        - Compliance review required
+      operationId: initiateNgnWithdrawal
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WithdrawalRequest"
+      responses:
+        "201":
+          description: Withdrawal initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AccountFrozen"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+components:
+  schemas:
+    FreezeReason:
+      type: string
+      enum:
+        - NEGATIVE_BALANCE
+        - MANUAL
+        - COMPLIANCE
+      description: |
+        Reason for account freeze:
+        - NEGATIVE_BALANCE: Automatic freeze due to deposit reversal making balance negative
+        - MANUAL: Manual freeze by admin for suspicious activity
+        - COMPLIANCE: Freeze for compliance review (KYC, AML, etc.)
+
+    UserRiskState:
+      type: object
+      required:
+        - userId
+        - isFrozen
+        - freezeReason
+        - frozenAt
+        - unfrozenAt
+        - notes
+        - createdAt
+        - updatedAt
+      properties:
+        userId:
+          type: string
+          example: "user-123"
+        isFrozen:
+          type: boolean
+          example: true
+        freezeReason:
+          $ref: "#/components/schemas/FreezeReason"
+        frozenAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-03-07T10:30:00Z"
+        unfrozenAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        notes:
+          type: string
+          nullable: true
+          example: "Auto-frozen due to deposit reversal. Deficit: 50000 NGN"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2024-03-07T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2024-03-07T10:30:00Z"
+
+    FreezeUserRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          $ref: "#/components/schemas/FreezeReason"
+        notes:
+          type: string
+          example: "Suspicious activity detected"
+
+    UnfreezeUserRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+          example: "Issue resolved, account verified"
+
+    UserRiskDetailResponse:
+      type: object
+      required:
+        - success
+        - riskState
+        - balances
+      properties:
+        success:
+          type: boolean
+          example: true
+        riskState:
+          $ref: "#/components/schemas/UserRiskState"
+        balances:
+          type: object
+          required:
+            - availableNgn
+            - heldNgn
+            - totalNgn
+          properties:
+            availableNgn:
+              type: number
+              example: -25000
+              description: Available balance (can be negative)
+            heldNgn:
+              type: number
+              example: 5000
+              description: Held balance (pending withdrawals, etc.)
+            totalNgn:
+              type: number
+              example: -20000
+              description: Total balance = available + held (can be negative)
+
+    FrozenUsersResponse:
+      type: object
+      required:
+        - success
+        - users
+      properties:
+        success:
+          type: boolean
+          example: true
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRiskState"
+
+    DepositReversalWebhook:
+      type: object
+      required:
+        - provider
+        - providerRef
+        - reversalRef
+        - eventType
+        - timestamp
+      properties:
+        provider:
+          type: string
+          enum: [onramp, offramp]
+          example: "onramp"
+        providerRef:
+          type: string
+          example: "ONRAMP-REF-123456"
+          description: Original deposit reference from provider
+        reversalRef:
+          type: string
+          example: "REVERSAL-REF-789012"
+          description: Reversal/chargeback reference from provider
+        eventType:
+          type: string
+          enum: [deposit.reversed]
+          example: "deposit.reversed"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-03-07T10:30:00Z"
+
+    WithdrawalRequest:
+      type: object
+      required:
+        - amountNgn
+        - bankAccount
+      properties:
+        amountNgn:
+          type: number
+          minimum: 100
+          maximum: 1000000
+          example: 50000
+        bankAccount:
+          type: object
+          required:
+            - accountNumber
+            - accountName
+            - bankName
+          properties:
+            accountNumber:
+              type: string
+              minLength: 10
+              maxLength: 10
+              example: "1234567890"
+            accountName:
+              type: string
+              minLength: 3
+              maxLength: 100
+              example: "John Doe"
+            bankName:
+              type: string
+              minLength: 3
+              maxLength: 100
+              example: "Guaranty Trust Bank"
+
+    WithdrawalResponse:
+      type: object
+      required:
+        - success
+        - id
+        - amountNgn
+        - status
+        - bankAccount
+        - reference
+        - createdAt
+        - processedAt
+        - failureReason
+      properties:
+        success:
+          type: boolean
+          example: true
+        id:
+          type: string
+          example: "wd-123456"
+        amountNgn:
+          type: number
+          example: 50000
+        status:
+          type: string
+          enum: [pending, approved, rejected, confirmed, failed]
+          example: "pending"
+        bankAccount:
+          type: object
+          properties:
+            accountNumber:
+              type: string
+              example: "1234567890"
+            accountName:
+              type: string
+              example: "John Doe"
+            bankName:
+              type: string
+              example: "Guaranty Trust Bank"
+        reference:
+          type: string
+          example: "WD-123456"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2024-03-07T10:30:00Z"
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        failureReason:
+          type: string
+          nullable: true
+          example: null
+
+  responses:
+    AccountFrozen:
+      description: Account is frozen and cannot perform this operation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            negativeBalance:
+              value:
+                error:
+                  code: "ACCOUNT_FROZEN"
+                  message: "Account frozen. Negative balance detected. Please top up to continue."
+            manualFreeze:
+              value:
+                error:
+                  code: "ACCOUNT_FROZEN"
+                  message: "Account frozen. Manual freeze by admin. Contact support."
+            complianceFreeze:
+              value:
+                error:
+                  code: "ACCOUNT_FROZEN"
+                  message: "Account frozen. Compliance review required. Contact support."
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Request validation failed"
+
+    Unauthorized:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Authentication token required"
+
+tags:
+  - name: Admin Risk
+    description: Risk management and account freeze operations for administrators
+  - name: NGN Wallet
+    description: Nigerian Naira wallet operations (balance, withdrawals, ledger)
+  - name: Webhooks
+    description: Webhook endpoints for external payment provider notifications

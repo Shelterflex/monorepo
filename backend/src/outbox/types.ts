@@ -14,6 +14,10 @@ export enum TxType {
   TENANT_REPAYMENT = 'tenant_repayment',
   LANDLORD_PAYOUT = 'landlord_payout',
   WHISTLEBLOWER_REWARD = 'whistleblower_reward',
+  STAKE = 'stake',
+  UNSTAKE = 'unstake',
+  STAKE_REWARD_CLAIM = 'stake_reward_claim',
+  CONVERSION = 'conversion',
 }
 
 /**
@@ -32,12 +36,49 @@ export interface OutboxItem {
   status: OutboxStatus
   attempts: number
   lastError?: string
+
+  // Fields from OutboxItemInsert
+  aggregateType: string
+  aggregateId: string
+  eventType: string
+
+  // Retry / processing fields
+  retryCount: number
+  nextRetryAt: Date | null
+  processedAt: Date | null
+
   createdAt: Date
   updatedAt: Date
 }
 
 export interface CreateOutboxItemInput {
   txType: TxType
-  canonicalExternalRefV1: CanonicalExternalRefV1
+  source: string  // Payment source (e.g., "paystack", "stellar")
+  ref: string     // External payment reference ID
   payload: Record<string, unknown>
+
+
+  aggregateId?: string
+  aggregateType?: string
+  eventType?: string
 }
+
+
+
+export interface Deal {
+  id: string;
+  canonicalRef: string;
+  status: string;
+  payload: object;
+}
+
+
+
+export interface OutboxItemInsert {
+  aggregateType: string;
+  aggregateId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+}
+
+

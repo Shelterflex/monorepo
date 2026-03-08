@@ -18,6 +18,9 @@ import {
 } from '../schemas/deal.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { outboxStore } from '../outbox/index.js'
+import { TxType } from '../outbox/types.js'
+import { computeDealProgress } from '../services/dealProgress.js'
 
 const router = Router()
 

@@ -50,6 +50,135 @@ paths:
         default:
           $ref: "#/components/responses/Error"
 
+  /api/auth/request-otp:
+    post:
+      summary: Request OTP for email login
+      description: Sends a one-time password (OTP) to the provided email address.
+      operationId: requestOtp
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: OTP request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - message
+                properties:
+                  message:
+                    type: string
+                    example: OTP sent to your email
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/auth/verify-otp:
+    post:
+      summary: Verify OTP and create session
+      description: Verifies the OTP for the email and returns a session token (Bearer).
+      operationId: verifyOtp
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+      responses:
+        "200":
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                  - user
+                properties:
+                  token:
+                    type: string
+                    description: Session token to be used as Authorization: Bearer <token>
+                  user:
+                    $ref: "#/components/schemas/User"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/auth/logout:
+    post:
+      summary: Logout
+      description: Invalidates the current session token.
+      operationId: logout
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - message
+                properties:
+                  message:
+                    type: string
+                    example: Logged out
+        default:
+          $ref: "#/components/responses/Error"
+
+  /api/auth/me:
+    get:
+      summary: Get current authenticated user
+      description: Returns the current user associated with the Bearer session token.
+      operationId: getMe
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - user
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        default:
+          $ref: "#/components/responses/Error"
+
   /soroban/config:
     get:
       summary: Get Soroban configuration
@@ -283,7 +412,7 @@ paths:
                     message: You have reached the maximum of 2 listings per month
         default:
           $ref: '#/components/responses/Error'
-    
+
     get:
       summary: List listings
       description: Get a paginated list of listings with optional filters
@@ -349,6 +478,134 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/wallet/ngn/withdraw/initiate:
+    post:
+      summary: Initiate NGN withdrawal
+      description: Initiates a withdrawal request and moves funds from available to held.
+      operationId: initiateNgnWithdrawal
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalRequest'
+      responses:
+        '201':
+          description: Withdrawal initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/wallet/ngn/withdrawals:
+    get:
+      summary: List NGN withdrawals
+      description: Returns the authenticated user's NGN withdrawal history.
+      operationId: listNgnWithdrawals
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Withdrawal list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalHistoryResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/withdrawals/{id}/approve:
+    post:
+      summary: Approve NGN withdrawal
+      description: Approves a pending withdrawal and executes provider payout. Idempotent if already approved/confirmed.
+      operationId: approveNgnWithdrawal
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Withdrawal approved/confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/withdrawals/{id}/reject:
+    post:
+      summary: Reject NGN withdrawal
+      description: Rejects a pending withdrawal and releases held funds back to available. Idempotent if already rejected/failed.
+      operationId: rejectNgnWithdrawal
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Withdrawal rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/whistleblower/listings/{id}:
     get:
       summary: Get listing by ID
@@ -391,6 +648,79 @@ paths:
                 error:
                   code: NOT_FOUND
                   message: Listing with ID '550e8400-e29b-41d4-a716-446655440000' not found
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/wallet/ngn/topup/initiate:
+    post:
+      summary: Initiate NGN wallet top-up
+      description: Creates a payment intent for NGN wallet top-up. Returns PSP redirect URL or bank transfer details.
+      operationId: initiateNgnWalletTopup
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional idempotency key for safe retries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amountNgn
+                - rail
+              properties:
+                amountNgn:
+                  type: number
+                  minimum: 100
+                  maximum: 5000000
+                rail:
+                  type: string
+                  enum: [paystack, flutterwave, bank_transfer, manual_admin]
+      responses:
+        '201':
+          description: Top-up initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - depositId
+                  - externalRefSource
+                  - externalRef
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  depositId:
+                    type: string
+                    format: uuid
+                  externalRefSource:
+                    type: string
+                    example: paystack
+                  externalRef:
+                    type: string
+                    example: pi_abc123
+                  redirectUrl:
+                    type: string
+                    nullable: true
+                  bankDetails:
+                    type: object
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
         default:
           $ref: '#/components/responses/Error'
 
@@ -748,6 +1078,133 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/deals/{dealId}/progress:
+    get:
+      summary: Get deal payment progress from on-chain receipts
+      description: |
+        Computes and returns a deal's payment progress by reading `TENANT_REPAYMENT`
+        receipts from the on-chain ledger (outbox store).
+
+        Only receipts with status `sent` (confirmed on-chain) are counted.
+        USDC is the canonical accounting unit.
+      operationId: getDealProgress
+      tags:
+        - Deals
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          description: ID of the deal
+          schema:
+            type: string
+            format: uuid
+            example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '200':
+          description: Deal progress computed from on-chain receipts
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/DealProgressResponse'
+              example:
+                success: true
+                data:
+                  totalPaidUsdc: "129.040000"
+                  periodsPaid: 2
+                  remainingPeriods: 10
+                  nextDueDate: "2024-04-15T00:00:00.000Z"
+                  lastPaymentTxId: "a3f2c1d4e5b6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+                  lastPaymentExternalRefSource: stripe
+                  lastPaymentExternalRef: pi_3OZxyz123456
+        '404':
+          description: Deal not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Deal with ID '550e8400-e29b-41d4-a716-446655440000' not found
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/staking/quote:
+    post:
+      summary: Create NGN→USDC staking quote
+      description: Returns a priced conversion from NGN to USDC including fees and expiry.
+      operationId: createStakingQuote
+      tags:
+        - Staking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amountNgn
+                - paymentRail
+              properties:
+                amountNgn:
+                  type: number
+                  minimum: 1
+                paymentRail:
+                  type: string
+                  enum: [paystack, flutterwave, bank_transfer, manual_admin]
+      responses:
+        '201':
+          description: Quote created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - quoteId
+                  - amountNgn
+                  - estimatedAmountUsdc
+                  - fxRateNgnPerUsdc
+                  - feesNgn
+                  - expiresAt
+                properties:
+                  quoteId:
+                    type: string
+                    format: uuid
+                  amountNgn:
+                    type: number
+                  estimatedAmountUsdc:
+                    type: string
+                    description: USDC amount with up to 6 decimals
+                  fxRateNgnPerUsdc:
+                    type: number
+                  feesNgn:
+                    type: number
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  disclaimer:
+                    type: string
+                    example: Final USDC may differ slightly due to FX movements
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/admin/rewards/{rewardId}/mark-paid:
     post:
       summary: Mark reward as paid
@@ -884,8 +1341,722 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/admin/whistleblower/listings:
+    get:
+      summary: List whistleblower listings (admin)
+      description: |
+        Returns a paginated list of whistleblower listings for admin review.
+        Defaults to `status=pending_review` when no status filter is provided.
+      operationId: adminListWhistleblowerListings
+      tags:
+        - Admin
+      parameters:
+        - name: status
+          in: query
+          description: Filter by listing status (defaults to pending_review)
+          required: false
+          schema:
+            type: string
+            enum: [pending_review, approved, rejected, rented]
+            default: pending_review
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of listings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - listings
+                  - pagination
+                properties:
+                  listings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminListing'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/whistleblower/listings/{id}/approve:
+    post:
+      summary: Approve a whistleblower listing
+      description: |
+        Transitions a listing from `pending_review` to `approved`.
+        Any other current status results in a 409 conflict.
+      operationId: approveWhistleblowerListing
+      tags:
+        - Admin
+      parameters:
+        - name: id
+          in: path
+          description: Listing ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reviewedBy
+              properties:
+                reviewedBy:
+                  type: string
+                  minLength: 1
+                  description: ID of the admin performing the review
+                  example: admin-001
+      responses:
+        '200':
+          description: Listing approved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - listing
+                properties:
+                  listing:
+                    $ref: '#/components/schemas/ModerationResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: Listing not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "Listing with ID 'abc-123' not found"
+        '409':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Listing cannot be approved. Current status: approved
+                  details:
+                    currentStatus: approved
+                    allowedFrom: pending_review
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/whistleblower/listings/{id}/reject:
+    post:
+      summary: Reject a whistleblower listing
+      description: |
+        Transitions a listing from `pending_review` to `rejected`.
+        A `reason` explaining the rejection is required.
+        Any other current status results in a 409 conflict.
+      operationId: rejectWhistleblowerListing
+      tags:
+        - Admin
+      parameters:
+        - name: id
+          in: path
+          description: Listing ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reviewedBy
+                - reason
+              properties:
+                reviewedBy:
+                  type: string
+                  minLength: 1
+                  description: ID of the admin performing the review
+                  example: admin-001
+                reason:
+                  type: string
+                  minLength: 1
+                  description: Reason for rejection shown to the whistleblower
+                  example: Photos do not match the listed address
+      responses:
+        '200':
+          description: Listing rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - listing
+                properties:
+                  listing:
+                    allOf:
+                      - $ref: '#/components/schemas/ModerationResult'
+                      - type: object
+                        properties:
+                          rejectionReason:
+                            type: string
+                            example: Photos do not match the listed address
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: Listing not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "Listing with ID 'abc-123' not found"
+        '409':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Listing cannot be rejected. Current status: rejected
+                  details:
+                    currentStatus: rejected
+                    allowedFrom: pending_review
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/staking/stake:
+    post:
+      summary: Stake USDC tokens
+      description: |
+        Stake USDC tokens and record the transaction on-chain.
+        
+        **Idempotency:** Submitting the same `(externalRefSource, externalRef)` pair twice will
+        return the existing receipt without writing a duplicate on-chain.
+      operationId: stakeTokens
+      tags:
+        - Staking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeRequest'
+            example:
+              amountUsdc: "1000.000000"
+              externalRefSource: manual
+              externalRef: stake-2024-01-15-001
+      responses:
+        '200':
+          description: Staking confirmed and receipt written to chain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingResponse'
+              example:
+                success: true
+                outboxId: "550e8400-e29b-41d4-a716-446655440001"
+                txId: "a3f2c1d4e5b6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+                status: sent
+                message: Staking confirmed and receipt written to chain
+        '202':
+          description: Staking confirmed, receipt queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingResponse'
+              example:
+                success: true
+                outboxId: "550e8400-e29b-41d4-a716-446655440001"
+                txId: "a3f2c1d4e5b6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+                status: pending
+                message: Staking confirmed, receipt queued for retry
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/staking/unstake:
+    post:
+      summary: Unstake USDC tokens
+      description: |
+        Unstake USDC tokens and record the transaction on-chain.
+        
+        **Idempotency:** Submitting the same `(externalRefSource, externalRef)` pair twice will
+        return the existing receipt without writing a duplicate on-chain.
+      operationId: unstakeTokens
+      tags:
+        - Staking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnstakeRequest'
+            example:
+              amountUsdc: "500.000000"
+              externalRefSource: manual
+              externalRef: unstake-2024-01-15-001
+      responses:
+        '200':
+          description: Unstaking confirmed and receipt written to chain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingResponse'
+              example:
+                success: true
+                outboxId: "550e8400-e29b-41d4-a716-446655440002"
+                txId: "b4g3d2e5f6c7g8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3"
+                status: sent
+                message: Unstaking confirmed and receipt written to chain
+        '202':
+          description: Unstaking confirmed, receipt queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingResponse'
+              example:
+                success: true
+                outboxId: "550e8400-e29b-41d4-a716-446655440002"
+                txId: "b4g3d2e5f6c7g8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3"
+                status: pending
+                message: Unstaking confirmed, receipt queued for retry
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/staking/claim:
+    post:
+      summary: Claim staking rewards
+      description: |
+        Claim staking rewards and record the transaction on-chain.
+        
+        **Idempotency:** Submitting the same `(externalRefSource, externalRef)` pair twice will
+        return the existing receipt without writing a duplicate on-chain.
+      operationId: claimStakingRewards
+      tags:
+        - Staking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimStakeRewardRequest'
+            example:
+              externalRefSource: manual
+              externalRef: claim-2024-01-15-001
+      responses:
+        '200':
+          description: Staking reward claim confirmed and receipt written to chain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingResponse'
+              example:
+                success: true
+                outboxId: "550e8400-e29b-41d4-a716-446655440003"
+                txId: "c5h4e3f6g7d8h9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4"
+                status: sent
+                message: Staking reward claim confirmed and receipt written to chain
+        '202':
+          description: Staking reward claim confirmed, receipt queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingResponse'
+              example:
+                success: true
+                outboxId: "550e8400-e29b-41d4-a716-446655440003"
+                txId: "c5h4e3f6g7d8h9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4"
+                status: pending
+                message: Staking reward claim confirmed, receipt queued for retry
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/staking/position:
+    get:
+      summary: Get staking position
+      description: Get current staking position (staked amount and claimable rewards)
+      operationId: getStakingPosition
+      tags:
+        - Staking
+      responses:
+        '200':
+          description: Staking position retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingPositionResponse'
+              example:
+                success: true
+                position:
+                  staked: "1000.000000"
+                  claimable: "50.250000"
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/staking/deposit/initiate:
+    post:
+      summary: Initiate NGN deposit for staking
+      description: Creates a payment intent for NGN deposit. Returns PSP redirect URL or bank details.
+      operationId: initiateStakingDeposit
+      tags:
+        - Staking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quoteId
+                - paymentRail
+              properties:
+                quoteId:
+                  type: string
+                paymentRail:
+                  type: string
+                  enum: [paystack, flutterwave, manual_admin, bank]
+                customerMeta:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    phone:
+                      type: string
+      responses:
+        '201':
+          description: Deposit initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - depositId
+                  - externalRefSource
+                  - externalRef
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  depositId:
+                    type: string
+                    format: uuid
+                  externalRefSource:
+                    type: string
+                    example: psp
+                  externalRef:
+                    type: string
+                    example: pi_abc123
+                  redirectUrl:
+                    type: string
+                    format: uri
+                    nullable: true
+                  bankDetails:
+                    type: object
+                    nullable: true
+                    properties:
+                      accountNumber:
+                        type: string
+                      bankName:
+                        type: string
+        '400':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/payments/{rail}:
+    post:
+      summary: Payments webhook
+      description: Ingest payment provider webhook. Idempotent by (rail, externalRef). Signature validation can be enabled.
+      operationId: paymentsWebhook
+      tags:
+        - Webhooks
+      parameters:
+        - name: rail
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [paystack, flutterwave, manual_admin, bank]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - externalRefSource
+                - externalRef
+              properties:
+                externalRefSource:
+                  type: string
+                externalRef:
+                  type: string
+                status:
+                  type: string
+                  enum: [confirmed, failed, reversed]
+                  default: confirmed
+                providerStatus:
+                  type: string
+                  description: Provider-specific status code for mapping
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '400':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   schemas:
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - createdAt
+        - name
+        - role
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+        name:
+          type: string
+        role:
+          type: string
+          enum: [tenant, landlord, agent]
+
+    BankAccountDetails:
+      type: object
+      required:
+        - accountNumber
+        - accountName
+        - bankName
+      properties:
+        accountNumber:
+          type: string
+          minLength: 10
+          maxLength: 10
+        accountName:
+          type: string
+        bankName:
+          type: string
+
+    WithdrawalRequest:
+      type: object
+      required:
+        - amountNgn
+      properties:
+        amountNgn:
+          type: number
+          minimum: 100
+          maximum: 1000000
+        bankAccountRef:
+          type: string
+          description: Reference to a saved bank account
+        bankAccount:
+          $ref: '#/components/schemas/BankAccountDetails'
+
+    WithdrawalResponse:
+      type: object
+      required:
+        - success
+        - id
+        - amountNgn
+        - status
+        - bankAccount
+        - reference
+        - createdAt
+        - processedAt
+        - failureReason
+      properties:
+        success:
+          type: boolean
+        id:
+          type: string
+        amountNgn:
+          type: number
+        status:
+          type: string
+          enum: [pending, approved, rejected, confirmed, failed, reversed]
+        bankAccount:
+          $ref: '#/components/schemas/BankAccountDetails'
+        reference:
+          type: string
+        createdAt:
+          type: string
+        processedAt:
+          type: string
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+
+    WithdrawalHistoryResponse:
+      type: object
+      required:
+        - success
+        - entries
+        - nextCursor
+      properties:
+        success:
+          type: boolean
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WithdrawalResponse'
+        nextCursor:
+          type: string
+          nullable: true
+
+    AdminListing:
+      type: object
+      required:
+        - listingId
+        - whistleblowerId
+        - address
+        - bedrooms
+        - bathrooms
+        - annualRentNgn
+        - photos
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        whistleblowerId:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        area:
+          type: string
+        bedrooms:
+          type: integer
+          minimum: 0
+        bathrooms:
+          type: integer
+          minimum: 0
+        annualRentNgn:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+            format: uri
+        status:
+          type: string
+          enum: [pending_review, approved, rejected, rented]
+        reviewedBy:
+          type: string
+          description: ID of the admin who reviewed this listing
+        reviewedAt:
+          type: string
+          format: date-time
+          description: Timestamp of the review decision
+        rejectionReason:
+          type: string
+          description: Reason provided when the listing was rejected
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ModerationResult:
+      type: object
+      required:
+        - listingId
+        - status
+        - reviewedBy
+        - reviewedAt
+        - updatedAt
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [approved, rejected]
+        reviewedBy:
+          type: string
+          example: admin-001
+        reviewedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     PaymentTxType:
       type: string
       enum:
@@ -1516,6 +2687,45 @@ components:
           description: ISO 8601 timestamp when the reward was paid (only present when status is "paid")
           example: "2024-01-20T14:45:00Z"
 
+    DealProgressResponse:
+      type: object
+      required:
+        - totalPaidUsdc
+        - periodsPaid
+        - remainingPeriods
+        - nextDueDate
+      properties:
+        totalPaidUsdc:
+          type: string
+          description: Total USDC paid across all confirmed on-chain TENANT_REPAYMENT receipts (decimal string with 6 decimal places)
+          example: "129.040000"
+        periodsPaid:
+          type: integer
+          description: Number of TENANT_REPAYMENT receipts confirmed on-chain
+          example: 2
+        remainingPeriods:
+          type: integer
+          description: Number of remaining repayment periods (termMonths minus periodsPaid, clamped to >= 0)
+          example: 10
+        nextDueDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO 8601 due date of the next scheduled payment; null if fully paid
+          example: "2024-04-15T00:00:00.000Z"
+        lastPaymentTxId:
+          type: string
+          description: txId (SHA-256 hex) of the most recent confirmed receipt
+          example: "a3f2c1d4e5b6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+        lastPaymentExternalRefSource:
+          type: string
+          description: Source part of the canonical external reference (e.g. "stripe", "manual")
+          example: stripe
+        lastPaymentExternalRef:
+          type: string
+          description: Reference part of the canonical external reference (e.g. payment intent ID)
+          example: pi_3OZxyz123456
+
     Error:
       type: object
       required:
@@ -1533,6 +2743,7 @@ components:
                 - VALIDATION_ERROR
                 - UNAUTHORIZED
                 - FORBIDDEN
+                - TOO_MANY_REQUESTS
                 - NOT_FOUND
                 - CONFLICT
                 - LISTING_ALREADY_RENTED
@@ -1546,6 +2757,124 @@ components:
               type: object
               description: Optional structured context for the error
               additionalProperties: true
+
+    StakeRequest:
+      type: object
+      description: Request body for staking USDC tokens
+      required:
+        - amountUsdc
+        - externalRefSource
+        - externalRef
+      properties:
+        amountUsdc:
+          type: string
+          description: Amount to stake in USDC (canonical on-chain unit). Decimal string with up to 6 places.
+          pattern: '^\d+(\.\d{1,6})?$'
+          example: "1000.000000"
+        externalRefSource:
+          type: string
+          description: Staking provider identifier (e.g., manual, stellar)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          example: manual
+        externalRef:
+          type: string
+          description: Provider-specific staking reference string
+          example: stake-2024-01-15-001
+
+    UnstakeRequest:
+      type: object
+      description: Request body for unstaking USDC tokens
+      required:
+        - amountUsdc
+        - externalRefSource
+        - externalRef
+      properties:
+        amountUsdc:
+          type: string
+          description: Amount to unstake in USDC (canonical on-chain unit). Decimal string with up to 6 places.
+          pattern: '^\d+(\.\d{1,6})?$'
+          example: "500.000000"
+        externalRefSource:
+          type: string
+          description: Unstaking provider identifier (e.g., manual, stellar)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          example: manual
+        externalRef:
+          type: string
+          description: Provider-specific unstaking reference string
+          example: unstake-2024-01-15-001
+
+    ClaimStakeRewardRequest:
+      type: object
+      description: Request body for claiming staking rewards
+      required:
+        - externalRefSource
+        - externalRef
+      properties:
+        externalRefSource:
+          type: string
+          description: Claim provider identifier (e.g., manual, stellar)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          example: manual
+        externalRef:
+          type: string
+          description: Provider-specific claim reference string
+          example: claim-2024-01-15-001
+
+    StakingResponse:
+      type: object
+      required:
+        - success
+        - outboxId
+        - txId
+        - status
+        - message
+      properties:
+        success:
+          type: boolean
+          example: true
+        outboxId:
+          type: string
+          format: uuid
+          description: ID of the outbox item
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        txId:
+          type: string
+          description: 32-byte transaction ID as hex
+          example: "a3f2c1d4e5b6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
+        status:
+          type: string
+          enum: [pending, sent, failed]
+          example: sent
+        message:
+          type: string
+          example: Staking confirmed and receipt written to chain
+
+    StakingPositionResponse:
+      type: object
+      required:
+        - success
+        - position
+      properties:
+        success:
+          type: boolean
+          example: true
+        position:
+          type: object
+          required:
+            - staked
+            - claimable
+          properties:
+            staked:
+              type: string
+              description: Total amount currently staked in USDC
+              pattern: '^\d+(\.\d{1,6})?$'
+              example: "1000.000000"
+            claimable:
+              type: string
+              description: Amount of rewards available for claiming in USDC
+              pattern: '^\d+(\.\d{1,6})?$'
+              example: "50.250000"
 
   responses:
     Error:
@@ -1566,13 +2895,19 @@ components:
               code: "TOO_MANY_REQUESTS"
               message: "Rate limit exceeded"
 
-  securitySchemes: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
 
 tags:
   - name: Health
     description: Health check operations
   - name: Soroban
     description: Soroban blockchain configuration
+  - name: Auth
+    description: Email/OTP authentication and sessions
   - name: Payments
     description: Payment confirmation and on-chain USDC receipt recording
   - name: Whistleblower
@@ -1583,3 +2918,5 @@ tags:
     description: Administrative operations including reward payouts
   - name: Whistleblower
     description: Whistleblower earnings and rewards operations
+  - name: Staking
+    description: Staking operations (stake, unstake, claim rewards)

@@ -174,6 +174,34 @@ class ListingStore {
   }
 
   /**
+   * Persist an admin moderation decision on a listing.
+   * Caller is responsible for validating the state transition before calling this.
+   * Returns null if the listing does not exist.
+   */
+  async moderate(
+    listingId: string,
+    status: ListingStatus.APPROVED | ListingStatus.REJECTED,
+    reviewedBy: string,
+    rejectionReason?: string,
+  ): Promise<Listing | null> {
+    const listing = this.listings.get(listingId)
+    if (!listing) return null
+
+    const now = new Date()
+    listing.status = status
+    listing.reviewedBy = reviewedBy
+    listing.reviewedAt = now
+    listing.updatedAt = now
+
+    if (rejectionReason) {
+      listing.rejectionReason = rejectionReason
+    }
+
+    this.listings.set(listingId, listing)
+    return listing
+  }
+
+  /**
    * Clear all data (for testing)
    */
   async clear(): Promise<void> {

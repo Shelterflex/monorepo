@@ -1,0 +1,65 @@
+{
+  "golden_test_vectors": [
+    {
+      "input": { "source": "paystack", "ref": "psk_12345" },
+      "expected_canonical": "v1|source=paystack|ref=psk_12345",
+      "expected_sha256": "71e9a576e18d122acff8e200cefac00bfcba57f4dc64e9cdad89f64304c6d0ec"
+    },
+    {
+      "input": { "source": "BANK_TRANSFER", "ref": " UTR_98765 " },
+      "expected_canonical": "v1|source=bank_transfer|ref=UTR_98765",
+      "expected_sha256": "e6cd19e46ae4e78bffce61f7ada43833ee97f01e3317be080e27ee398e74a29b"
+    },
+    {
+      "input": { "source": "stellar", "ref": "" },
+      "expected_error": "Ref cannot be empty after trimming"
+    },
+    {
+      "input": { "source": "manual", "ref": "stake-2024-01-15-001" },
+      "expected_canonical": "v1|source=manual|ref=stake-2024-01-15-001",
+      "expected_sha256": "113912647282aa2426130185e2a9848d957f8f73903a584e6754a1694fbc64eb"
+    },
+    {
+      "input": { "source": "manual", "ref": "unstake-2024-01-15-001" },
+      "expected_canonical": "v1|source=manual|ref=unstake-2024-01-15-001",
+      "expected_sha256": "e888cb5660d9a10674819c6fc9129945c3bbdeb375766d3d019a53535c2b9aa5"
+    },
+    {
+      "input": { "source": "manual", "ref": "claim-2024-01-15-001" },
+      "expected_canonical": "v1|source=manual|ref=claim-2024-01-15-001",
+      "expected_sha256": "1c2ca38d259d3b758f809308f8d649f1ea0bc037175c52a68030460541f6894e"
+    }
+  ],
+
+  "staking_metadata_hash_vectors": [
+    {
+      "name": "basic_stake",
+      "input": {
+        "tx_type": "stake",
+        "amount_usdc": "1000000",
+        "timestamp": 1620000000,
+        "deal_id": "",
+        "listing_id": "",
+        "metadata": {}
+      },
+      "expected_canonical_payload_v1": "v1|tx_type=stake|amount_usdc=1000000|token=<TOKEN>|user=<USER>|timestamp=1620000000|deal_id=|listing_id=|meta=",
+      "expected_sha256": "c420b6abfa2b233108918399c8cb0059b951cdd2f1c3562bf38c183a0ff96713"
+    },
+    {
+      "name": "unstake_with_metadata",
+      "input": {
+        "tx_type": "unstake",
+        "amount_usdc": "500000",
+        "timestamp": 1620000000,
+        "deal_id": "DEAL001",
+        "listing_id": "LIST001",
+        "metadata": {
+          "reference": "TX123456789",
+          "source": "bank_transfer"
+        }
+      },
+      "expected_canonical_payload_v1": "v1|tx_type=unstake|amount_usdc=500000|token=<TOKEN>|user=<USER>|timestamp=1620000000|deal_id=DEAL001|listing_id=LIST001|meta=reference=TX123456789&source=bank_transfer",
+      "expected_sha256": "348091ff408ec28120067b9708aee87b147834307a57c23b36821ffced58e5a0"
+    }
+  ]
+}

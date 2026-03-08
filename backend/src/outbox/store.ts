@@ -1,20 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import {
   OutboxStatus,
+  TxType,
   type OutboxItem,
   type CreateOutboxItemInput,
   type CanonicalExternalRefV1,
 } from './types.js'
-import { computeTxId } from './canonicalization.js'
+import { computeTxId, buildCanonicalString } from './canonicalization.js'
 
 /**
  * In-memory outbox store
- * 
+ *
  * MVP implementation using Map for storage.
  * Designed to be easily replaced with database persistence.
  */
 class OutboxStore {
-  private items = new Map<string, OutboxItem>()
+  public items = new Map<string, OutboxItem>()
   private refIndex = new Map<CanonicalExternalRefV1, string>() // ref -> id mapping
 
   /**
@@ -22,8 +23,11 @@ class OutboxStore {
    * Returns existing item if canonicalExternalRefV1 already exists (idempotent)
    */
   async create(input: CreateOutboxItemInput): Promise<OutboxItem> {
+    // Build canonical string from source and ref
+    const canonicalExternalRefV1 = buildCanonicalString(input.source, input.ref)
+
     // Check if item already exists for this external reference
-    const existingId = this.refIndex.get(input.canonicalExternalRefV1)
+    const existingId = this.refIndex.get(canonicalExternalRefV1)
     if (existingId) {
       const existing = this.items.get(existingId)
       if (existing) {
@@ -31,28 +35,33 @@ class OutboxStore {
       }
     }
 
-    // Compute deterministic tx_id
-    const txId = computeTxId({
-      txType: input.txType,
-      externalRef: input.canonicalExternalRefV1,
-      payload: input.payload,
-    })
+    // Compute deterministic tx_id from source and ref only
+    const txId = computeTxId(input.source, input.ref)
 
     const now = new Date()
     const item: OutboxItem = {
       id: randomUUID(),
       txType: input.txType,
-      canonicalExternalRefV1: input.canonicalExternalRefV1,
+      canonicalExternalRefV1,
       txId,
       payload: input.payload,
       status: OutboxStatus.PENDING,
       attempts: 0,
+
+      lastError: "",
+      aggregateId: input.aggregateId ?? "",
+      aggregateType: input.aggregateType ?? "",
+      eventType: input.eventType ?? "",
+      nextRetryAt: null,
+      processedAt: null,
+      retryCount: 0,
+
       createdAt: now,
       updatedAt: now,
     }
 
     this.items.set(item.id, item)
-    this.refIndex.set(input.canonicalExternalRefV1, item.id)
+    this.refIndex.set(canonicalExternalRefV1, item.id)
 
     return item
   }
@@ -67,8 +76,9 @@ class OutboxStore {
   /**
    * Get item by external reference
    */
-  async getByExternalRef(ref: CanonicalExternalRefV1): Promise<OutboxItem | null> {
-    const id = this.refIndex.get(ref)
+  async getByExternalRef(source: string, ref: string): Promise<OutboxItem | null> {
+    const canonical = buildCanonicalString(source, ref)
+    const id = this.refIndex.get(canonical)
     if (!id) return null
     return this.items.get(id) ?? null
   }
@@ -101,13 +111,28 @@ class OutboxStore {
     item.status = status
     item.attempts += 1
     item.updatedAt = new Date()
-    
+
     if (error) {
       item.lastError = error
     }
 
     this.items.set(id, item)
     return item
+  }
+
+  /**
+   * List items by dealId, optionally filtered by txType
+   * Only returns items whose payload.dealId matches.
+   */
+  async listByDealId(dealId: string, txType?: TxType): Promise<OutboxItem[]> {
+    const items: OutboxItem[] = []
+    for (const item of this.items.values()) {
+      if (item.payload.dealId !== dealId) continue
+      if (txType !== undefined && item.txType !== txType) continue
+      items.push(item)
+    }
+    // Sort by createdAt ascending (chronological order)
+    return items.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
   }
 
   /**

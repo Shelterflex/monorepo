@@ -1,8 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{
-    contract, contractimpl, contracttype, vec, Address, Env, Symbol, Vec, BytesN,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, vec, Address, BytesN, Env, Symbol, Vec};
 
 /// Deal ID type - using u64 for simplicity
 pub type DealId = u64;
@@ -42,7 +40,7 @@ pub struct Receipt {
 #[derive(Clone, Debug)]
 pub struct ReceiptPage {
     pub receipts: Vec<Receipt>,
-    pub has_next: bool, // True if there are more receipts
+    pub has_next: bool,      // True if there are more receipts
     pub next_cursor: Cursor, // Cursor for next page (only valid if has_next is true)
 }
 
@@ -105,11 +103,12 @@ fn get_tx_id(env: &Env) -> TxId {
     // For now, we'll use a combination of timestamp and sequence number
     let ledger_info = env.ledger();
     let timestamp = ledger_info.timestamp();
-    
+
     // Get a global counter from storage to ensure uniqueness across all receipts
     // Use a special deal_id (u64::MAX) as the key for the global counter
     let global_counter_key = DataKey::ReceiptCount(u64::MAX);
-    let counter: u64 = env.storage()
+    let counter: u64 = env
+        .storage()
         .persistent()
         .get(&global_counter_key)
         .unwrap_or(0);
@@ -117,30 +116,30 @@ fn get_tx_id(env: &Env) -> TxId {
     env.storage()
         .persistent()
         .set(&global_counter_key, &new_counter);
-    
+
     // Create a deterministic tx_id from timestamp and counter
     // In a real implementation, you'd get this from the actual transaction hash
     let mut bytes = [0u8; 32];
-    
+
     // Convert timestamp (u64) to bytes manually
     let mut ts = timestamp;
     for i in (0..8).rev() {
         bytes[i] = (ts & 0xFF) as u8;
         ts >>= 8;
     }
-    
-    // Convert counter (u64) to bytes manually  
+
+    // Convert counter (u64) to bytes manually
     let mut cnt = new_counter;
     for i in (8..16).rev() {
         bytes[i] = (cnt & 0xFF) as u8;
         cnt >>= 8;
     }
-    
+
     // Fill remaining bytes with a pattern for uniqueness
     for i in 16..32 {
         bytes[i] = (timestamp as u8).wrapping_add(i as u8);
     }
-    
+
     BytesN::from_array(env, &bytes)
 }
 
@@ -156,14 +155,9 @@ impl RentPayments {
 
     /// Create a new receipt for a deal
     /// This function records a monthly payment receipt
-    pub fn create_receipt(
-        env: Env,
-        deal_id: DealId,
-        amount: i128,
-        payer: Address,
-    ) -> Receipt {
+    pub fn create_receipt(env: Env, deal_id: DealId, amount: i128, payer: Address) -> Receipt {
         require_admin(&env);
-        
+
         if amount <= 0 {
             panic!("amount must be positive");
         }
@@ -195,23 +189,23 @@ impl RentPayments {
     }
 
     /// List receipts for a deal with cursor-based pagination
-    /// 
+    ///
     /// # Arguments
     /// * `deal_id` - The deal ID to list receipts for
     /// * `limit` - Maximum number of receipts to return (must be > 0 and <= 100)
     /// * `cursor` - Optional cursor for pagination. If None, starts from the beginning.
     ///              Cursor format: (timestamp, tx_id) tuple
-    /// 
+    ///
     /// # Returns
     /// * `ReceiptPage` containing:
     ///   - `receipts`: Vec of receipts ordered by (timestamp ASC, tx_id ASC)
     ///   - `next_cursor`: Optional cursor for the next page, None if this is the last page
-    /// 
+    ///
     /// # Ordering
     /// Receipts are ordered by:
     /// 1. `timestamp` (ascending)
     /// 2. `tx_id` (ascending, as bytes comparison)
-    /// 
+    ///
     /// This ensures stable, deterministic ordering even if multiple receipts have the same timestamp.
     pub fn list_receipts_by_deal(
         env: Env,
@@ -229,38 +223,40 @@ impl RentPayments {
         // Convert to a sortable format - we'll need to collect into a Vec for sorting
         // Since Soroban Vec doesn't support sort_by directly, we'll build a sorted Vec
         let mut sorted_receipts = vec![&env];
-        
+
         // Collect all receipts into the sorted Vec
         for i in 0..receipts_len {
             sorted_receipts.push_back(receipts.get(i).unwrap());
         }
 
         // Sort receipts by (timestamp, tx_id) in ascending order
-        // We'll use a simple bubble sort since we can't use sort_by in no_std easily
-        // For production, consider using a more efficient algorithm or storing sorted
+        // Using insertion sort for better performance than bubble sort
         if sorted_receipts.len() > 1 {
-            let mut swapped = true;
-            while swapped {
-                swapped = false;
-                let len = sorted_receipts.len();
-                for i in 0..(len - 1) {
-                    let a = sorted_receipts.get(i).unwrap();
-                    let b = sorted_receipts.get(i + 1).unwrap();
-                    
-                    let should_swap = match a.timestamp.cmp(&b.timestamp) {
-                        core::cmp::Ordering::Greater => true,
+            let len = sorted_receipts.len();
+            for i in 1..len {
+                let key = sorted_receipts.get(i).unwrap().clone();
+                let mut j = i;
+                
+                while j > 0 {
+                    let prev = sorted_receipts.get(j - 1).unwrap();
+                    let should_swap = match key.timestamp.cmp(&prev.timestamp) {
+                        core::cmp::Ordering::Less => true,
                         core::cmp::Ordering::Equal => {
-                            a.tx_id.to_array() > b.tx_id.to_array()
-                        }
-                        core::cmp::Ordering::Less => false,
+                            let key_tx_id_array = key.tx_id.to_array();
+                            let prev_tx_id_array = prev.tx_id.to_array();
+                            key_tx_id_array < prev_tx_id_array
+                        },
+                        core::cmp::Ordering::Greater => false,
                     };
                     
                     if should_swap {
-                        sorted_receipts.set(i, b.clone());
-                        sorted_receipts.set(i + 1, a.clone());
-                        swapped = true;
+                        sorted_receipts.set(j, prev.clone());
+                        j -= 1;
+                    } else {
+                        break;
                     }
                 }
+                sorted_receipts.set(j, key);
             }
         }
 
@@ -268,20 +264,19 @@ impl RentPayments {
         let mut start_index = 0u32;
         if let Some(cursor) = cursor {
             let cursor_tx_id_array = cursor.tx_id.to_array();
-            
+
             // Find the first receipt with (timestamp, tx_id) > cursor
             for i in 0..sorted_receipts.len() {
                 let r = sorted_receipts.get(i).unwrap();
                 let r_tx_id_array = r.tx_id.to_array();
                 if r.timestamp > cursor.timestamp
-                    || (r.timestamp == cursor.timestamp
-                        && r_tx_id_array > cursor_tx_id_array)
+                    || (r.timestamp == cursor.timestamp && r_tx_id_array > cursor_tx_id_array)
                 {
                     start_index = i;
                     break;
                 }
             }
-            // If no receipt found, start_index remains at end
+            // If no receipt found that is > cursor, we're at the end
             if start_index == 0 && sorted_receipts.len() > 0 {
                 let first = sorted_receipts.get(0).unwrap();
                 let first_tx_id_array = first.tx_id.to_array();
@@ -320,23 +315,32 @@ impl RentPayments {
                 0
             };
             if let Some(last_receipt) = page_receipts.get(last_index) {
-                (true, Cursor {
-                    timestamp: last_receipt.timestamp,
-                    tx_id: last_receipt.tx_id.clone(),
-                })
+                (
+                    true,
+                    Cursor {
+                        timestamp: last_receipt.timestamp,
+                        tx_id: last_receipt.tx_id.clone(),
+                    },
+                )
             } else {
                 // Fallback: create empty cursor
-                (false, Cursor {
-                    timestamp: 0,
-                    tx_id: empty_tx_id,
-                })
+                (
+                    false,
+                    Cursor {
+                        timestamp: 0,
+                        tx_id: empty_tx_id,
+                    },
+                )
             }
         } else {
             // No more receipts
-            (false, Cursor {
-                timestamp: 0,
-                tx_id: empty_tx_id,
-            })
+            (
+                false,
+                Cursor {
+                    timestamp: 0,
+                    tx_id: empty_tx_id,
+                },
+            )
         };
 
         ReceiptPage {
@@ -358,7 +362,7 @@ mod test {
 
     use super::*;
     use soroban_sdk::{
-        testutils::{Address as _, MockAuth, MockAuthInvoke},
+        testutils::{Address as _, MockAuth, MockAuthInvoke, Ledger},
         Address, BytesN, Env, IntoVal,
     };
 
@@ -370,7 +374,6 @@ mod test {
         client.init(&admin);
         (admin, client, contract_id)
     }
-
 
     #[test]
     fn test_list_receipts_by_deal_empty() {
@@ -442,16 +445,8 @@ mod test {
         assert!(!page2.has_next);
 
         // Verify no duplicates between pages
-        let page1_ids: std::vec::Vec<u64> = page1
-            .receipts
-            .iter()
-            .map(|r| r.id)
-            .collect();
-        let page2_ids: std::vec::Vec<u64> = page2
-            .receipts
-            .iter()
-            .map(|r| r.id)
-            .collect();
+        let page1_ids: std::vec::Vec<u64> = page1.receipts.iter().map(|r| r.id).collect();
+        let page2_ids: std::vec::Vec<u64> = page2.receipts.iter().map(|r| r.id).collect();
 
         for id in &page1_ids {
             assert!(!page2_ids.contains(id), "Duplicate receipt found: {}", id);
@@ -498,7 +493,7 @@ mod test {
 
         // Verify we got exactly 25 receipts (no skipping)
         assert_eq!(all_receipt_ids.len(), 25);
-        
+
         // Verify all IDs are unique (no duplicates)
         let mut sorted_ids = all_receipt_ids.clone();
         sorted_ids.sort();
@@ -529,7 +524,7 @@ mod test {
 
         // Get all receipts in one call
         let all_page = client.list_receipts_by_deal(&deal_id, &100u32, &None);
-        
+
         // Get receipts in pages and verify ordering is consistent
         let mut cursor = None;
         let mut prev_timestamp = 0u64;
@@ -537,14 +532,14 @@ mod test {
 
         loop {
             let page = client.list_receipts_by_deal(&deal_id, &3u32, &cursor);
-            
+
             for receipt in page.receipts.iter() {
                 // Verify ordering: timestamp should be >= previous
                 assert!(
                     receipt.timestamp >= prev_timestamp,
                     "Receipts not in ascending timestamp order"
                 );
-                
+
                 // If timestamp is equal, tx_id should be >= previous
                 if receipt.timestamp == prev_timestamp {
                     if let Some(ref prev) = prev_tx_id {
@@ -556,7 +551,7 @@ mod test {
                         );
                     }
                 }
-                
+
                 prev_timestamp = receipt.timestamp;
                 prev_tx_id = Some(receipt.tx_id.clone());
             }
@@ -582,7 +577,92 @@ mod test {
         }
 
         let all_ids: std::vec::Vec<u64> = all_page.receipts.iter().map(|r| r.id).collect();
-        assert_eq!(paginated_ids, all_ids, "Paginated results don't match full results");
+        assert_eq!(
+            paginated_ids, all_ids,
+            "Paginated results don't match full results"
+        );
+    }
+
+    #[test]
+    fn test_list_receipts_by_deal_same_timestamp() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+
+        // Set a fixed timestamp for all receipts to test same-timestamp ordering
+        let fixed_timestamp = 12345u64;
+        env.ledger().set_timestamp(fixed_timestamp);
+
+        // Create multiple receipts with the same timestamp
+        for i in 1..=5 {
+            env.mock_auths(&[MockAuth {
+                address: &admin,
+                invoke: &MockAuthInvoke {
+                    contract: &contract_id,
+                    fn_name: "create_receipt",
+                    args: (deal_id, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    sub_invokes: &[],
+                },
+            }]);
+            client.create_receipt(&deal_id, &(i * 1000), &payer);
+        }
+
+        // Get all receipts and verify they are ordered by tx_id when timestamps are equal
+        let all_page = client.list_receipts_by_deal(&deal_id, &100u32, &None);
+        assert_eq!(all_page.receipts.len(), 5);
+
+        // Verify all receipts have the same timestamp
+        for receipt in all_page.receipts.iter() {
+            assert_eq!(receipt.timestamp, fixed_timestamp);
+        }
+
+        // Verify tx_id ordering is strictly increasing
+        let mut prev_tx_id: Option<BytesN<32>> = None;
+        for receipt in all_page.receipts.iter() {
+            if let Some(ref prev) = prev_tx_id {
+                let receipt_array = receipt.tx_id.to_array();
+                let prev_array = prev.to_array();
+                assert!(
+                    receipt_array > prev_array,
+                    "Receipts with same timestamp not in ascending tx_id order"
+                );
+            }
+            prev_tx_id = Some(receipt.tx_id.clone());
+        }
+
+        // Test pagination with same timestamp
+        let page1 = client.list_receipts_by_deal(&deal_id, &2u32, &None);
+        assert_eq!(page1.receipts.len(), 2);
+        assert!(page1.has_next);
+
+        let cursor1 = page1.next_cursor.clone();
+        let page2 = client.list_receipts_by_deal(&deal_id, &2u32, &Some(cursor1));
+        assert_eq!(page2.receipts.len(), 2);
+        assert!(page2.has_next);
+
+        let cursor2 = page2.next_cursor.clone();
+        let page3 = client.list_receipts_by_deal(&deal_id, &2u32, &Some(cursor2));
+        assert_eq!(page3.receipts.len(), 1);
+        assert!(!page3.has_next);
+
+        // Verify no duplicates across pages
+        let mut all_tx_ids = std::vec::Vec::new();
+        for receipt in page1.receipts.iter() {
+            all_tx_ids.push(receipt.tx_id.clone());
+        }
+        for receipt in page2.receipts.iter() {
+            all_tx_ids.push(receipt.tx_id.clone());
+        }
+        for receipt in page3.receipts.iter() {
+            all_tx_ids.push(receipt.tx_id.clone());
+        }
+
+        // All tx_ids should be unique
+        let mut sorted_tx_ids = all_tx_ids.clone();
+        sorted_tx_ids.sort_by(|a, b| a.to_array().cmp(&b.to_array()));
+        sorted_tx_ids.dedup();
+        assert_eq!(sorted_tx_ids.len(), 5, "Found duplicate tx_ids across pages");
     }
 
     #[test]
@@ -603,6 +683,236 @@ mod test {
         let deal_id = 1u64;
 
         client.list_receipts_by_deal(&deal_id, &101u32, &None);
+    }
+
+    // ============================================================================
+    // Security Tests
+    // ============================================================================
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn create_receipt_fails_with_zero_amount() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id, 0i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.create_receipt(&deal_id, &0i128, &payer);
+    }
+
+    #[test]
+    #[should_panic(expected = "amount must be positive")]
+    fn create_receipt_fails_with_negative_amount() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id, -100i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.create_receipt(&deal_id, &-100i128, &payer);
+    }
+
+    #[test]
+    #[should_panic]
+    fn create_receipt_fails_without_admin_auth() {
+        let env = Env::default();
+        let (_admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+        let non_admin = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id, 1000i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.create_receipt(&deal_id, &1000i128, &payer);
+    }
+
+    #[test]
+    fn test_create_receipt_state_update_ordering() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+
+        // Get initial state
+        let initial_count = client.receipt_count(&deal_id);
+        assert_eq!(initial_count, 0u64);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id, 1000i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        // Create receipt - this should update state before any external calls
+        let receipt = client.create_receipt(&deal_id, &1000i128, &payer);
+
+        // Verify state was updated correctly
+        assert_eq!(client.receipt_count(&deal_id), 1u64);
+        assert_eq!(receipt.amount, 1000i128);
+        assert_eq!(receipt.payer, payer);
+        assert_eq!(receipt.deal_id, deal_id);
+
+        // Verify receipt is stored and retrievable
+        let page = client.list_receipts_by_deal(&deal_id, &10u32, &None);
+        assert_eq!(page.receipts.len(), 1);
+        assert_eq!(page.receipts.get(0).unwrap().id, receipt.id);
+    }
+
+    #[test]
+    fn test_create_receipt_maximum_amount() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+
+        let max_amount = i128::MAX;
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id, max_amount, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        // Should succeed with maximum i128 value
+        let receipt = client.create_receipt(&deal_id, &max_amount, &payer);
+        assert_eq!(receipt.amount, max_amount);
+        assert_eq!(client.receipt_count(&deal_id), 1u64);
+    }
+
+    #[test]
+    fn test_multiple_receipts_state_consistency() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id = 1u64;
+        let payer = Address::generate(&env);
+
+        // Create multiple receipts and verify state consistency
+        let amounts = [1000i128, 2000i128, 3000i128];
+        let mut receipt_ids = std::vec::Vec::new();
+
+        for (i, amount) in amounts.iter().enumerate() {
+            env.mock_auths(&[MockAuth {
+                address: &admin,
+                invoke: &MockAuthInvoke {
+                    contract: &contract_id,
+                    fn_name: "create_receipt",
+                    args: (deal_id, amount, payer.clone()).into_val(&env),
+                    sub_invokes: &[],
+                },
+            }]);
+
+            let receipt = client.create_receipt(&deal_id, &amount, &payer);
+            receipt_ids.push(receipt.id);
+
+            // Verify state after each creation
+            assert_eq!(client.receipt_count(&deal_id), (i + 1) as u64);
+            
+            // Verify all previous receipts are still accessible
+            let page = client.list_receipts_by_deal(&deal_id, &100u32, &None);
+            assert_eq!(page.receipts.len(), (i + 1) as u32);
+        }
+
+        // Final verification
+        assert_eq!(client.receipt_count(&deal_id), 3u64);
+        
+        let final_page = client.list_receipts_by_deal(&deal_id, &100u32, &None);
+        assert_eq!(final_page.receipts.len(), 3);
+        
+        // Verify all amounts are correct
+        let mut found_amounts = std::vec::Vec::new();
+        for receipt in final_page.receipts.iter() {
+            found_amounts.push(receipt.amount);
+        }
+        found_amounts.sort();
+        let mut expected_amounts = amounts.to_vec();
+        expected_amounts.sort();
+        
+        // Compare lengths first
+        assert_eq!(found_amounts.len(), expected_amounts.len());
+        // Compare each element
+        for i in 0..found_amounts.len() {
+            assert_eq!(found_amounts[i], expected_amounts[i]);
+        }
+    }
+
+    #[test]
+    fn test_receipt_isolation_between_deals() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let deal_id_1 = 1u64;
+        let deal_id_2 = 2u64;
+        let payer = Address::generate(&env);
+
+        // Create receipts for deal 1
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id_1, 1000i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.create_receipt(&deal_id_1, &1000i128, &payer);
+
+        // Create receipts for deal 2
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (deal_id_2, 2000i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.create_receipt(&deal_id_2, &2000i128, &payer);
+
+        // Verify isolation
+        assert_eq!(client.receipt_count(&deal_id_1), 1u64);
+        assert_eq!(client.receipt_count(&deal_id_2), 1u64);
+
+        let page_1 = client.list_receipts_by_deal(&deal_id_1, &10u32, &None);
+        let page_2 = client.list_receipts_by_deal(&deal_id_2, &10u32, &None);
+
+        assert_eq!(page_1.receipts.len(), 1);
+        assert_eq!(page_2.receipts.len(), 1);
+        assert_eq!(page_1.receipts.get(0).unwrap().amount, 1000i128);
+        assert_eq!(page_2.receipts.get(0).unwrap().amount, 2000i128);
     }
 
     #[test]

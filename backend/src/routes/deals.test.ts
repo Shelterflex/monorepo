@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../app.js'
 import { dealStore } from '../models/dealStore.js'
+import { outboxStore } from '../outbox/store.js'
+import { OutboxStatus, TxType } from '../outbox/types.js'
+import { listingStore } from '../models/listingStore.js'
+import { ListingStatus } from '../models/listing.js'
 
 describe('Deals API', () => {
   let app: any
@@ -12,11 +16,30 @@ describe('Deals API', () => {
   })
 
   describe('POST /api/deals', () => {
+    let approvedListingId: string
+
+    beforeEach(async () => {
+      await listingStore.clear()
+      const listing = await listingStore.create({
+        whistleblowerId: 'wb-001',
+        address: '123 Test St',
+        city: 'Lagos',
+        area: 'Ikeja',
+        bedrooms: 2,
+        bathrooms: 2,
+        annualRentNgn: 1200000,
+        description: 'Test listing',
+        photos: []
+      })
+      await listingStore.updateStatus(listing.listingId, ListingStatus.APPROVED)
+      approvedListingId = listing.listingId
+    })
+
     it('should create a new deal with valid data', async () => {
       const dealData = {
         tenantId: 'tenant-001',
         landlordId: 'landlord-001',
-        listingId: '550e8400-e29b-41d4-a716-446655440001',
+        listingId: approvedListingId,
         annualRentNgn: 1200000,
         depositNgn: 240000,
         termMonths: 12
@@ -273,6 +296,157 @@ describe('Deals API', () => {
       const response = await request(app)
         .patch(`/api/deals/${fakeId}/schedule/1`)
         .send({ status: 'paid' })
+        .expect(404)
+
+      expect(response.body.error.code).toBe('NOT_FOUND')
+    })
+  })
+
+  describe('GET /api/deals/:dealId/progress', () => {
+    let dealId: string
+
+    beforeEach(async () => {
+      await outboxStore.clear()
+      // Create a fresh deal for each test
+      const createRes = await request(app)
+        .post('/api/deals')
+        .send({
+          tenantId: 'tenant-001',
+          landlordId: 'landlord-001',
+          annualRentNgn: 1200000,
+          depositNgn: 240000,
+          termMonths: 12,
+        })
+      dealId = createRes.body.data.dealId
+    })
+
+    it('should return zero progress when no receipts exist', async () => {
+      const response = await request(app)
+        .get(`/api/deals/${dealId}/progress`)
+        .expect(200)
+
+      expect(response.body.success).toBe(true)
+      const data = response.body.data
+      expect(data.periodsPaid).toBe(0)
+      expect(data.totalPaidUsdc).toBe('0.000000')
+      expect(data.remainingPeriods).toBe(12)
+      expect(data.nextDueDate).toBeDefined()
+      expect(data.nextDueDate).not.toBeNull()
+      expect(data.lastPaymentTxId).toBeUndefined()
+    })
+
+    it('should count only SENT TENANT_REPAYMENT receipts', async () => {
+      // Create a SENT receipt
+      const sentItem = await outboxStore.create({
+        txType: TxType.TENANT_REPAYMENT,
+        source: 'stripe',
+        ref: 'pi_sent_001',
+        payload: { dealId, amountUsdc: '64.52', tokenAddress: 'USDC_ADDR', txType: TxType.TENANT_REPAYMENT },
+      })
+      await outboxStore.updateStatus(sentItem.id, OutboxStatus.SENT)
+
+      // Create a PENDING receipt (should NOT be counted)
+      await outboxStore.create({
+        txType: TxType.TENANT_REPAYMENT,
+        source: 'stripe',
+        ref: 'pi_pending_002',
+        payload: { dealId, amountUsdc: '64.52', tokenAddress: 'USDC_ADDR', txType: TxType.TENANT_REPAYMENT },
+      })
+
+      // Create a FAILED receipt (should NOT be counted)
+      const failedItem = await outboxStore.create({
+        txType: TxType.TENANT_REPAYMENT,
+        source: 'stripe',
+        ref: 'pi_failed_003',
+        payload: { dealId, amountUsdc: '64.52', tokenAddress: 'USDC_ADDR', txType: TxType.TENANT_REPAYMENT },
+      })
+      await outboxStore.updateStatus(failedItem.id, OutboxStatus.FAILED)
+
+      const response = await request(app)
+        .get(`/api/deals/${dealId}/progress`)
+        .expect(200)
+
+      const data = response.body.data
+      expect(data.periodsPaid).toBe(1)
+      expect(data.totalPaidUsdc).toBe('64.520000')
+      expect(data.remainingPeriods).toBe(11)
+      expect(data.lastPaymentTxId).toBe(sentItem.txId)
+      expect(data.lastPaymentExternalRefSource).toBe('stripe')
+      expect(data.lastPaymentExternalRef).toBe('pi_sent_001')
+    })
+
+    it('should sum multiple SENT receipts and pick the latest as last payment', async () => {
+      const item1 = await outboxStore.create({
+        txType: TxType.TENANT_REPAYMENT,
+        source: 'stripe',
+        ref: 'pi_aaa',
+        payload: { dealId, amountUsdc: '50.00', tokenAddress: 'USDC_ADDR', txType: TxType.TENANT_REPAYMENT },
+      })
+      await outboxStore.updateStatus(item1.id, OutboxStatus.SENT)
+
+      const item2 = await outboxStore.create({
+        txType: TxType.TENANT_REPAYMENT,
+        source: 'stellar',
+        ref: 'txhash_bbb',
+        payload: { dealId, amountUsdc: '79.04', tokenAddress: 'USDC_ADDR', txType: TxType.TENANT_REPAYMENT },
+      })
+      await outboxStore.updateStatus(item2.id, OutboxStatus.SENT)
+
+      const response = await request(app)
+        .get(`/api/deals/${dealId}/progress`)
+        .expect(200)
+
+      const data = response.body.data
+      expect(data.periodsPaid).toBe(2)
+      expect(data.totalPaidUsdc).toBe('129.040000')
+      expect(data.remainingPeriods).toBe(10)
+      expect(data.lastPaymentExternalRefSource).toBe('stellar')
+      expect(data.lastPaymentExternalRef).toBe('txhash_bbb')
+    })
+
+    it('should not count LANDLORD_PAYOUT receipts', async () => {
+      const item = await outboxStore.create({
+        txType: TxType.LANDLORD_PAYOUT,
+        source: 'manual',
+        ref: 'payout_001',
+        payload: { dealId, amountUsdc: '960.00', tokenAddress: 'USDC_ADDR', txType: TxType.LANDLORD_PAYOUT },
+      })
+      await outboxStore.updateStatus(item.id, OutboxStatus.SENT)
+
+      const response = await request(app)
+        .get(`/api/deals/${dealId}/progress`)
+        .expect(200)
+
+      expect(response.body.data.periodsPaid).toBe(0)
+      expect(response.body.data.totalPaidUsdc).toBe('0.000000')
+    })
+
+    it('should return nextDueDate as null when fully paid', async () => {
+      // Create 12 SENT receipts for a 12-month deal (= fully paid)
+      for (let i = 0; i < 12; i++) {
+        const item = await outboxStore.create({
+          txType: TxType.TENANT_REPAYMENT,
+          source: 'stripe',
+          ref: `pi_period_${i}`,
+          payload: { dealId, amountUsdc: '80000.00', tokenAddress: 'USDC_ADDR', txType: TxType.TENANT_REPAYMENT },
+        })
+        await outboxStore.updateStatus(item.id, OutboxStatus.SENT)
+      }
+
+      const response = await request(app)
+        .get(`/api/deals/${dealId}/progress`)
+        .expect(200)
+
+      const data = response.body.data
+      expect(data.periodsPaid).toBe(12)
+      expect(data.remainingPeriods).toBe(0)
+      expect(data.nextDueDate).toBeNull()
+    })
+
+    it('should return 404 for non-existent deal', async () => {
+      const fakeId = '550e8400-e29b-41d4-a716-446655440999'
+      const response = await request(app)
+        .get(`/api/deals/${fakeId}/progress`)
         .expect(404)
 
       expect(response.body.error.code).toBe('NOT_FOUND')

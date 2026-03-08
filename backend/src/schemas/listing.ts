@@ -35,3 +35,34 @@ export const listingFiltersSchema = z.object({
 })
 
 export type ListingFiltersRequest = z.infer<typeof listingFiltersSchema>
+
+/**
+ * Query params for GET /api/admin/whistleblower/listings
+ * Defaults to pending_review so the moderation queue is immediately visible
+ */
+export const adminListingFiltersSchema = z.object({
+  status: z.nativeEnum(ListingStatus).optional().default(ListingStatus.PENDING_REVIEW),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+export type AdminListingFiltersRequest = z.infer<typeof adminListingFiltersSchema>
+
+/**
+ * Body for POST /api/admin/whistleblower/listings/:id/approve
+ */
+export const approveListingSchema = z.object({
+  reviewedBy: z.string().min(1, 'Reviewer ID is required'),
+})
+
+export type ApproveListingRequest = z.infer<typeof approveListingSchema>
+
+/**
+ * Body for POST /api/admin/whistleblower/listings/:id/reject
+ */
+export const rejectListingSchema = z.object({
+  reviewedBy: z.string().min(1, 'Reviewer ID is required'),
+  reason: z.string().min(1, 'Rejection reason is required'),
+})
+
+export type RejectListingRequest = z.infer<typeof rejectListingSchema>
