@@ -4,6 +4,7 @@ import { SorobanAdapter } from '../soroban/adapter.js'
 import { logger } from '../utils/logger.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { getPaymentProvider } from '../payments/index.js'
 import { validate } from '../middleware/validate.js'
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth.js'
 import { depositStore } from '../models/depositStore.js'
@@ -13,18 +14,23 @@ import { depositInitiateSchema, type DepositInitiateRequest } from '../schemas/d
 import { stakeFromDepositSchema, type StakeFromDepositRequest } from '../schemas/stakeFromDeposit.js'
 import { stakeFinalizeSchema, type StakeFinalizeRequest } from '../schemas/stakeFinalize.js'
 import { conversionStore } from '../models/conversionStore.js'
+import { ConversionService } from '../services/conversionService.js'
 import { WalletService } from '../services/walletService.js'
+import { NgnWalletService } from '../services/ngnWalletService.js'
 import { stakingQuoteSchema, type StakingQuoteRequest } from '../schemas/stakingQuote.js'
 import { quoteStore } from '../models/quoteStore.js'
+import { StakingService } from '../services/stakingService.js'
 import {
   stakeSchema,
   unstakeSchema,
   claimStakeRewardSchema,
   stakingPositionSchema,
+  stakeNgnSchema,
   type StakeRequest,
   type UnstakeRequest,
   type ClaimStakeRewardRequest,
   type StakingPositionResponse,
+  type StakeNgnRequest,
 } from '../schemas/staking.js'
 
 function formatAmount6(amountMicro: bigint): string {
@@ -39,6 +45,9 @@ export function createStakingRouter(
   adapter: SorobanAdapter,
   walletService: WalletService,
   linkedAddressStore: LinkedAddressStore,
+  ngnWalletService?: NgnWalletService,
+  conversionService?: ConversionService,
+  stakingService?: StakingService,
 ) {
   const router = Router()
   const sender = new OutboxSender(adapter)
@@ -94,44 +103,29 @@ export function createStakingRouter(
         if (typeof userId !== 'string' || userId.length === 0) {
           throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Missing x-user-id header')
         }
-        const amountNgnHeader = req.headers['x-amount-ngn']
-        const amountNgn = typeof amountNgnHeader === 'string' ? Number(amountNgnHeader) : NaN
-        if (!Number.isFinite(amountNgn) || amountNgn <= 0) {
-          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Invalid NGN amount')
+
+        const quote = await quoteStore.getById(quoteId)
+        if (!quote) {
+          throw new AppError(ErrorCode.NOT_FOUND, 404, 'Quote not found')
         }
-        const originalRail = paymentRail
-        const internalRail =
-          originalRail === 'bank_transfer'
-            ? 'bank'
-            : originalRail === 'paystack' ||
-              originalRail === 'flutterwave' ||
-              originalRail === 'manual_admin'
-            ? 'psp'
-            : originalRail
-        if (originalRail !== 'psp' && originalRail !== 'bank') {
-          const quote = await quoteStore.getById(quoteId)
-          if (!quote) {
-            throw new AppError(ErrorCode.NOT_FOUND, 404, 'Quote not found')
-          }
-          if (quote.userId !== userId) {
-            throw new AppError(ErrorCode.FORBIDDEN, 403, 'Quote does not belong to user')
-          }
-          const now = Date.now()
-          if (quote.status !== 'active') {
-            throw new AppError(ErrorCode.CONFLICT, 409, 'Quote cannot be used')
-          }
-          if (quote.expiresAt.getTime() <= now) {
-            await quoteStore.markExpired(quote.quoteId)
-            throw new AppError(ErrorCode.CONFLICT, 409, 'Quote expired')
-          }
-          if (quote.amountNgn !== amountNgn) {
-            throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Amount mismatch with quote')
-          }
-          if (quote.paymentRail !== originalRail) {
-            throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Payment rail mismatch with quote')
-          }
-          await quoteStore.markUsed(quote.quoteId)
+        if (quote.userId !== userId) {
+          throw new AppError(ErrorCode.FORBIDDEN, 403, 'Quote does not belong to user')
         }
+        if (quote.status !== 'active') {
+          throw new AppError(ErrorCode.CONFLICT, 409, 'Quote is already used or expired')
+        }
+        if (quote.expiresAt.getTime() <= Date.now()) {
+          await quoteStore.markExpired(quote.quoteId)
+          throw new AppError(ErrorCode.CONFLICT, 409, 'Quote has expired')
+        }
+        if (quote.paymentRail !== paymentRail) {
+          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Payment rail mismatch with quote')
+        }
+
+        const amountNgn = quote.amountNgn
+
+        await quoteStore.markUsed(quote.quoteId)
+
         const deposit = await depositStore.create({
           quoteId,
           userId,
@@ -139,14 +133,27 @@ export function createStakingRouter(
           amountNgn,
           customerMeta,
         })
+
+        const pspRail = paymentRail === 'bank_transfer' ? 'bank' : paymentRail
+        const internalRail = (pspRail === 'bank') ? 'bank' : 'psp'
+
         let externalRefSource: string | undefined
         let externalRef: string | undefined
         let redirectUrl: string | undefined
         let bankDetails: Record<string, string> | undefined
+
         if (internalRail === 'psp') {
-          externalRefSource = 'psp'
-          externalRef = `pi_${deposit.depositId}`
-          redirectUrl = `https://pay.example.com/${externalRef}`
+          const provider = getPaymentProvider(paymentRail)
+          const init = await provider.initiatePayment({
+            amountNgn,
+            userId,
+            internalRef: deposit.depositId,
+            rail: paymentRail,
+            customerMeta,
+          })
+          externalRefSource = init.externalRefSource
+          externalRef = init.externalRef
+          redirectUrl = init.redirectUrl
         } else if (internalRail === 'bank') {
           externalRefSource = 'bank'
           externalRef = `bnk_${deposit.depositId}`
@@ -186,54 +193,19 @@ export function createStakingRouter(
     validate(stakeFinalizeSchema),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
+        if (!stakingService) {
+          throw new AppError(ErrorCode.INTERNAL_ERROR, 503, 'Staking service not available')
+        }
         const { conversionId } = req.body as StakeFinalizeRequest
 
-        const conversion = await conversionStore.getByConversionId(conversionId)
-        if (!conversion) {
-          throw new AppError(ErrorCode.NOT_FOUND, 404, 'Conversion not found')
-        }
-        if (conversion.status !== 'completed') {
-          throw new AppError(ErrorCode.CONFLICT, 409, 'Conversion not completed')
-        }
+        const result = await stakingService.finalizeStaking(conversionId)
 
-        // Create outbox item idempotent by conversionId
-        const outboxItem = await outboxStore.create({
-          txType: TxType.STAKE,
-          source: 'conversion',
-          ref: conversion.conversionId,
-          payload: {
-            txType: TxType.STAKE,
-            amountUsdc: conversion.amountUsdc,
-
-            // Include FX metadata so receipt is deterministic.
-            amountNgn: conversion.amountNgn,
-            fxRateNgnPerUsdc: conversion.fxRateNgnPerUsdc,
-            fxProvider: conversion.provider,
-
-            conversionId: conversion.conversionId,
-            depositId: conversion.depositId,
-            conversionProviderRef: conversion.providerRef,
-            userId: conversion.userId,
-          },
-        })
-
-        const sent = await sender.send(outboxItem)
-
-        const updatedItem = await outboxStore.getById(outboxItem.id)
-        if (!updatedItem) {
-          throw new AppError(
-            ErrorCode.INTERNAL_ERROR,
-            500,
-            'Failed to retrieve outbox item after send attempt',
-          )
-        }
-
-        res.status(sent ? 200 : 202).json({
+        res.status(result.sent ? 200 : 202).json({
           success: true,
-          outboxId: updatedItem.id,
-          txId: updatedItem.txId,
-          status: updatedItem.status,
-          message: sent
+          outboxId: result.outboxId,
+          txId: result.txId,
+          status: result.status,
+          message: result.sent
             ? 'Staking finalized and receipt written to chain'
             : 'Staking finalized, receipt queued for retry',
         })
@@ -380,6 +352,190 @@ export function createStakingRouter(
             ? 'Staking confirmed and receipt written to chain'
             : 'Staking confirmed, receipt queued for retry',
         })
+      } catch (error) {
+        next(error)
+      }
+    },
+  )
+
+  /**
+   * POST /api/staking/stake-ngn
+   * 
+   * Stake using NGN balance from internal wallet.
+   * Flow:
+   * 1. Reserve NGN (move from available to held)
+   * 2. Convert NGN to USDC
+   * 3. Debit NGN from held (after conversion)
+   * 4. Create on-chain stake transaction
+   * 
+   * Idempotent by externalRefSource:externalRef combination.
+   * Never stakes on-chain without NGN reserve.
+   */
+  router.post(
+    '/stake-ngn',
+    authenticateToken,
+    validate(stakeNgnSchema),
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+      try {
+        if (!ngnWalletService || !conversionService) {
+          throw new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            503,
+            'NGN staking service not available'
+          )
+        }
+
+        const userId = req.user?.id
+        if (!userId) {
+          throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Authentication required')
+        }
+
+        const { amountNgn, externalRefSource, externalRef } = req.body as StakeNgnRequest
+
+        logger.info('NGN staking request received', {
+          userId,
+          amountNgn,
+          externalRefSource,
+          externalRef,
+          requestId: req.requestId,
+        })
+
+        // Step 1: Reserve NGN (idempotent by canonical ref)
+        // This moves funds from available to held and creates STAKE_RESERVE ledger entry
+        const reserveResult = await ngnWalletService.reserveNgnForStaking(
+          userId,
+          externalRefSource,
+          externalRef,
+          amountNgn
+        )
+
+        if (!reserveResult.reserved) {
+          // Already reserved - idempotent return
+          logger.info('NGN already reserved for this staking request', {
+            userId,
+            externalRefSource,
+            externalRef,
+            requestId: req.requestId,
+          })
+
+          // Check if conversion already completed
+          const syntheticDepositId = `stake:${externalRefSource}:${externalRef}`
+          const existingConversion = await conversionStore.getByDepositId(syntheticDepositId)
+
+          if (existingConversion?.status === 'completed') {
+            // Conversion already done, check if outbox item exists
+            const existingOutbox = await outboxStore.getByExternalRef(
+              externalRefSource,
+              externalRef
+            )
+
+            return res.status(200).json({
+              success: true,
+              message: 'Staking already processed',
+              conversionId: existingConversion.conversionId,
+              amountUsdc: existingConversion.amountUsdc,
+              outboxId: existingOutbox?.id,
+            })
+          }
+
+          // Still processing, return current status
+          return res.status(202).json({
+            success: true,
+            message: 'Staking in progress',
+            status: existingConversion?.status || 'reserved',
+          })
+        }
+
+        let conversion: any = null
+        try {
+          // Step 2: Create and execute conversion (idempotent)
+          conversion = await conversionService.convertForStaking({
+            externalRefSource,
+            externalRef,
+            userId,
+            amountNgn,
+          })
+
+          // Step 3: Debit NGN from held after successful conversion
+          await ngnWalletService.debitNgnForConversion(
+            userId,
+            externalRefSource,
+            externalRef,
+            amountNgn
+          )
+
+          // Step 4: Create outbox item for on-chain stake (idempotent)
+          const outboxItem = await outboxStore.create({
+            txType: TxType.STAKE,
+            source: externalRefSource,
+            ref: externalRef,
+            payload: {
+              txType: TxType.STAKE,
+              amountUsdc: conversion.amountUsdc,
+              amountNgn: conversion.amountNgn,
+              fxRateNgnPerUsdc: conversion.fxRateNgnPerUsdc,
+              externalRefSource,
+              externalRef,
+              userId,
+            },
+          })
+
+          // Attempt immediate on-chain write
+          const sent = await sender.send(outboxItem)
+
+          const updatedItem = await outboxStore.getById(outboxItem.id)
+          if (!updatedItem) {
+            throw new AppError(
+              ErrorCode.INTERNAL_ERROR,
+              500,
+              'Failed to retrieve outbox item after send attempt'
+            )
+          }
+
+          logger.info('NGN staking completed successfully', {
+            userId,
+            amountNgn,
+            amountUsdc: conversion.amountUsdc,
+            conversionId: conversion.conversionId,
+            outboxId: updatedItem.id,
+            requestId: req.requestId,
+          })
+
+          res.status(sent ? 200 : 202).json({
+            success: true,
+            conversionId: conversion.conversionId,
+            amountUsdc: conversion.amountUsdc,
+            fxRateNgnPerUsdc: conversion.fxRateNgnPerUsdc,
+            outboxId: updatedItem.id,
+            txId: updatedItem.txId,
+            status: updatedItem.status,
+            message: sent
+              ? 'NGN staking confirmed and receipt written to chain'
+              : 'NGN staking confirmed, receipt queued for retry',
+          })
+        } catch (conversionError) {
+          // Conversion failed - release NGN reserve
+          logger.error('Conversion failed, releasing NGN reserve', {
+            userId,
+            externalRefSource,
+            externalRef,
+            error: conversionError instanceof Error ? conversionError.message : String(conversionError),
+            requestId: req.requestId,
+          })
+
+          await ngnWalletService.releaseNgnReserve(
+            userId,
+            externalRefSource,
+            externalRef,
+            amountNgn
+          )
+
+          throw new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            500,
+            `Conversion failed: ${conversionError instanceof Error ? conversionError.message : String(conversionError)}`
+          )
+        }
       } catch (error) {
         next(error)
       }

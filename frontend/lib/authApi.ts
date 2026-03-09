@@ -29,13 +29,13 @@ export interface WalletChallengeRequest {
 }
 
 export interface WalletChallengeResponse {
-  message: string;
-  nonce: string;
+  challengeXdr: string;
+  expiresAt: string;
 }
 
 export interface WalletVerifyRequest {
   address: string;
-  signature: string;
+  signedChallengeXdr: string;
 }
 
 export interface WalletVerifyResponse {
@@ -71,11 +71,11 @@ export async function requestWalletChallenge(address: string): Promise<WalletCha
 
 export async function verifyWalletSignature(
   address: string,
-  signature: string
+  signedChallengeXdr: string
 ): Promise<WalletVerifyResponse> {
   const res = await apiPost<WalletVerifyResponse>("/auth/wallet/verify", {
     address,
-    signature,
+    signedChallengeXdr,
   });
   setToken(res.token);
   return res;

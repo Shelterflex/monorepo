@@ -15,3 +15,5 @@ backend/.env
 # Contracts
 contracts/target
 contracts/.soroban
+
+.kiro/

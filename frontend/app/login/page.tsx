@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Loader2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,10 @@ import { requestOtp } from "@/lib/authApi";
 import { WalletConnect } from "@/components/wallet/WalletConnect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,13 @@ export default function LoginPage() {
 
     try {
       await requestOtp(email);
-      router.push(`/verify-otp?email=${encodeURIComponent(email)}`);
+      
+      // Preserve returnTo parameter when redirecting to verify-otp
+      const verifyOtpUrl = returnTo 
+        ? `/verify-otp?email=${encodeURIComponent(email)}&returnTo=${encodeURIComponent(returnTo)}`
+        : `/verify-otp?email=${encodeURIComponent(email)}`;
+      
+      router.push(verifyOtpUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -53,7 +61,7 @@ export default function LoginPage() {
               </TabsTrigger>
               <TabsTrigger value="wallet" className="font-mono">
                 <Wallet className="w-4 h-4 mr-1" />
-                Wallet
+                Stellar Wallet
               </TabsTrigger>
             </TabsList>
 
@@ -131,5 +139,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

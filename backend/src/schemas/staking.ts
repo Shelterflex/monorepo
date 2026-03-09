@@ -61,6 +61,28 @@ export const claimStakeRewardSchema = z.object({
 export type ClaimStakeRewardRequest = z.infer<typeof claimStakeRewardSchema>
 
 /**
+ * Schema for staking with NGN balance
+ */
+export const stakeNgnSchema = z.object({
+  amountNgn: z
+    .number()
+    .positive()
+    .min(100, 'Minimum staking amount is 100 NGN')
+    .describe('Amount to stake in NGN'),
+  externalRefSource: z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9_-]+$/, 'Must be alphanumeric with underscores/hyphens only')
+    .describe('Staking source identifier (e.g., web, mobile)'),
+  externalRef: z
+    .string()
+    .min(1)
+    .describe('External reference for idempotency (e.g., UUID, transaction ID)'),
+})
+
+export type StakeNgnRequest = z.infer<typeof stakeNgnSchema>
+
+/**
  * Schema for staking position response
  */
 export const stakingPositionSchema = z.object({

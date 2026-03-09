@@ -16,9 +16,11 @@ import { rewardStore } from '../models/rewardStore.js'
 import { RewardStatus } from '../models/reward.js'
 import { listingStore } from '../models/listingStore.js'
 import { ListingStatus } from '../models/listing.js'
-import { getActiveMasterKeyVersion, type MasterKeyVersion, type WalletStore } from '../services/walletRotation.js'
+import { env } from '../schemas/env.js'
+import type { WalletStore } from '../models/wallet.js'
+import type { EncryptionService } from '../services/walletService.js'
 
-export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletStore) {
+export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletStore, encryptionService?: EncryptionService) {
   const router = Router()
   const sender = new OutboxSender(adapter)
 
@@ -26,7 +28,7 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
     '/wallets/rewrap',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        if (!walletStore) {
+        if (!walletStore || !encryptionService) {
           throw new AppError(
             ErrorCode.INTERNAL_ERROR,
             501,
@@ -34,44 +36,28 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
           )
         }
 
-        const fromVersion = Number(req.body.fromVersion) as MasterKeyVersion
-        const toVersion = Number(req.body.toVersion) as MasterKeyVersion
-        const batchSize = req.body.batchSize ? Number(req.body.batchSize) : 100
+        const headerSecret = req.headers['x-admin-secret']
+        if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
+          throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
+        }
 
-        if (fromVersion !== 1 && fromVersion !== 2) {
-          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'fromVersion must be 1 or 2')
-        }
-        if (toVersion !== 1 && toVersion !== 2) {
-          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'toVersion must be 1 or 2')
-        }
-        if (fromVersion >= toVersion) {
-          throw new AppError(
-            ErrorCode.VALIDATION_ERROR,
-            400,
-            'toVersion must be greater than fromVersion',
-          )
+        const fromKeyId = typeof req.body.fromKeyId === 'string' ? req.body.fromKeyId : undefined
+        const toKeyId = typeof req.body.toKeyId === 'string' ? req.body.toKeyId : encryptionService.getCurrentKeyId()
+        const batchSize = req.body.batchSize ? Number(req.body.batchSize) : 100
+        const userId = typeof req.body.userId === 'string' ? req.body.userId : undefined
+
+        if (!toKeyId) {
+          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'toKeyId is required')
         }
         if (!Number.isFinite(batchSize) || batchSize <= 0 || batchSize > 1000) {
-          throw new AppError(
-            ErrorCode.VALIDATION_ERROR,
-            400,
-            'batchSize must be between 1 and 1000',
-          )
-        }
-
-        const activeVersion = getActiveMasterKeyVersion()
-        if (activeVersion !== toVersion) {
-          throw new AppError(
-            ErrorCode.CONFLICT,
-            409,
-            'Active master key version must match toVersion before rotation',
-          )
+          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'batchSize must be between 1 and 1000')
         }
 
         logger.info('Wallet rewrap requested', {
-          fromVersion,
-          toVersion,
+          fromKeyId: fromKeyId ?? 'any',
+          toKeyId,
           batchSize,
+          userId: userId ?? 'batch',
           requestId: req.requestId,
         })
 
@@ -79,60 +65,86 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
         auditAdminWalletAction(req, {
           action: 'WALLET_REWRAP',
           details: {
-            fromVersion,
-            toVersion,
+            fromKeyId: fromKeyId ?? 'any',
+            toKeyId,
             batchSize,
+            userId: userId ?? 'batch',
           },
         })
 
-        const candidates = await walletStore.listByEncryptionVersion(fromVersion, batchSize)
+        const work: string[] = []
+        if (userId) {
+          work.push(userId)
+        } else {
+          throw new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            501,
+            'Batch rewrap is not implemented for this wallet store; supply userId',
+          )
+        }
 
         let processed = 0
         let updated = 0
-        const failures: { walletId: string; reason: string }[] = []
+        let skipped = 0
+        const failures: { userId: string; reason: string }[] = []
 
-        for (const wallet of candidates) {
+        for (const uid of work) {
           processed += 1
-          if (wallet.encryptionVersion !== fromVersion) {
-            continue
-          }
-
           try {
-            const changed = await walletStore.rewrapWalletDek(wallet.id, fromVersion, toVersion)
-            if (changed) {
-              updated += 1
+            const record = await walletStore.getEncryptedKey(uid)
+            if (!record) {
+              skipped += 1
+              continue
             }
+
+            if (record.keyId === toKeyId) {
+              skipped += 1
+              continue
+            }
+
+            if (fromKeyId && record.keyId !== fromKeyId) {
+              skipped += 1
+              continue
+            }
+
+            const cipherTextBuf = Buffer.from(record.cipherText, 'base64')
+            const plaintext = await encryptionService.decrypt(cipherTextBuf, record.keyId)
+            const { cipherText: newCipherTextBuf } = await encryptionService.encrypt(plaintext, toKeyId)
+
+            await walletStore.updateEncryption(uid, newCipherTextBuf.toString('base64'), toKeyId)
+            updated += 1
           } catch (error) {
             const reason = error instanceof Error ? error.message : 'unknown error'
-            failures.push({ walletId: wallet.id, reason })
+            failures.push({ userId: uid, reason })
             logger.error('Failed to rewrap wallet', {
-              walletId: wallet.id,
-              fromVersion,
-              toVersion,
+              userId: uid,
+              fromKeyId: fromKeyId ?? 'any',
+              toKeyId,
               error: reason,
               requestId: req.requestId,
             })
           }
         }
 
-        const hasMore = candidates.length === batchSize
+        const hasMore = false
 
         logger.info('Wallet rewrap completed', {
-          fromVersion,
-          toVersion,
+          fromKeyId: fromKeyId ?? 'any',
+          toKeyId,
           processed,
           updated,
+          skipped,
           failures: failures.length,
           hasMore,
           requestId: req.requestId,
         })
 
         res.json({
-          fromVersion,
-          toVersion,
+          fromKeyId: fromKeyId ?? 'any',
+          toKeyId,
           processed,
           updated,
-          skipped: processed - updated,
+          skipped,
           failures,
           hasMore,
         })

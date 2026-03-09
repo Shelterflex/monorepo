@@ -1,5 +1,12 @@
-import { Keypair, Transaction, xdr } from "@stellar/stellar-sdk"
-import { CustodialWalletService } from "./CustodialWalletService.js"
+import { Keypair, Transaction, TransactionBuilder } from "@stellar/stellar-sdk"
+import { CustodialWalletService, KeyStore, Decryptor } from "./CustodialWalletService.js"
+
+export class WalletNotFoundError extends Error {
+  constructor(userId: string) {
+    super(`Wallet not found for user: ${userId}`)
+    this.name = 'WalletNotFoundError'
+  }
+}
 
 /**
  * Implementation of CustodialWalletService using Stellar SDK.
@@ -10,84 +17,117 @@ import { CustodialWalletService } from "./CustodialWalletService.js"
  * - All signing operations are audited (without secrets)
  */
 export class CustodialWalletServiceImpl implements CustodialWalletService {
-  private readonly logger: (message: string, metadata?: Record<string, unknown>) => void
-  private readonly networkPassphrase: string
-
   constructor(
-    networkPassphrase: string,
-    logger?: (message: string, metadata?: Record<string, unknown>) => void,
-  ) {
-    this.networkPassphrase = networkPassphrase
-    this.logger = logger ?? ((msg, meta) => {
+    private readonly store: KeyStore,
+    private readonly decryptor: Decryptor,
+    private readonly networkPassphrase: string,
+    private readonly logger: (message: string, metadata?: Record<string, unknown>) => void = (msg, meta) => {
       console.log(`[CustodialWalletService] ${msg}`, meta ? JSON.stringify(meta) : "")
-    })
-  }
-
-  /**
-   * Decrypts a secret key from its encrypted format.
-   * 
-   * For now, this assumes the secret key is provided in Stellar secret key format (S...).
-   * In production, this should decrypt from a secure storage format.
-   * 
-   * @param encryptedSecretKey - The encrypted/encoded secret key
-   * @returns The decrypted secret key string
-   * @throws Error if decryption fails or key format is invalid
-   */
-  private decryptSecretKey(encryptedSecretKey: string): string {
-    // TODO: Implement proper decryption based on your encryption scheme
-    // For now, we assume the key is already in Stellar secret key format
-    // In production, you would decrypt from your secure storage format here
-    
-    // Validate that it looks like a Stellar secret key (starts with 'S')
-    if (!encryptedSecretKey.startsWith("S")) {
-      throw new Error("Invalid secret key format: must be a Stellar secret key (starts with 'S')")
     }
+  ) { }
 
-    // In a real implementation, you would decrypt here:
-    // const decrypted = yourDecryptionFunction(encryptedSecretKey, decryptionKey)
-    // For now, we assume it's already decrypted or needs minimal processing
-    
-    return encryptedSecretKey
+  async signMessage(userId: string, message: string): Promise<{ signature: string; publicKey: string }> {
+    this.logger("Message signing invoked", {
+      messageLength: message.length,
+      userId,
+      timestamp: new Date().toISOString(),
+    })
+
+    let keypair: Keypair | null = null
+    let secretKey: Buffer | null = null
+
+    try {
+      let record
+      try {
+        record = await this.store.getEncryptedKey(userId)
+      } catch (e) {
+        throw new WalletNotFoundError(userId)
+      }
+      secretKey = await this.decryptor.decrypt(record.envelope)
+      if (!secretKey) {
+        throw new Error("Secret key decryption failed: received null buffer")
+      }
+      keypair = Keypair.fromSecret(secretKey.toString('utf8'))
+      const publicKey = keypair.publicKey()
+      secretKey.fill(0)
+      secretKey = null
+
+      const signature = keypair.sign(Buffer.from(message)).toString('base64')
+
+      this.logger("Message signing completed", {
+        publicKey,
+        signatureLength: signature.length,
+        timestamp: new Date().toISOString(),
+      })
+
+      return {
+        signature,
+        publicKey,
+      }
+    } catch (error) {
+      this.logger("Message signing failed", {
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      })
+      if (secretKey) {
+        secretKey.fill(0)
+        secretKey = null
+      }
+      keypair = null
+      throw error
+    }
   }
 
   /**
    * Signs a Stellar/Soroban transaction XDR.
    * 
-   * @param encryptedSecretKey - The encrypted secret key
+   * @param userId - The user ID for the wallet
    * @param transactionXdr - The transaction XDR string to sign
    * @returns Object containing the signature and public key
    * @throws Error if decryption, parsing, or signing fails
    */
   async signTransaction(
-    encryptedSecretKey: string,
+    userId: string,
     transactionXdr: string,
   ): Promise<{ signature: string; publicKey: string }> {
     // Audit log: signing invoked (no secrets)
     this.logger("Transaction signing invoked", {
       transactionXdrLength: transactionXdr.length,
+      userId,
       timestamp: new Date().toISOString(),
     })
 
     let keypair: Keypair | null = null
-    let secretKey: string | null = null
+    let secretKey: Buffer | null = null
 
     try {
+      let record
+      try {
+        record = await this.store.getEncryptedKey(userId)
+      } catch (e) {
+        throw new WalletNotFoundError(userId)
+      }
+
       // Decrypt the secret key
-      secretKey = this.decryptSecretKey(encryptedSecretKey)
+      secretKey = await this.decryptor.decrypt(record.envelope)
+      if (!secretKey) {
+        throw new Error("Secret key decryption failed: received null buffer")
+      }
 
       // Derive Keypair from secret key
-      keypair = Keypair.fromSecret(secretKey)
+      keypair = Keypair.fromSecret(secretKey.toString('utf8'))
 
       // Get the public key before signing (for return value)
       const publicKey = keypair.publicKey()
 
       // Clear the secret key from memory as soon as possible
+      secretKey.fill(0)
       secretKey = null
 
       // Parse the transaction XDR
       // Transaction.fromXDR handles both regular and Soroban transactions
       // Using type assertion because TypeScript types may not be fully up to date
-      const transaction = (Transaction as any).fromXDR(transactionXdr, this.networkPassphrase) as Transaction
+      const transaction = TransactionBuilder.fromXDR(transactionXdr, this.networkPassphrase) as Transaction
 
       // Sign the transaction
       transaction.sign(keypair)
@@ -122,7 +162,10 @@ export class CustodialWalletServiceImpl implements CustodialWalletService {
       })
 
       // Clear any remaining secret key data
-      secretKey = null
+      if (secretKey) {
+        secretKey.fill(0)
+        secretKey = null
+      }
       keypair = null
 
       throw error

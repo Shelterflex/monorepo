@@ -5,6 +5,8 @@ import { createNgnWalletRouter } from '../routes/ngnWallet.js'
 import { sessionStore, userStore } from '../models/authStore.js'
 import request from 'supertest'
 import express from 'express'
+import { sessionStore, userStore } from '../models/authStore.js'
+import { ngnDepositStore } from '../models/ngnDepositStore.js'
 
 describe('NGN Wallet Routes', () => {
   let ngnWalletService: NgnWalletService
@@ -23,6 +25,8 @@ describe('NGN Wallet Routes', () => {
     app = express()
     app.use(express.json())
     app.use('/api/wallet/ngn', createNgnWalletRouter(ngnWalletService))
+
+    return ngnDepositStore.clear()
   })
 
   describe('GET /api/wallet/ngn/balance', () => {
@@ -126,6 +130,56 @@ describe('NGN Wallet Routes', () => {
       expect(response.body.entries.length).toBeGreaterThan(0)
       expect(response.body.entries[0].amountNgn).toBe(5000)
       expect(response.body.entries[0].status).toBe('pending')
+    })
+  })
+
+  describe('GET /api/wallet/ngn/withdrawals', () => {
+    it('should return withdrawals', async () => {
+      const response = await request(app)
+        .get('/api/wallet/ngn/withdrawals')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+
+      expect(response.body.success).toBe(true)
+      expect(Array.isArray(response.body.entries)).toBe(true)
+    })
+  })
+
+  describe('POST /api/wallet/ngn/topup/initiate', () => {
+    it('should initiate topup successfully', async () => {
+      const response = await request(app)
+        .post('/api/wallet/ngn/topup/initiate')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ amountNgn: 1500, rail: 'paystack' })
+        .expect(201)
+
+      expect(response.body.success).toBe(true)
+      expect(response.body.depositId).toBeDefined()
+      expect(response.body.externalRefSource).toBeDefined()
+      expect(response.body.externalRef).toBeDefined()
+      expect(response.body.redirectUrl).toBeDefined()
+    })
+
+    it('should be idempotent with Idempotency-Key', async () => {
+      const key = '3d6f0b7e-9d8c-4a6a-9c2c-2c4f3fb4e7b1'
+
+      const first = await request(app)
+        .post('/api/wallet/ngn/topup/initiate')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Idempotency-Key', key)
+        .send({ amountNgn: 1500, rail: 'paystack' })
+        .expect(201)
+
+      const second = await request(app)
+        .post('/api/wallet/ngn/topup/initiate')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Idempotency-Key', key)
+        .send({ amountNgn: 1500, rail: 'paystack' })
+        .expect(200)
+
+      expect(second.body.depositId).toBe(first.body.depositId)
+      expect(second.body.externalRef).toBe(first.body.externalRef)
+      expect(second.body.externalRefSource).toBe(first.body.externalRefSource)
     })
   })
 })

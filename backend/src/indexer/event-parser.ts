@@ -11,7 +11,7 @@ export function parseReceiptEvent(raw: RawReceiptEvent): IndexedReceipt {
      return {
           txId: req(d, 'tx_id'), txType: req(d, 'tx_type') as TxType,
           dealId: req(d, 'deal_id'), amountUsdc: req(d, 'amount_usdc'),
-          externalRefHash: req(d, 'external_ref_hash'),
+          externalRefHash: req(d, 'external_ref'), // Contract stores as 'external_ref' (same as tx_id)
           listingId: opt(d, 'listing_id'), amountNgn: optNum(d, 'amount_ngn'),
           fxRate: optNum(d, 'fx_rate'), fxProvider: opt(d, 'fx_provider'),
           from: opt(d, 'from'), to: opt(d, 'to'), metadataHash: opt(d, 'metadata_hash'),

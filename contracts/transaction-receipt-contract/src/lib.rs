@@ -5,6 +5,7 @@
 //! canonicalized external payment reference (the `tx_id`). The contract enforces
 //! validation rules on external references, prevents duplicates, and supports
 //! admin/operator authorization and pause control.
+//!
 #![no_std]
 
 extern crate alloc;
@@ -14,24 +15,26 @@ use soroban_sdk::{
 };
 
 /// Allowed external reference sources for transaction ID generation
-pub const ALLOWED_SOURCES: [&str; 7] = [
+pub const ALLOWED_SOURCES: [&str; 8] = [
     "paystack",
     "flutterwave",
     "bank_transfer",
     "stellar",
     "onramp",
     "offramp",
+    "manual",
     "manual_admin",
 ];
 
 /// Allowed transaction types for MVP
-pub const ALLOWED_TX_TYPES: [&str; 6] = [
+pub const ALLOWED_TX_TYPES: [&str; 7] = [
     "TENANT_REPAYMENT",
-    "LANDLORD_PAYOUT", 
+    "LANDLORD_PAYOUT",
     "WHISTLEBLOWER_REWARD",
     "STAKE",
     "UNSTAKE",
     "STAKE_REWARD_CLAIM",
+    "CONVERSION",
 ];
 
 /// Input parameters for recording a receipt (to avoid 10-parameter limit)
@@ -64,6 +67,127 @@ pub struct ReceiptInput {
     pub fx_provider: Option<String>,
     /// Optional metadata hash (SHA-256 of canonical receipt payload v1)
     pub metadata_hash: Option<BytesN<32>>,
+}
+
+/// Helper function to validate external reference source and external reference.
+///
+/// This enforces the same invariants as `generate_tx_id`, but can be used
+/// independently in validation flows.
+fn validate_external_ref(
+    external_ref_source: &Symbol,
+    external_ref: &String,
+) -> Result<(), ContractError> {
+    use alloc::string::ToString;
+
+    extern crate alloc;
+    use alloc::string::String as StdString;
+
+    let source_str: StdString = external_ref_source.to_string();
+    let source_trimmed = source_str.trim();
+    let source_lower = source_trimmed.to_lowercase();
+
+    if !ALLOWED_SOURCES.contains(&source_lower.as_str()) {
+        return Err(ContractError::InvalidExternalRefSource);
+    }
+
+    let ref_str: StdString = external_ref.to_string();
+    let ref_trimmed = ref_str.trim();
+
+    if ref_trimmed.is_empty() {
+        return Err(ContractError::InvalidExternalRef);
+    }
+
+    if ref_trimmed.contains('|') {
+        return Err(ContractError::InvalidExternalRef);
+    }
+
+    if ref_trimmed.len() > 256 {
+        return Err(ContractError::InvalidExternalRef);
+    }
+
+    Ok(())
+}
+
+/// Produce canonical bytes for metadata hashing (v1).
+///
+/// Canonical format:
+/// `v1|external_ref_source=<lowercased_trimmed>|external_ref=<trimmed>|tx_type=<case_sensitive>|amount_usdc=<i128>|token=<address>|deal_id=<string>|listing_id=<string>|from=<address>|to=<address>|amount_ngn=<i128>|fx_rate_ngn_per_usdc=<i128>|fx_provider=<string>`
+///
+/// Optional fields rules:
+/// - If `None`, the key is omitted entirely.
+/// - If `Some`, values are rendered without extra whitespace.
+///
+/// Ordering is fixed and MUST NOT change.
+fn canonical_metadata_payload_v1(
+    env: &soroban_sdk::Env,
+    input: &ReceiptInput,
+) -> soroban_sdk::Bytes {
+    use soroban_sdk::Bytes;
+
+    extern crate alloc;
+    use alloc::format;
+    use alloc::string::String as StdString;
+    use alloc::string::ToString;
+
+    let source_str: StdString = input.external_ref_source.to_string();
+    let source_lower = source_str.trim().to_lowercase();
+
+    let ext_ref_str: StdString = input.external_ref.to_string();
+    let ext_ref_trimmed = ext_ref_str.trim();
+
+    let tx_type_str: StdString = input.tx_type.to_string();
+    let token_str: StdString = input.token.to_string().to_string();
+    let deal_id_str: StdString = input.deal_id.to_string().to_string();
+
+    let mut out: StdString = format!(
+        "v1|external_ref_source={}|external_ref={}|tx_type={}|amount_usdc={}|token={}|deal_id={}",
+        source_lower, ext_ref_trimmed, tx_type_str, input.amount_usdc, token_str, deal_id_str,
+    );
+
+    if let Some(ref listing_id) = input.listing_id {
+        out.push_str("|listing_id=");
+        let s: StdString = listing_id.to_string();
+        out.push_str(s.as_str());
+    }
+
+    if let Some(ref from) = input.from {
+        out.push_str("|from=");
+        let s: StdString = from.to_string().to_string();
+        out.push_str(s.as_str());
+    }
+
+    if let Some(ref to) = input.to {
+        out.push_str("|to=");
+        let s: StdString = to.to_string().to_string();
+        out.push_str(s.as_str());
+    }
+
+    if let Some(amount_ngn) = input.amount_ngn {
+        out.push_str("|amount_ngn=");
+        out.push_str(format!("{}", amount_ngn).as_str());
+    }
+
+    if let Some(fx_rate) = input.fx_rate_ngn_per_usdc {
+        out.push_str("|fx_rate_ngn_per_usdc=");
+        out.push_str(format!("{}", fx_rate).as_str());
+    }
+
+    if let Some(ref fx_provider) = input.fx_provider {
+        out.push_str("|fx_provider=");
+        let s: StdString = fx_provider.to_string();
+        out.push_str(s.as_str());
+    }
+
+    Bytes::from_slice(env, out.as_bytes())
+}
+
+fn derive_metadata_hash(env: &soroban_sdk::Env, input: &ReceiptInput) -> BytesN<32> {
+    let payload = canonical_metadata_payload_v1(env, input);
+    env.crypto().sha256(&payload).into()
+}
+
+fn verify_metadata_hash(env: &soroban_sdk::Env, input: &ReceiptInput, hash: &BytesN<32>) -> bool {
+    derive_metadata_hash(env, input) == hash.clone()
 }
 
 /// Receipt data structure representing an immutable transaction record
@@ -104,6 +228,7 @@ pub struct Receipt {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StorageKey {
+    ContractVersion,
     /// Admin address (set during initialization, immutable)
     Admin,
     /// Operator address (can be changed by admin)
@@ -116,6 +241,10 @@ pub enum StorageKey {
     DealIndex(String, u32),
     /// Deal count: deal_id → count
     DealCount(String),
+    /// User index: (user_address, index) → tx_id
+    UserIndex(Address, u32),
+    /// User count: user_address → count
+    UserCount(Address),
 }
 
 /// Contract error types
@@ -141,6 +270,8 @@ pub enum ContractError {
     InvalidTimestamp = 8,
     /// Transaction type is not in allowed list
     InvalidTxType = 9,
+    /// Metadata hash is invalid (does not match canonical payload)
+    InvalidMetadataHash = 10,
 }
 
 #[contract]
@@ -183,10 +314,21 @@ impl TransactionReceiptContract {
             .instance()
             .set(&StorageKey::Operator, &operator);
 
+        env.storage()
+            .instance()
+            .set(&StorageKey::ContractVersion, &1u32);
+
         // Initialize paused state to false
         env.storage().instance().set(&StorageKey::Paused, &false);
 
         Ok(())
+    }
+
+    pub fn contract_version(env: soroban_sdk::Env) -> u32 {
+        env.storage()
+            .instance()
+            .get::<_, u32>(&StorageKey::ContractVersion)
+            .unwrap_or(0u32)
     }
 
     /// Pause the contract to prevent receipt recording
@@ -316,8 +458,18 @@ impl TransactionReceiptContract {
         // Validate tx_type is in allowed list
         validate_tx_type(&input.tx_type)?;
 
+        // Validate external reference source and reference
+        validate_external_ref(&input.external_ref_source, &input.external_ref)?;
+
         // Generate tx_id from canonical external reference
         let tx_id = generate_tx_id(&env, &input.external_ref_source, &input.external_ref)?;
+
+        // If provided, validate metadata hash against canonical payload
+        if let Some(ref mh) = input.metadata_hash {
+            if !verify_metadata_hash(&env, &input, mh) {
+                return Err(ContractError::InvalidMetadataHash);
+            }
+        }
 
         // Check for duplicate tx_id
         if env
@@ -366,6 +518,30 @@ impl TransactionReceiptContract {
         env.storage()
             .persistent()
             .set(&deal_count_key, &(current_count + 1));
+
+        // Update user indices for from and to addresses
+        if let Some(ref from_addr) = receipt.from {
+            let user_count_key = StorageKey::UserCount(from_addr.clone());
+            let user_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
+            env.storage().persistent().set(
+                &StorageKey::UserIndex(from_addr.clone(), user_count),
+                &tx_id,
+            );
+            env.storage()
+                .persistent()
+                .set(&user_count_key, &(user_count + 1));
+        }
+
+        if let Some(ref to_addr) = receipt.to {
+            let user_count_key = StorageKey::UserCount(to_addr.clone());
+            let user_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
+            env.storage()
+                .persistent()
+                .set(&StorageKey::UserIndex(to_addr.clone(), user_count), &tx_id);
+            env.storage()
+                .persistent()
+                .set(&user_count_key, &(user_count + 1));
+        }
 
         // Emit event with topic ("receipt", tx_id) and receipt payload
         env.events().publish(
@@ -445,6 +621,53 @@ impl TransactionReceiptContract {
                 .get::<StorageKey, BytesN<32>>(&deal_index_key)
             {
                 // Load receipt for this tx_id
+                if let Some(receipt) = env
+                    .storage()
+                    .persistent()
+                    .get::<StorageKey, Receipt>(&StorageKey::Receipt(tx_id))
+                {
+                    results.push_back(receipt);
+                }
+            }
+        }
+
+        results
+    }
+
+    /// List receipts for a specific user with pagination
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `user` - The user address (from or to)
+    /// * `limit` - Maximum number of receipts to return
+    /// * `cursor` - Optional starting index for pagination
+    ///
+    /// # Returns
+    /// A vector of receipts for the user, starting from cursor (or 0) up to limit
+    pub fn list_receipts_by_user(
+        env: soroban_sdk::Env,
+        user: Address,
+        limit: u32,
+        cursor: Option<u32>,
+    ) -> soroban_sdk::Vec<Receipt> {
+        use soroban_sdk::Vec;
+
+        let mut results = Vec::new(&env);
+
+        let user_count_key = StorageKey::UserCount(user.clone());
+        let total_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
+
+        let start_index = cursor.unwrap_or(0);
+        let end_index = core::cmp::min(start_index + limit, total_count);
+
+        for index in start_index..end_index {
+            let user_index_key = StorageKey::UserIndex(user.clone(), index);
+
+            if let Some(tx_id) = env
+                .storage()
+                .persistent()
+                .get::<StorageKey, BytesN<32>>(&user_index_key)
+            {
                 if let Some(receipt) = env
                     .storage()
                     .persistent()
@@ -543,13 +766,13 @@ fn require_not_paused(env: &soroban_sdk::Env) -> Result<(), ContractError> {
 /// * `Err(ContractError::InvalidTxType)` - If the transaction type is not in allowed list
 fn validate_tx_type(tx_type: &Symbol) -> Result<(), ContractError> {
     use alloc::string::ToString;
-    
+
     let tx_type_str = tx_type.to_string();
-    
+
     if !ALLOWED_TX_TYPES.contains(&tx_type_str.as_str()) {
         return Err(ContractError::InvalidTxType);
     }
-    
+
     Ok(())
 }
 

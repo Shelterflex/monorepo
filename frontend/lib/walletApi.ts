@@ -32,6 +32,17 @@ export interface NgnBalanceResponse {
   totalNgn: number;
 }
 
+export type WalletLedgerType =
+  | "top_up"
+  | "withdrawal"
+  | "staking_conversion"
+  | "staking_reserve"
+  | "staking_debit"
+  | "staking_refund"
+  | "reversal"
+  | "reward"
+  | string;
+
 export type WalletLedgerStatus = "pending" | "approved" | "rejected" | "confirmed" | "failed";
 
 export interface WalletLedgerEntry {
@@ -77,13 +88,16 @@ export function getNgnBalance(): Promise<NgnBalanceResponse> {
 export function getNgnLedger(params?: {
   cursor?: string;
   limit?: number;
+  type?: WalletLedgerType[];
 }): Promise<WalletLedgerResponse> {
   const cursor = params?.cursor ?? "";
   const limit = params?.limit ?? 20;
+  const types = params?.type ?? [];
 
   const qs = new URLSearchParams();
   if (cursor) qs.set("cursor", cursor);
   qs.set("limit", String(limit));
+  types.forEach((t) => qs.append("type", t));
 
   return apiFetch<WalletLedgerResponse>(`/api/wallet/ngn/ledger?${qs.toString()}`);
 }

@@ -1,8 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol,
-};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol};
 
 #[contracttype]
 #[derive(Clone)]
@@ -96,7 +94,12 @@ impl RentWallet {
         Ok(())
     }
 
-    pub fn credit(env: Env, admin: Address, user: Address, amount: i128) -> Result<(), ContractError> {
+    pub fn credit(
+        env: Env,
+        admin: Address,
+        user: Address,
+        amount: i128,
+    ) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
 
         require_not_paused(&env)?;
@@ -113,14 +116,23 @@ impl RentWallet {
         put_balances(&env, b);
 
         env.events().publish(
-            (Symbol::new(&env, "rent_wallet"), Symbol::new(&env, "credit"), user),
+            (
+                Symbol::new(&env, "rent_wallet"),
+                Symbol::new(&env, "credit"),
+                user,
+            ),
             amount,
         );
 
         Ok(())
     }
 
-    pub fn debit(env: Env, admin: Address, user: Address, amount: i128) -> Result<(), ContractError> {
+    pub fn debit(
+        env: Env,
+        admin: Address,
+        user: Address,
+        amount: i128,
+    ) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
 
         require_not_paused(&env)?;
@@ -141,7 +153,11 @@ impl RentWallet {
         put_balances(&env, b);
 
         env.events().publish(
-            (Symbol::new(&env, "rent_wallet"), Symbol::new(&env, "debit"), user),
+            (
+                Symbol::new(&env, "rent_wallet"),
+                Symbol::new(&env, "debit"),
+                user,
+            ),
             amount,
         );
 
@@ -160,7 +176,10 @@ impl RentWallet {
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
         env.events().publish(
-            (Symbol::new(&env, "rent_wallet"), Symbol::new(&env, "set_admin")),
+            (
+                Symbol::new(&env, "rent_wallet"),
+                Symbol::new(&env, "set_admin"),
+            ),
             new_admin,
         );
 
@@ -182,7 +201,10 @@ impl RentWallet {
         require_admin(&env, &admin)?;
         env.storage().instance().set(&DataKey::Paused, &false);
         env.events().publish(
-            (Symbol::new(&env, "rent_wallet"), Symbol::new(&env, "unpause")),
+            (
+                Symbol::new(&env, "rent_wallet"),
+                Symbol::new(&env, "unpause"),
+            ),
             (),
         );
 
@@ -350,7 +372,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_credit(&admin, &user, &0i128).unwrap_err().unwrap();
+        let err = client
+            .try_credit(&admin, &user, &0i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::InvalidAmount);
     }
 
@@ -368,7 +393,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_credit(&admin, &user, &-10i128).unwrap_err().unwrap();
+        let err = client
+            .try_credit(&admin, &user, &-10i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::InvalidAmount);
     }
 
@@ -487,7 +515,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_debit(&admin, &user, &1i128).unwrap_err().unwrap();
+        let err = client
+            .try_debit(&admin, &user, &1i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::InsufficientBalance);
     }
 
@@ -518,7 +549,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_debit(&admin, &user, &0i128).unwrap_err().unwrap();
+        let err = client
+            .try_debit(&admin, &user, &0i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::InvalidAmount);
     }
 
@@ -549,7 +583,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_debit(&admin, &user, &-10i128).unwrap_err().unwrap();
+        let err = client
+            .try_debit(&admin, &user, &-10i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::InvalidAmount);
     }
 
@@ -651,7 +688,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_debit(&non_admin, &user, &1i128).unwrap_err().unwrap();
+        let err = client
+            .try_debit(&non_admin, &user, &1i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::NotAuthorized);
     }
 
@@ -711,7 +751,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_set_admin(&non_admin, &new_admin).unwrap_err().unwrap();
+        let err = client
+            .try_set_admin(&non_admin, &new_admin)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::NotAuthorized);
     }
 
@@ -888,7 +931,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_debit(&admin, &user, &50i128).unwrap_err().unwrap();
+        let err = client
+            .try_debit(&admin, &user, &50i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::Paused);
     }
 

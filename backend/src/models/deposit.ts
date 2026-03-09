@@ -2,6 +2,7 @@ export enum DepositStatus {
   PENDING = 'pending',
   CONFIRMED = 'confirmed',
   FAILED = 'failed',
+  REVERSED = 'reversed',
 }
 
 export interface CustomerMeta {
@@ -46,6 +47,8 @@ export interface DepositRecord {
   createdAt: Date
   updatedAt: Date
   consumedAt: Date | null
+  reversedAt: Date | null
+  reversalRef: string | null
 }
 
 export interface ConfirmDepositRecordInput {

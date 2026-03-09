@@ -8,25 +8,12 @@ import {
   ValidationError,
 } from './canonicalization.js'
 
+ import { readFileSync } from 'node:fs'
+ import { resolve } from 'node:path'
+
 // Golden test vectors - shared with contract tests
-const goldenVectors = {
-  golden_test_vectors: [
-    {
-      input: { source: "paystack", ref: "psk_12345" },
-      expected_canonical: "v1|source=paystack|ref=psk_12345",
-      expected_sha256: "71e9a576e18d122acff8e200cefac00bfcba57f4dc64e9cdad89f64304c6d0ec"
-    },
-    {
-      input: { source: "BANK_TRANSFER", ref: " UTR_98765 " },
-      expected_canonical: "v1|source=bank_transfer|ref=UTR_98765",
-      expected_sha256: "e6cd19e46ae4e78bffce61f7ada43833ee97f01e3317be080e27ee398e74a29b"
-    },
-    {
-      input: { source: "stellar", ref: "" },
-      expected_error: "Ref cannot be empty after trimming"
-    }
-  ]
-}
+const goldenVectorsPath = resolve(process.cwd(), '..', 'test-vectors.json')
+const goldenVectors = JSON.parse(readFileSync(goldenVectorsPath, 'utf8'))
 
 describe('buildCanonicalString', () => {
   it('should construct canonical string in correct format', () => {

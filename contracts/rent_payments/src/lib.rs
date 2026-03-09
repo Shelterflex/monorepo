@@ -236,7 +236,7 @@ impl RentPayments {
             for i in 1..len {
                 let key = sorted_receipts.get(i).unwrap().clone();
                 let mut j = i;
-                
+
                 while j > 0 {
                     let prev = sorted_receipts.get(j - 1).unwrap();
                     let should_swap = match key.timestamp.cmp(&prev.timestamp) {
@@ -245,10 +245,10 @@ impl RentPayments {
                             let key_tx_id_array = key.tx_id.to_array();
                             let prev_tx_id_array = prev.tx_id.to_array();
                             key_tx_id_array < prev_tx_id_array
-                        },
+                        }
                         core::cmp::Ordering::Greater => false,
                     };
-                    
+
                     if should_swap {
                         sorted_receipts.set(j, prev.clone());
                         j -= 1;
@@ -362,7 +362,7 @@ mod test {
 
     use super::*;
     use soroban_sdk::{
-        testutils::{Address as _, MockAuth, MockAuthInvoke, Ledger},
+        testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
         Address, BytesN, Env, IntoVal,
     };
 
@@ -662,7 +662,11 @@ mod test {
         let mut sorted_tx_ids = all_tx_ids.clone();
         sorted_tx_ids.sort_by(|a, b| a.to_array().cmp(&b.to_array()));
         sorted_tx_ids.dedup();
-        assert_eq!(sorted_tx_ids.len(), 5, "Found duplicate tx_ids across pages");
+        assert_eq!(
+            sorted_tx_ids.len(),
+            5,
+            "Found duplicate tx_ids across pages"
+        );
     }
 
     #[test]
@@ -841,7 +845,7 @@ mod test {
 
             // Verify state after each creation
             assert_eq!(client.receipt_count(&deal_id), (i + 1) as u64);
-            
+
             // Verify all previous receipts are still accessible
             let page = client.list_receipts_by_deal(&deal_id, &100u32, &None);
             assert_eq!(page.receipts.len(), (i + 1) as u32);
@@ -849,10 +853,10 @@ mod test {
 
         // Final verification
         assert_eq!(client.receipt_count(&deal_id), 3u64);
-        
+
         let final_page = client.list_receipts_by_deal(&deal_id, &100u32, &None);
         assert_eq!(final_page.receipts.len(), 3);
-        
+
         // Verify all amounts are correct
         let mut found_amounts = std::vec::Vec::new();
         for receipt in final_page.receipts.iter() {
@@ -861,7 +865,7 @@ mod test {
         found_amounts.sort();
         let mut expected_amounts = amounts.to_vec();
         expected_amounts.sort();
-        
+
         // Compare lengths first
         assert_eq!(found_amounts.len(), expected_amounts.len());
         // Compare each element

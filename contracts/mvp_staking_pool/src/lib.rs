@@ -44,7 +44,9 @@ fn staked_balances(env: &Env) -> Map<Address, i128> {
 }
 
 fn put_staked_balances(env: &Env, balances: Map<Address, i128>) {
-    env.storage().instance().set(&DataKey::StakedBalances, &balances);
+    env.storage()
+        .instance()
+        .set(&DataKey::StakedBalances, &balances);
 }
 
 fn get_total_staked(env: &Env) -> i128 {
@@ -79,7 +81,9 @@ fn user_reward_index(env: &Env) -> Map<Address, i128> {
 }
 
 fn put_user_reward_index(env: &Env, idxs: Map<Address, i128>) {
-    env.storage().instance().set(&DataKey::UserRewardIndex, &idxs);
+    env.storage()
+        .instance()
+        .set(&DataKey::UserRewardIndex, &idxs);
 }
 
 fn claimable_rewards(env: &Env) -> Map<Address, i128> {
@@ -196,10 +200,8 @@ impl StakingPool {
         put_total_staked(&env, total + amount);
 
         // Emit event with standardized topic ("stake", user)
-        env.events().publish(
-            (Symbol::new(&env, "stake"), user.clone()),
-            amount,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "stake"), user.clone()), amount);
     }
 
     pub fn unstake(env: Env, user: Address, amount: i128) {
@@ -231,10 +233,8 @@ impl StakingPool {
         token_client.transfer(&env.current_contract_address(), &user, &amount);
 
         // Emit event with standardized topic ("unstake", user)
-        env.events().publish(
-            (Symbol::new(&env, "unstake"), user.clone()),
-            amount,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "unstake"), user.clone()), amount);
     }
 
     pub fn staked_balance(env: Env, user: Address) -> i128 {
@@ -269,10 +269,8 @@ impl StakingPool {
         let new_idx = get_global_reward_index(&env) + increment;
         put_global_reward_index(&env, new_idx);
 
-        env.events().publish(
-            (Symbol::new(&env, "fund_rewards"), from.clone()),
-            amount,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "fund_rewards"), from.clone()), amount);
     }
 
     pub fn claimable(env: Env, user: Address) -> i128 {
@@ -300,7 +298,8 @@ impl StakingPool {
         let token_client = TokenClient::new(&env, &token_address);
         token_client.transfer(&env.current_contract_address(), &to, &amount);
 
-        env.events().publish((Symbol::new(&env, "claim"), to.clone()), amount);
+        env.events()
+            .publish((Symbol::new(&env, "claim"), to.clone()), amount);
         amount
     }
 
@@ -321,14 +320,12 @@ mod test {
 
     use super::{StakingPool, StakingPoolClient};
     use soroban_sdk::testutils::{Address as _, Events, MockAuth, MockAuthInvoke};
-    use soroban_sdk::{
-        token::StellarAssetClient, Address, Env, IntoVal, Symbol, TryIntoVal,
-    };
+    use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal, Symbol, TryIntoVal};
 
     fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Address, Address) {
         let contract_id = env.register(StakingPool, ());
         let client = StakingPoolClient::new(env, &contract_id);
-        
+
         let admin = Address::generate(env);
         let user = Address::generate(env);
         let token_admin = Address::generate(env);
@@ -396,7 +393,7 @@ mod test {
         let env = Env::default();
         let contract_id = env.register(StakingPool, ());
         let client = StakingPoolClient::new(&env, &contract_id);
-        
+
         let admin = Address::generate(&env);
         let token_admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(token_admin);
@@ -423,7 +420,7 @@ mod test {
         let env = Env::default();
         let contract_id = env.register(StakingPool, ());
         let client = StakingPoolClient::new(&env, &contract_id);
-        
+
         let admin = Address::generate(&env);
         let token_admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(token_admin);

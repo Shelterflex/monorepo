@@ -16,7 +16,8 @@ export type DepositInitiateRequest = z.infer<typeof depositInitiateSchema>
 export const paymentsWebhookSchema = z.object({
   externalRefSource: z.string().min(1),
   externalRef: z.string().min(1),
-  status: z.enum(['confirmed', 'failed']).default('confirmed'),
+  status: z.enum(['confirmed', 'failed', 'reversed']).default('confirmed'),
+  providerStatus: z.string().optional().describe('Provider-specific status code for mapping'),
 })
 
 export type PaymentsWebhookRequest = z.infer<typeof paymentsWebhookSchema>

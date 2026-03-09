@@ -1,5 +1,6 @@
 import "dotenv/config"
 import { createApp } from "./app.js"
+import { maybeStartOutboxWorker } from "./outbox/workerEntry.js"
 import { env } from "./schemas/env.js"
 import { errorHandler } from "./middleware/index.js"
 import { AppError } from "./errors/index.js"
@@ -24,6 +25,7 @@ if (env.NODE_ENV !== 'development') {
 
 const app = createApp()
 
+maybeStartOutboxWorker()
 app.listen(env.PORT, () => {
   console.log(`[backend] listening on http://localhost:${env.PORT}`)
 })

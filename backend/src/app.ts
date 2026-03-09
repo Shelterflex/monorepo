@@ -25,17 +25,21 @@ import { StubConversionProvider } from "./services/conversionProvider.js"
 import { ConversionService } from "./services/conversionService.js"
 import { createWalletRouter } from "./routes/wallet.js"
 import { createNgnWalletRouter } from "./routes/ngnWallet.js"
-import { WalletServiceImpl } from "./services/walletService.js"
+import { createAdminRiskRouter } from "./routes/adminRisk.js"
+import { createAdminWithdrawalsRouter } from "./routes/adminWithdrawals.js"
+import { WalletServiceImpl, EnvironmentEncryptionService, KeyringEncryptionService, readEncryptionKeyringFromEnv } from "./services/walletService.js"
+import { CustodialWalletServiceImpl } from "./services/CustodialWalletServiceImpl.js"
 import { NgnWalletService } from "./services/ngnWalletService.js"
-import { EnvironmentEncryptionService } from "./services/walletService.js"
-import { InMemoryWalletStore } from "./models/walletStore.js"
-import { InMemoryLinkedAddressStore } from "./models/linkedAddressStore.js"
+import { InMemoryWalletStore, PostgresWalletStore } from "./models/walletStore.js"
+import { InMemoryLinkedAddressStore, PostgresLinkedAddressStore } from "./models/linkedAddressStore.js"
 import { StubRewardsDataLayer } from "./services/stub-rewards-data-layer.js"
 import authRouter from "./routes/auth.js"
-import { StubReceiptRepository } from "./indexer/receipt-repository.js"
+import { StubReceiptRepository, PostgresReceiptRepository } from "./indexer/receipt-repository.js"
 import { ReceiptIndexer } from "./indexer/worker.js"
 import { createReceiptsRouter } from "./routes/receiptsRoute.js"
 import { getPool } from "./db.js"
+import { StakingService } from "./services/stakingService.js"
+import { StakingFinalizer } from "./jobs/stakingFinalizer.js"
 
 
 export function createApp() {
@@ -59,10 +63,53 @@ export function createApp() {
 
   // Initialize earnings service with stub data layer
   // Initialize wallet service and store
-  const walletStore = new InMemoryWalletStore()
-  const encryptionService = new EnvironmentEncryptionService(env.ENCRYPTION_KEY)
-  const walletService = new WalletServiceImpl(walletStore, encryptionService)
-  const linkedAddressStore = new InMemoryLinkedAddressStore()
+  const walletStore = process.env.DATABASE_URL
+    ? new PostgresWalletStore()
+    : new InMemoryWalletStore()
+  const keyring = readEncryptionKeyringFromEnv(process.env as Record<string, string | undefined>)
+  const hasKeyring = Object.keys(keyring).length > 0
+  const encryptionService = hasKeyring
+    ? new KeyringEncryptionService(keyring)
+    : new EnvironmentEncryptionService(env.ENCRYPTION_KEY)
+
+  // Bridge the old interfaces to the new security boundary interfaces
+  const keyStoreAdapter = {
+    getEncryptedKey: async (userId: string) => {
+      const key = await walletStore.getEncryptedKey(userId)
+      if (!key) throw new Error('Key not found')
+      const publicAddress = await walletStore.getPublicAddress(userId)
+      return {
+        envelope: JSON.parse(Buffer.from(key.cipherText, 'base64').toString('utf8')),
+        keyVersion: key.keyId,
+        publicAddress
+      }
+    },
+    getPublicAddress: (userId: string) => walletStore.getPublicAddress(userId)
+  }
+
+  const decryptorAdapter = {
+    decrypt: async (envelope: unknown) => {
+      const cipherText = Buffer.from(JSON.stringify(envelope), 'utf8')
+      const record = envelope as { version: number }
+      void record
+      const keyVersion = (envelope as any)?.keyVersion
+      if (typeof keyVersion !== 'string' || !keyVersion) {
+        throw new Error('Missing key version for decryption')
+      }
+      return encryptionService.decrypt(cipherText, keyVersion)
+    }
+  }
+
+  const custodialService = new CustodialWalletServiceImpl(
+    keyStoreAdapter as any,
+    decryptorAdapter as any,
+    sorobanConfig.networkPassphrase
+  )
+
+  const walletService = new WalletServiceImpl(walletStore, encryptionService, custodialService)
+  const linkedAddressStore = process.env.DATABASE_URL
+    ? new PostgresLinkedAddressStore()
+    : new InMemoryLinkedAddressStore()
   const ngnWalletService = new NgnWalletService()
 
   const rewardsDataLayer = new StubRewardsDataLayer()
@@ -72,9 +119,17 @@ export function createApp() {
 
   const conversionProvider = new StubConversionProvider(env.FX_RATE_NGN_PER_USDC)
   const conversionService = new ConversionService(conversionProvider, 'onramp')
+  app.set('conversionService', conversionService)
+  const stakingService = new StakingService(sorobanAdapter)
+
+  // Staking Finalizer Job
+  const stakingFinalizer = new StakingFinalizer(stakingService)
+  stakingFinalizer.start()
 
   // Indexer
-  const receiptRepo = new StubReceiptRepository()
+  const receiptRepo = process.env.DATABASE_URL
+    ? new PostgresReceiptRepository()
+    : new StubReceiptRepository()
   const indexer = new ReceiptIndexer(sorobanAdapter, receiptRepo, {
     pollIntervalMs: parseInt(process.env.INDEXER_POLL_MS ?? '5000'),
     startLedger: process.env.INDEXER_START_LEDGER ? parseInt(process.env.INDEXER_START_LEDGER) : undefined,
@@ -108,12 +163,14 @@ export function createApp() {
   app.use('/api', createReceiptsRouter(receiptRepo))
   app.use('/api/wallet', createWalletRateLimiter(env), createWalletRouter(walletService))
   app.use('/api/wallet/ngn', createNgnWalletRouter(ngnWalletService))
+  app.use('/api/admin/risk', createAdminRiskRouter(ngnWalletService))
+  app.use('/api/admin', createAdminWithdrawalsRouter(ngnWalletService))
   app.use('/api/payments', createPaymentsRouter(sorobanAdapter))
-  app.use('/api/admin', createAdminRouter(sorobanAdapter))
+  app.use('/api/admin', createAdminRouter(sorobanAdapter, walletStore as any, encryptionService as any))
   app.use('/api/deals', createDealsRouter())
   app.use('/api/whistleblower', createWhistleblowerRouter(earningsService))
-  app.use('/api/staking', createStakingRouter(sorobanAdapter, walletService, linkedAddressStore))
-  app.use('/api/webhooks', createWebhooksRouter())
+  app.use('/api/staking', createStakingRouter(sorobanAdapter, walletService, linkedAddressStore, ngnWalletService, conversionService, stakingService))
+  app.use('/api/webhooks', createWebhooksRouter(ngnWalletService))
   app.use('/api/deposits', createDepositsRouter(conversionService))
 
 

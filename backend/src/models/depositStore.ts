@@ -75,6 +75,16 @@ class DepositStore {
     return deposit
   }
 
+  async reverseByCanonical(rail: string, externalRef: string): Promise<Deposit | null> {
+    const deposit = await this.getByCanonical(rail, externalRef)
+    if (!deposit) return null
+    if (deposit.status === DepositStatus.REVERSED) return deposit
+    deposit.status = DepositStatus.REVERSED
+    deposit.updatedAt = new Date()
+    this.initiationsById.set(deposit.depositId, deposit)
+    return deposit
+  }
+
   // Confirmed deposit flow
   async confirm(input: ConfirmDepositRecordInput): Promise<DepositRecord> {
     const existing = this.deposits.get(input.depositId)
@@ -93,6 +103,8 @@ class DepositStore {
       createdAt: now,
       updatedAt: now,
       consumedAt: null,
+      reversedAt: null,
+      reversalRef: null,
     }
 
     this.deposits.set(input.depositId, record)
@@ -118,6 +130,35 @@ class DepositStore {
     }
     this.deposits.set(depositId, updated)
     return updated
+  }
+
+  async markReversed(depositId: string, reversalRef: string): Promise<DepositRecord | null> {
+    const dep = this.deposits.get(depositId)
+    if (!dep) return null
+    
+    // Idempotent - if already reversed, return existing
+    if (dep.reversedAt) {
+      return dep
+    }
+
+    const now = new Date()
+    const updated: DepositRecord = {
+      ...dep,
+      reversedAt: now,
+      reversalRef,
+      updatedAt: now,
+    }
+    this.deposits.set(depositId, updated)
+    return updated
+  }
+
+  async getByProviderRef(provider: string, providerRef: string): Promise<DepositRecord | null> {
+    for (const dep of this.deposits.values()) {
+      if (dep.provider === provider && dep.providerRef === providerRef) {
+        return dep
+      }
+    }
+    return null
   }
 
   async clear(): Promise<void> {

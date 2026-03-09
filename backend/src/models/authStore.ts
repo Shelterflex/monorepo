@@ -27,7 +27,7 @@ export interface Session {
 
 export interface WalletChallenge {
   address: string
-  message: string
+  challengeXdr: string
   nonce: string
   expiresAt: Date
   attempts: number

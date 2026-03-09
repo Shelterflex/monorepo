@@ -22,6 +22,10 @@ export const envSchema = z.object({
   CUSTODIAL_SIGNING_PAUSED: z.coerce.boolean().default(false),
   WEBHOOK_SIGNATURE_ENABLED: z.coerce.boolean().default(false),
   WEBHOOK_SECRET: z.string().optional(),
+  // Provider-specific webhook secrets for signature validation
+  PAYSTACK_SECRET: z.string().optional(),
+  FLUTTERWAVE_SECRET: z.string().optional(),
+  MANUAL_ADMIN_SECRET: z.string().optional(),
   FX_RATE_NGN_PER_USDC: z.coerce.number().positive().default(1600),
   QUOTE_MAX_AMOUNT_NGN: z.coerce.number().positive().default(5_000_000),
   QUOTE_EXPIRY_MS: z.coerce.number().positive().default(5 * 60_000),
@@ -59,11 +63,39 @@ export const envSchema = z.object({
     path: ['CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION'],
   })
   .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.WEBHOOK_SECRET
+  }, {
+    message: 'WEBHOOK_SECRET is required in production to validate webhook signatures',
+    path: ['WEBHOOK_SECRET'],
+  })
+  .refine((data) => {
     if (!data.WEBHOOK_SIGNATURE_ENABLED) return true
     return !!data.WEBHOOK_SECRET
   }, {
     message: 'WEBHOOK_SECRET is required when WEBHOOK_SIGNATURE_ENABLED is true',
     path: ['WEBHOOK_SECRET'],
+  })
+  .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.PAYSTACK_SECRET
+  }, {
+    message: 'PAYSTACK_SECRET is required in production for webhook signature validation',
+    path: ['PAYSTACK_SECRET'],
+  })
+  .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.FLUTTERWAVE_SECRET
+  }, {
+    message: 'FLUTTERWAVE_SECRET is required in production for webhook signature validation',
+    path: ['FLUTTERWAVE_SECRET'],
+  })
+  .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.MANUAL_ADMIN_SECRET
+  }, {
+    message: 'MANUAL_ADMIN_SECRET is required in production for webhook signature validation',
+    path: ['MANUAL_ADMIN_SECRET'],
   })
 
 export type Env = z.infer<typeof envSchema>

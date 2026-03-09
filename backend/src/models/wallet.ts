@@ -23,6 +23,11 @@ export interface WalletStore {
   getByUserId(userId: string): Promise<Wallet | null>
   getPublicAddress(userId: string): Promise<string>
   getEncryptedKey(userId: string): Promise<{ cipherText: string; keyId: string } | null>
+  listUserIdsByKeyId(
+    keyId: string,
+    limit: number,
+    cursorUserId?: string,
+  ): Promise<{ userIds: string[]; nextCursorUserId?: string }>
   updateEncryption(
     userId: string,
     newEncryptedSecretKey: string,

@@ -2,6 +2,8 @@
 
 A Soroban smart contract for staking USDC tokens with pause functionality for emergencies and metadata hash support for receipt verification.
 
+See `docs/specs/contracts/UPGRADE_STRATEGY.md` for the contract upgrade/versioning strategy.
+
 ## Overview
 
 The Staking Pool contract allows users to stake and unstake USDC tokens while providing administrators with emergency pause capabilities. This is an MVP implementation focused on core staking functionality without reward distribution, now enhanced with canonical metadata hash computation for transaction receipt verification.

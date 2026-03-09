@@ -15,7 +15,7 @@ import { computeTxId, buildCanonicalString } from './canonicalization.js'
  * Designed to be easily replaced with database persistence.
  */
 class OutboxStore {
-  private items = new Map<string, OutboxItem>()
+  public items = new Map<string, OutboxItem>()
   private refIndex = new Map<CanonicalExternalRefV1, string>() // ref -> id mapping
 
   /**

@@ -9,11 +9,13 @@ use soroban_sdk::{
 #[contracttype]
 #[derive(Clone)]
 pub enum StorageKey {
+    ContractVersion,
     Admin,
     Operator,
     Token,
     Paused,
-    Allocation(Address, String),
+    TotalAllocated(Address, String),
+    TotalClaimed(Address, String),
 }
 
 #[contracterror]
@@ -25,6 +27,7 @@ pub enum ContractError {
     Paused = 3,
     InvalidAmount = 4,
     NothingToClaim = 5,
+    AmountExceedsClaimable = 6,
 }
 
 #[contract]
@@ -81,23 +84,54 @@ fn require_admin(env: &Env, caller: &Address) -> Result<(), ContractError> {
     Ok(())
 }
 
-fn allocation_get(env: &Env, whistleblower: &Address, listing_id: &String) -> i128 {
+fn total_allocated_get(env: &Env, whistleblower: &Address, listing_id: &String) -> i128 {
     env.storage()
         .instance()
-        .get::<_, i128>(&StorageKey::Allocation(whistleblower.clone(), listing_id.clone()))
+        .get::<_, i128>(&StorageKey::TotalAllocated(
+            whistleblower.clone(),
+            listing_id.clone(),
+        ))
         .unwrap_or(0)
 }
 
-fn allocation_put(env: &Env, whistleblower: &Address, listing_id: &String, amount: i128) {
+fn total_allocated_put(env: &Env, whistleblower: &Address, listing_id: &String, amount: i128) {
     env.storage().instance().set(
-        &StorageKey::Allocation(whistleblower.clone(), listing_id.clone()),
+        &StorageKey::TotalAllocated(whistleblower.clone(), listing_id.clone()),
         &amount,
     );
 }
 
+fn total_claimed_get(env: &Env, whistleblower: &Address, listing_id: &String) -> i128 {
+    env.storage()
+        .instance()
+        .get::<_, i128>(&StorageKey::TotalClaimed(
+            whistleblower.clone(),
+            listing_id.clone(),
+        ))
+        .unwrap_or(0)
+}
+
+fn total_claimed_put(env: &Env, whistleblower: &Address, listing_id: &String, amount: i128) {
+    env.storage().instance().set(
+        &StorageKey::TotalClaimed(whistleblower.clone(), listing_id.clone()),
+        &amount,
+    );
+}
+
+fn claimable_get(env: &Env, whistleblower: &Address, listing_id: &String) -> i128 {
+    let allocated = total_allocated_get(env, whistleblower, listing_id);
+    let claimed = total_claimed_get(env, whistleblower, listing_id);
+    allocated.checked_sub(claimed).unwrap_or(0)
+}
+
 #[contractimpl]
 impl WhistleblowerRewards {
-    pub fn init(env: Env, admin: Address, operator: Address, token: Address) -> Result<(), ContractError> {
+    pub fn init(
+        env: Env,
+        admin: Address,
+        operator: Address,
+        token: Address,
+    ) -> Result<(), ContractError> {
         if env.storage().instance().has(&StorageKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
@@ -106,13 +140,26 @@ impl WhistleblowerRewards {
             .instance()
             .set(&StorageKey::Operator, &operator);
         env.storage().instance().set(&StorageKey::Token, &token);
+        env.storage()
+            .instance()
+            .set(&StorageKey::ContractVersion, &1u32);
         env.storage().instance().set(&StorageKey::Paused, &false);
 
         env.events().publish(
-            (Symbol::new(&env, "whistleblower_rewards"), Symbol::new(&env, "init")),
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "init"),
+            ),
             (admin, operator, token),
         );
         Ok(())
+    }
+
+    pub fn contract_version(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get::<_, u32>(&StorageKey::ContractVersion)
+            .unwrap_or(0u32)
     }
 
     pub fn allocate(
@@ -128,11 +175,16 @@ impl WhistleblowerRewards {
         if amount <= 0 {
             return Err(ContractError::InvalidAmount);
         }
-        let cur = allocation_get(&env, &whistleblower, &listing_id);
-        let new_amt = cur
+        let cur_alloc = total_allocated_get(&env, &whistleblower, &listing_id);
+        let new_alloc = cur_alloc
             .checked_add(amount)
             .expect("overflow on allocation add");
-        allocation_put(&env, &whistleblower, &listing_id, new_amt);
+        total_allocated_put(&env, &whistleblower, &listing_id, new_alloc);
+
+        let total_claimed = total_claimed_get(&env, &whistleblower, &listing_id);
+        let claimable = new_alloc
+            .checked_sub(total_claimed)
+            .expect("underflow on claimable after allocation");
 
         env.events().publish(
             (
@@ -142,25 +194,52 @@ impl WhistleblowerRewards {
                 listing_id.clone(),
                 deal_id,
             ),
-            amount,
+            (amount, new_alloc, total_claimed, claimable),
         );
         Ok(())
     }
 
-    pub fn claim(env: Env, to: Address, listing_id: String) -> Result<i128, ContractError> {
+    pub fn claim(
+        env: Env,
+        to: Address,
+        listing_id: String,
+        amount: Option<i128>,
+    ) -> Result<i128, ContractError> {
         to.require_auth();
         require_not_paused(&env)?;
 
-        let claimable = allocation_get(&env, &to, &listing_id);
+        let claimable = claimable_get(&env, &to, &listing_id);
         if claimable <= 0 {
             return Err(ContractError::NothingToClaim);
         }
 
-        allocation_put(&env, &to, &listing_id, 0);
+        let to_claim = match amount {
+            None => claimable,
+            Some(a) => {
+                if a <= 0 {
+                    return Err(ContractError::InvalidAmount);
+                }
+                if a > claimable {
+                    return Err(ContractError::AmountExceedsClaimable);
+                }
+                a
+            }
+        };
+
+        let cur_claimed = total_claimed_get(&env, &to, &listing_id);
+        let new_claimed = cur_claimed
+            .checked_add(to_claim)
+            .expect("overflow on claimed add");
+        total_claimed_put(&env, &to, &listing_id, new_claimed);
+
+        let total_allocated = total_allocated_get(&env, &to, &listing_id);
+        let new_claimable = total_allocated
+            .checked_sub(new_claimed)
+            .expect("underflow on claimable after claim");
 
         let token_addr = get_token(&env);
         let token_client = token::Client::new(&env, &token_addr);
-        token_client.transfer(&env.current_contract_address(), &to, &claimable);
+        token_client.transfer(&env.current_contract_address(), &to, &to_claim);
 
         env.events().publish(
             (
@@ -169,21 +248,24 @@ impl WhistleblowerRewards {
                 to.clone(),
                 listing_id.clone(),
             ),
-            claimable,
+            (to_claim, total_allocated, new_claimed, new_claimable),
         );
 
-        Ok(claimable)
+        Ok(to_claim)
     }
 
     pub fn claimable(env: Env, whistleblower: Address, listing_id: String) -> i128 {
-        allocation_get(&env, &whistleblower, &listing_id)
+        claimable_get(&env, &whistleblower, &listing_id)
     }
 
     pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
         env.storage().instance().set(&StorageKey::Paused, &true);
         env.events().publish(
-            (Symbol::new(&env, "whistleblower_rewards"), Symbol::new(&env, "pause")),
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "pause"),
+            ),
             (),
         );
         Ok(())
@@ -193,7 +275,10 @@ impl WhistleblowerRewards {
         require_admin(&env, &admin)?;
         env.storage().instance().set(&StorageKey::Paused, &false);
         env.events().publish(
-            (Symbol::new(&env, "whistleblower_rewards"), Symbol::new(&env, "unpause")),
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "unpause"),
+            ),
             (),
         );
         Ok(())
@@ -210,9 +295,18 @@ mod test {
 
     use super::{ContractError, WhistleblowerRewards, WhistleblowerRewardsClient};
     use soroban_sdk::testutils::{Address as _, Events, MockAuth, MockAuthInvoke};
-    use soroban_sdk::{token, Address, Env, IntoVal, Symbol, TryIntoVal, String as SString};
+    use soroban_sdk::{token, Address, Env, IntoVal, String as SString, Symbol, TryIntoVal};
 
-    fn setup(env: &Env) -> (soroban_sdk::Address, WhistleblowerRewardsClient<'_>, Address, Address, Address, Address) {
+    fn setup(
+        env: &Env,
+    ) -> (
+        soroban_sdk::Address,
+        WhistleblowerRewardsClient<'_>,
+        Address,
+        Address,
+        Address,
+        Address,
+    ) {
         env.mock_all_auths();
         let contract_id = env.register_contract(None, WhistleblowerRewards);
         let client = WhistleblowerRewardsClient::new(env, &contract_id);
@@ -224,7 +318,10 @@ mod test {
         let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
         let token_id = token_contract.address();
 
-        client.try_init(&admin, &operator, &token_id).unwrap().unwrap();
+        client
+            .try_init(&admin, &operator, &token_id)
+            .unwrap()
+            .unwrap();
         (contract_id, client, admin, operator, token_id, token_admin)
     }
 
@@ -232,6 +329,8 @@ mod test {
     fn init_sets_fields() {
         let env = Env::default();
         let (contract_id, client, admin, operator, token_id, _token_admin) = setup(&env);
+
+        assert_eq!(client.contract_version(), 1u32);
 
         env.mock_auths(&[MockAuth {
             address: &admin,
@@ -271,7 +370,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "allocate",
-                args: (operator.clone(), wb.clone(), listing.clone(), deal.clone(), 100i128).into_val(&env),
+                args: (
+                    operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal.clone(),
+                    100i128,
+                )
+                    .into_val(&env),
                 sub_invokes: &[],
             },
         }]);
@@ -287,7 +393,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "allocate",
-                args: (not_operator.clone(), wb.clone(), listing.clone(), deal.clone(), 50i128).into_val(&env),
+                args: (
+                    not_operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal.clone(),
+                    50i128,
+                )
+                    .into_val(&env),
                 sub_invokes: &[],
             },
         }]);
@@ -311,7 +424,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "allocate",
-                args: (operator.clone(), wb.clone(), listing.clone(), deal.clone(), 250i128).into_val(&env),
+                args: (
+                    operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal.clone(),
+                    250i128,
+                )
+                    .into_val(&env),
                 sub_invokes: &[],
             },
         }]);
@@ -340,11 +460,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "claim",
-                args: (wb.clone(), listing.clone()).into_val(&env),
+                args: (wb.clone(), listing.clone(), Option::<i128>::None).into_val(&env),
                 sub_invokes: &[],
             },
         }]);
-        let claimed = client.try_claim(&wb, &listing).unwrap().unwrap();
+        let claimed = client
+            .try_claim(&wb, &listing, &Option::<i128>::None)
+            .unwrap()
+            .unwrap();
         assert_eq!(claimed, 250i128);
         assert_eq!(client.claimable(&wb, &listing), 0i128);
 
@@ -353,11 +476,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "claim",
-                args: (wb.clone(), listing.clone()).into_val(&env),
+                args: (wb.clone(), listing.clone(), Option::<i128>::None).into_val(&env),
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_claim(&wb, &listing).unwrap_err().unwrap();
+        let err = client
+            .try_claim(&wb, &listing, &Option::<i128>::None)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::NothingToClaim);
     }
 
@@ -375,7 +501,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "allocate",
-                args: (operator.clone(), wb1.clone(), listing.clone(), deal.clone(), 90i128).into_val(&env),
+                args: (
+                    operator.clone(),
+                    wb1.clone(),
+                    listing.clone(),
+                    deal.clone(),
+                    90i128,
+                )
+                    .into_val(&env),
                 sub_invokes: &[],
             },
         }]);
@@ -389,11 +522,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "claim",
-                args: (wb2.clone(), listing.clone()).into_val(&env),
+                args: (wb2.clone(), listing.clone(), Option::<i128>::None).into_val(&env),
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_claim(&wb2, &listing).unwrap_err().unwrap();
+        let err = client
+            .try_claim(&wb2, &listing, &Option::<i128>::None)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::NothingToClaim);
     }
 
@@ -422,7 +558,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "allocate",
-                args: (operator.clone(), wb.clone(), listing.clone(), deal.clone(), 10i128).into_val(&env),
+                args: (
+                    operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal.clone(),
+                    10i128,
+                )
+                    .into_val(&env),
                 sub_invokes: &[],
             },
         }]);
@@ -437,11 +580,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "claim",
-                args: (wb.clone(), listing.clone()).into_val(&env),
+                args: (wb.clone(), listing.clone(), Option::<i128>::None).into_val(&env),
                 sub_invokes: &[],
             },
         }]);
-        let err2 = client.try_claim(&wb, &listing).unwrap_err().unwrap();
+        let err2 = client
+            .try_claim(&wb, &listing, &Option::<i128>::None)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err2, ContractError::Paused);
     }
 
@@ -458,7 +604,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "allocate",
-                args: (operator.clone(), wb.clone(), listing.clone(), deal.clone(), 5i128).into_val(&env),
+                args: (
+                    operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal.clone(),
+                    5i128,
+                )
+                    .into_val(&env),
                 sub_invokes: &[],
             },
         }]);
@@ -493,11 +646,14 @@ mod test {
             invoke: &MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "claim",
-                args: (wb.clone(), listing.clone()).into_val(&env),
+                args: (wb.clone(), listing.clone(), Option::<i128>::None).into_val(&env),
                 sub_invokes: &[],
             },
         }]);
-        client.try_claim(&wb, &listing).unwrap().unwrap();
+        client
+            .try_claim(&wb, &listing, &Option::<i128>::None)
+            .unwrap()
+            .unwrap();
         let events2 = env.events().all();
         let claim_event = events2.last().unwrap();
         let topics2: soroban_sdk::Vec<soroban_sdk::Val> = claim_event.1.clone();
@@ -507,5 +663,120 @@ mod test {
         let action2: Symbol = topics2.get(1).unwrap().try_into_val(&env).unwrap();
         assert_eq!(action2, Symbol::new(&env, "claim"));
     }
-}
 
+    #[test]
+    fn multiple_allocations_and_partial_claims() {
+        let env = Env::default();
+        let (contract_id, client, _admin, operator, token_id, token_admin) = setup(&env);
+        let wb = Address::generate(&env);
+        let listing = SString::from_str(&env, "listing-partial");
+        let deal_a = SString::from_str(&env, "deal-A");
+        let deal_b = SString::from_str(&env, "deal-B");
+
+        env.mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "allocate",
+                args: (
+                    operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal_a.clone(),
+                    100i128,
+                )
+                    .into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_allocate(&operator, &wb, &listing, &deal_a, &100i128)
+            .unwrap()
+            .unwrap();
+
+        env.mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "allocate",
+                args: (
+                    operator.clone(),
+                    wb.clone(),
+                    listing.clone(),
+                    deal_b.clone(),
+                    50i128,
+                )
+                    .into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_allocate(&operator, &wb, &listing, &deal_b, &50i128)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(client.claimable(&wb, &listing), 150i128);
+
+        let sac = token::StellarAssetClient::new(&env, &token_id);
+        let token_client = token::Client::new(&env, &token_id);
+        env.mock_auths(&[MockAuth {
+            address: &token_admin,
+            invoke: &MockAuthInvoke {
+                contract: &token_id,
+                fn_name: "mint",
+                args: (contract_id.clone(), 1_000_000i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        sac.mint(&contract_id, &1_000_000i128);
+        let bal_before = token_client.balance(&wb);
+
+        env.mock_auths(&[MockAuth {
+            address: &wb,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "claim",
+                args: (wb.clone(), listing.clone(), Option::<i128>::Some(40i128)).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let c1 = client
+            .try_claim(&wb, &listing, &Option::<i128>::Some(40i128))
+            .unwrap()
+            .unwrap();
+        assert_eq!(c1, 40i128);
+        assert_eq!(client.claimable(&wb, &listing), 110i128);
+        assert_eq!(token_client.balance(&wb), bal_before + 40i128);
+
+        env.mock_auths(&[MockAuth {
+            address: &wb,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "claim",
+                args: (wb.clone(), listing.clone(), Option::<i128>::Some(999i128)).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let err = client
+            .try_claim(&wb, &listing, &Option::<i128>::Some(999i128))
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::AmountExceedsClaimable);
+
+        env.mock_auths(&[MockAuth {
+            address: &wb,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "claim",
+                args: (wb.clone(), listing.clone(), Option::<i128>::None).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let c2 = client
+            .try_claim(&wb, &listing, &Option::<i128>::None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(c2, 110i128);
+        assert_eq!(client.claimable(&wb, &listing), 0i128);
+    }
+}

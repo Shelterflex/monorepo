@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { ArrowRight, AlertCircle, Check, Loader2, AlertTriangle } from "lucide-react";
+import { handleError, showSuccessToast } from "@/lib/toast";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,18 +28,24 @@ import {
   type WithdrawalResponse,
   type BankAccountDetails,
 } from "@/lib/walletApi";
+import { ACCOUNT_FROZEN_MESSAGE, isAccountFrozenError } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface WithdrawalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   availableBalance: number;
+  isFrozen?: boolean;
+  freezeReason?: string | null;
+  deficitNgn?: number;
+  onTopUpClick?: () => void;
 }
 
 type Step = "input" | "confirmation" | "error";
 
-const MIN_WITHDRAWAL = 100; // Minimum 100 NGN
-const MAX_WITHDRAWAL = 1000000; // Maximum 1,000,000 NGN
+const MIN_WITHDRAWAL = 100;
+const MAX_WITHDRAWAL = 1000000;
 
 const NIGERIAN_BANKS = [
   "Access Bank",
@@ -68,7 +75,17 @@ function formatNgn(amount: number) {
   }).format(amount);
 }
 
-export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalance }: WithdrawalModalProps) {
+export function WithdrawalModal({
+  open,
+  onOpenChange,
+  onSuccess,
+  availableBalance,
+  isFrozen = false,
+  freezeReason,
+  deficitNgn = 0,
+  onTopUpClick,
+}: WithdrawalModalProps) {
+  const { toast } = useToast();
   const [step, setStep] = useState<Step>("input");
   const [amount, setAmount] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState<string>("");
@@ -127,6 +144,12 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
   const handleSubmit = async () => {
     if (isSubmitting) return;
 
+    if (isFrozen) {
+      setErrorMessage(ACCOUNT_FROZEN_MESSAGE);
+      setStep("error");
+      return;
+    }
+
     const validationError = validateAmount(amount);
     if (validationError) {
       setErrorMessage(validationError);
@@ -155,9 +178,20 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
       });
       setWithdrawalResult(result);
       setStep("confirmation");
+      showSuccessToast("Withdrawal initiated successfully");
       onSuccess?.();
     } catch (err) {
+      // Show toast for API errors
+      handleError(err, "Failed to initiate withdrawal");
+      // Also set inline error for form display
       const message = err instanceof Error ? err.message : "Failed to initiate withdrawal";
+      if (isAccountFrozenError(err)) {
+        toast({
+          title: "Account frozen",
+          description: ACCOUNT_FROZEN_MESSAGE,
+          variant: "destructive",
+        });
+      }
       setErrorMessage(message);
       setStep("error");
     } finally {
@@ -200,6 +234,17 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
 
         {step === "input" && (
           <div className="space-y-5 pt-2">
+            {isFrozen && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <p className="font-semibold">Account frozen</p>
+                <p className="mt-1">{ACCOUNT_FROZEN_MESSAGE}</p>
+                {deficitNgn > 0 && (
+                  <p className="mt-1">Outstanding deficit: {formatNgn(deficitNgn)}</p>
+                )}
+                {freezeReason ? <p className="mt-1 text-xs">Reason: {freezeReason}</p> : null}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="amount">Amount (NGN)</Label>
               <Input
@@ -214,7 +259,7 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
                 min={MIN_WITHDRAWAL}
                 max={Math.min(MAX_WITHDRAWAL, availableBalance)}
                 className="border-2 border-foreground"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isFrozen}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Min: {formatNgn(MIN_WITHDRAWAL)} · Max: {formatNgn(MAX_WITHDRAWAL)}</span>
@@ -230,7 +275,7 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
                   setBankName(value);
                   setErrorMessage("");
                 }}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isFrozen}
               >
                 <SelectTrigger id="bankName" className="border-2 border-foreground">
                   <SelectValue placeholder="Select your bank" />
@@ -259,7 +304,7 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
                 }}
                 maxLength={10}
                 className="border-2 border-foreground"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isFrozen}
               />
             </div>
 
@@ -275,7 +320,7 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
                   setErrorMessage("");
                 }}
                 className="border-2 border-foreground"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isFrozen}
               />
             </div>
 
@@ -288,7 +333,14 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
 
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !amount || !accountNumber || !accountName || !bankName}
+              disabled={
+                isFrozen ||
+                isSubmitting ||
+                !amount ||
+                !accountNumber ||
+                !accountName ||
+                !bankName
+              }
               className="w-full border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-50"
             >
               {isSubmitting ? (
@@ -343,7 +395,7 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
                 <div className="text-sm text-blue-800">
                   <p className="font-medium">Funds Held</p>
                   <p className="mt-1">
-                    {formatNgn(withdrawalResult.amountNgn)} has been held from your available balance 
+                    {formatNgn(withdrawalResult.amountNgn)} has been held from your available balance
                     while this withdrawal is being processed.
                   </p>
                 </div>
@@ -380,6 +432,11 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
               <div>
                 <p className="font-bold">Could not process withdrawal</p>
                 <p className="mt-1 text-sm text-muted-foreground">{errorMessage}</p>
+                {errorMessage === ACCOUNT_FROZEN_MESSAGE && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Top up your wallet to repay the deficit, then try again.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -393,12 +450,18 @@ export function WithdrawalModal({ open, onOpenChange, onSuccess, availableBalanc
               </Button>
               <Button
                 onClick={() => {
+                  if (errorMessage === ACCOUNT_FROZEN_MESSAGE && onTopUpClick) {
+                    onTopUpClick();
+                    return;
+                  }
                   setStep("input");
                   setErrorMessage("");
                 }}
                 className="flex-1 border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
               >
-                Try Again
+                {errorMessage === ACCOUNT_FROZEN_MESSAGE && onTopUpClick
+                  ? "Top Up Wallet"
+                  : "Try Again"}
               </Button>
             </div>
           </div>

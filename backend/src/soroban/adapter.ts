@@ -3,7 +3,7 @@ import { TxType } from '../outbox/types.js'
 import { RawReceiptEvent } from '../indexer/event-parser.js'
 
 export interface RecordReceiptParams {
-  txId: string           // BytesN<32> as hex string - deterministic idempotency key
+  txId: string           // BytesN<32> as hex string - deterministic idempotency key (SHA-256 of canonical external ref)
   txType: TxType
   amountUsdc: string     // USDC amount (canonical); decimal string
   tokenAddress: string   // USDC token contract address
@@ -11,7 +11,6 @@ export interface RecordReceiptParams {
   listingId?: string
   from?: string
   to?: string
-  externalRefHash: string // SHA-256 of canonical external ref (privacy on-chain)
   amountNgn?: number
   fxRate?: number
   fxProvider?: string

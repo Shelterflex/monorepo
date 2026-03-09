@@ -1,5 +1,19 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env};
+
+#[contracttype]
+#[derive(Clone)]
+pub enum StorageKey {
+    ContractVersion,
+    Admin,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum ContractError {
+    AlreadyInitialized = 1,
+}
 
 #[contracttype]
 #[derive(Clone)]
@@ -17,6 +31,26 @@ pub struct StakingRewards;
 
 #[contractimpl]
 impl StakingRewards {
+    pub fn init(env: Env, admin: Address) -> Result<(), ContractError> {
+        if env.storage().instance().has(&StorageKey::Admin) {
+            return Err(ContractError::AlreadyInitialized);
+        }
+
+        env.storage().instance().set(&StorageKey::Admin, &admin);
+        env.storage()
+            .instance()
+            .set(&StorageKey::ContractVersion, &1u32);
+
+        Ok(())
+    }
+
+    pub fn contract_version(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get::<_, u32>(&StorageKey::ContractVersion)
+            .unwrap_or(0u32)
+    }
+
     pub fn stake(env: Env, user: Address, amount: i128) {
         user.require_auth();
 
@@ -89,12 +123,23 @@ mod test {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Env};
 
+    fn setup(env: &Env) -> (soroban_sdk::Address, StakingRewardsClient<'_>) {
+        env.mock_all_auths();
+        let contract_id = env.register(StakingRewards, ());
+        let client = StakingRewardsClient::new(env, &contract_id);
+
+        let admin = Address::generate(env);
+        client.try_init(&admin).unwrap().unwrap();
+
+        assert_eq!(client.contract_version(), 1u32);
+
+        (contract_id, client)
+    }
+
     #[test]
     fn test_two_users_different_times() {
         let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register(StakingRewards, ());
-        let client = StakingRewardsClient::new(&env, &contract_id);
+        let (_contract_id, client) = setup(&env);
 
         let user1 = Address::generate(&env);
         let user2 = Address::generate(&env);
@@ -111,9 +156,7 @@ mod test {
     #[test]
     fn test_claim_does_not_affect_others() {
         let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register(StakingRewards, ());
-        let client = StakingRewardsClient::new(&env, &contract_id);
+        let (_contract_id, client) = setup(&env);
 
         let user1 = Address::generate(&env);
         let user2 = Address::generate(&env);
@@ -133,9 +176,7 @@ mod test {
     #[test]
     fn test_rewards_distributed_fairly() {
         let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register(StakingRewards, ());
-        let client = StakingRewardsClient::new(&env, &contract_id);
+        let (_contract_id, client) = setup(&env);
 
         let user1 = Address::generate(&env);
         let user2 = Address::generate(&env);

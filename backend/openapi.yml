@@ -412,7 +412,7 @@ paths:
                     message: You have reached the maximum of 2 listings per month
         default:
           $ref: '#/components/responses/Error'
-    
+
     get:
       summary: List listings
       description: Get a paginated list of listings with optional filters
@@ -478,6 +478,134 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/wallet/ngn/withdraw/initiate:
+    post:
+      summary: Initiate NGN withdrawal
+      description: Initiates a withdrawal request and moves funds from available to held.
+      operationId: initiateNgnWithdrawal
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalRequest'
+      responses:
+        '201':
+          description: Withdrawal initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/wallet/ngn/withdrawals:
+    get:
+      summary: List NGN withdrawals
+      description: Returns the authenticated user's NGN withdrawal history.
+      operationId: listNgnWithdrawals
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Withdrawal list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalHistoryResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/withdrawals/{id}/approve:
+    post:
+      summary: Approve NGN withdrawal
+      description: Approves a pending withdrawal and executes provider payout. Idempotent if already approved/confirmed.
+      operationId: approveNgnWithdrawal
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Withdrawal approved/confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/withdrawals/{id}/reject:
+    post:
+      summary: Reject NGN withdrawal
+      description: Rejects a pending withdrawal and releases held funds back to available. Idempotent if already rejected/failed.
+      operationId: rejectNgnWithdrawal
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Withdrawal rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/whistleblower/listings/{id}:
     get:
       summary: Get listing by ID
@@ -520,6 +648,79 @@ paths:
                 error:
                   code: NOT_FOUND
                   message: Listing with ID '550e8400-e29b-41d4-a716-446655440000' not found
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/wallet/ngn/topup/initiate:
+    post:
+      summary: Initiate NGN wallet top-up
+      description: Creates a payment intent for NGN wallet top-up. Returns PSP redirect URL or bank transfer details.
+      operationId: initiateNgnWalletTopup
+      tags:
+        - NGN Wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional idempotency key for safe retries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amountNgn
+                - rail
+              properties:
+                amountNgn:
+                  type: number
+                  minimum: 100
+                  maximum: 5000000
+                rail:
+                  type: string
+                  enum: [paystack, flutterwave, bank_transfer, manual_admin]
+      responses:
+        '201':
+          description: Top-up initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - depositId
+                  - externalRefSource
+                  - externalRef
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  depositId:
+                    type: string
+                    format: uuid
+                  externalRefSource:
+                    type: string
+                    example: paystack
+                  externalRef:
+                    type: string
+                    example: pi_abc123
+                  redirectUrl:
+                    type: string
+                    nullable: true
+                  bankDetails:
+                    type: object
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
         default:
           $ref: '#/components/responses/Error'
 
@@ -1536,6 +1737,95 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/staking/quote:
+    post:
+      summary: Get staking quote
+      description: Returns a priced conversion from NGN to USDC for staking. Includes fees, slippage, and expiry window.
+      operationId: getStakingQuote
+      tags:
+        - Staking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amountNgn
+                - paymentRail
+              properties:
+                amountNgn:
+                  type: number
+                  description: Amount in Nigerian Naira to stake
+                  minimum: 1
+                  example: 160000
+                paymentRail:
+                  type: string
+                  enum: [paystack, flutterwave, bank_transfer, manual_admin]
+                  description: Payment provider for the deposit
+                  example: manual_admin
+      responses:
+        '201':
+          description: Quote created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - quoteId
+                  - amountNgn
+                  - estimatedAmountUsdc
+                  - fxRateNgnPerUsdc
+                  - feesNgn
+                  - expiresAt
+                  - disclaimer
+                properties:
+                  quoteId:
+                    type: string
+                    format: uuid
+                    description: Unique identifier for the quote
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  amountNgn:
+                    type: number
+                    description: Original NGN amount
+                    example: 160000
+                  estimatedAmountUsdc:
+                    type: string
+                    description: Estimated USDC amount after fees and FX conversion (6 decimal places)
+                    pattern: '^\d+(\.\d{1,6})?$'
+                    example: "97.560976"
+                  fxRateNgnPerUsdc:
+                    type: number
+                    description: FX rate used (NGN per 1 USDC)
+                    example: 1600
+                  feesNgn:
+                    type: number
+                    description: Fees deducted in NGN
+                    example: 2400
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: Quote expiry timestamp (ISO 8601)
+                    example: "2024-01-15T10:05:00Z"
+                  disclaimer:
+                    type: string
+                    description: Disclaimer about FX rate fluctuations
+                    example: "Final USDC may differ slightly due to FX movements"
+        '400':
+          description: Validation error (invalid amount, exceeds maximum, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/staking/deposit/initiate:
     post:
       summary: Initiate NGN deposit for staking
@@ -1557,7 +1847,7 @@ paths:
                   type: string
                 paymentRail:
                   type: string
-                  enum: [psp, bank]
+                  enum: [paystack, flutterwave, manual_admin, bank]
                 customerMeta:
                   type: object
                   properties:
@@ -1620,7 +1910,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [psp, bank]
+            enum: [paystack, flutterwave, manual_admin, bank]
       requestBody:
         required: true
         content:
@@ -1637,8 +1927,11 @@ paths:
                   type: string
                 status:
                   type: string
-                  enum: [confirmed, failed]
+                  enum: [confirmed, failed, reversed]
                   default: confirmed
+                providerStatus:
+                  type: string
+                  description: Provider-specific status code for mapping
       responses:
         '200':
           description: Webhook processed
@@ -1683,6 +1976,89 @@ components:
         role:
           type: string
           enum: [tenant, landlord, agent]
+
+    BankAccountDetails:
+      type: object
+      required:
+        - accountNumber
+        - accountName
+        - bankName
+      properties:
+        accountNumber:
+          type: string
+          minLength: 10
+          maxLength: 10
+        accountName:
+          type: string
+        bankName:
+          type: string
+
+    WithdrawalRequest:
+      type: object
+      required:
+        - amountNgn
+      properties:
+        amountNgn:
+          type: number
+          minimum: 100
+          maximum: 1000000
+        bankAccountRef:
+          type: string
+          description: Reference to a saved bank account
+        bankAccount:
+          $ref: '#/components/schemas/BankAccountDetails'
+
+    WithdrawalResponse:
+      type: object
+      required:
+        - success
+        - id
+        - amountNgn
+        - status
+        - bankAccount
+        - reference
+        - createdAt
+        - processedAt
+        - failureReason
+      properties:
+        success:
+          type: boolean
+        id:
+          type: string
+        amountNgn:
+          type: number
+        status:
+          type: string
+          enum: [pending, approved, rejected, confirmed, failed, reversed]
+        bankAccount:
+          $ref: '#/components/schemas/BankAccountDetails'
+        reference:
+          type: string
+        createdAt:
+          type: string
+        processedAt:
+          type: string
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+
+    WithdrawalHistoryResponse:
+      type: object
+      required:
+        - success
+        - entries
+        - nextCursor
+      properties:
+        success:
+          type: boolean
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WithdrawalResponse'
+        nextCursor:
+          type: string
+          nullable: true
 
     AdminListing:
       type: object

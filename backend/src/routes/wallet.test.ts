@@ -18,7 +18,14 @@ describe('Wallet Routes', () => {
   beforeEach(() => {
     walletStore = new InMemoryWalletStore()
     encryptionService = new EnvironmentEncryptionService('test-encryption-key-32-chars-long-123456')
-    walletService = new WalletServiceImpl(walletStore, encryptionService)
+
+    // Mock custodial service for legacy tests
+    const custodialService = {
+      signMessage: vi.fn(async (userId: string, msg: string) => ({ signature: 'mock-sig', publicKey: 'GDHD3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D' })),
+      signTransaction: vi.fn(async (userId: string, xdr: string) => ({ signature: 'mock-sig', publicKey: 'GDHD3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D3Y2D' }))
+    } as any
+
+    walletService = new WalletServiceImpl(walletStore, encryptionService, custodialService)
 
     // Seed an authenticated user session for tests
     const user = userStore.getOrCreateByEmail('test-user@example.com')
@@ -53,7 +60,7 @@ describe('Wallet Routes', () => {
 
       console.log('Response body:', response.body)
       console.log('Response text:', response.text)
-      
+
       // Check if response has the expected error structure
       if (response.body && response.body.error) {
         expect(response.body.error.code).toBe('UNAUTHORIZED')

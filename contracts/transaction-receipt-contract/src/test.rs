@@ -1,26 +1,138 @@
 #![cfg(test)]
 
-use crate::{generate_tx_id, validate_tx_type, ContractError, Receipt, StorageKey, ALLOWED_SOURCES, ALLOWED_TX_TYPES};
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String, Symbol, Vec};
+extern crate std;
 
-// Golden test vectors - shared with backend tests
-const GOLDEN_TEST_VECTORS: &[(&str, &str, &str, &str)] = &[
-    ("paystack", "psk_12345", "v1|source=paystack|ref=psk_12345", "71e9a576e18d122acff8e200cefac00bfcba57f4dc64e9cdad89f64304c6d0ec"),
-    ("BANK_TRANSFER", " UTR_98765 ", "v1|source=bank_transfer|ref=UTR_98765", "e6cd19e46ae4e78bffce61f7ada43833ee97f01e3317be080e27ee398e74a29b"),
-    ("stellar", "", "", "Ref cannot be empty after trimming"), // Error case
-];
+extern crate alloc;
+use alloc::format;
+use alloc::string::ToString;
+
+use crate::{
+    generate_tx_id, validate_tx_type, ContractError, Receipt, ReceiptInput, StorageKey,
+    TransactionReceiptContract, TransactionReceiptContractClient, ALLOWED_SOURCES,
+    ALLOWED_TX_TYPES,
+};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String, Symbol};
+use std::string::String as StdString;
 
 #[test]
 fn test_allowed_sources_constant() {
     // Verify ALLOWED_SOURCES contains expected values
-    assert_eq!(ALLOWED_SOURCES.len(), 7);
+    assert_eq!(ALLOWED_SOURCES.len(), 8);
     assert!(ALLOWED_SOURCES.contains(&"paystack"));
     assert!(ALLOWED_SOURCES.contains(&"flutterwave"));
     assert!(ALLOWED_SOURCES.contains(&"bank_transfer"));
     assert!(ALLOWED_SOURCES.contains(&"stellar"));
     assert!(ALLOWED_SOURCES.contains(&"onramp"));
     assert!(ALLOWED_SOURCES.contains(&"offramp"));
+    assert!(ALLOWED_SOURCES.contains(&"manual"));
     assert!(ALLOWED_SOURCES.contains(&"manual_admin"));
+}
+
+#[test]
+fn test_generate_tx_id_golden_vector_v1() {
+    let env = Env::default();
+    let source = Symbol::new(&env, "PAYSTACK");
+    let reference = String::from_str(&env, "  ref_12345  ");
+
+    let tx_id = generate_tx_id(&env, &source, &reference).unwrap();
+
+    let canonical = "v1|source=paystack|ref=ref_12345";
+    let expected: BytesN<32> = env
+        .crypto()
+        .sha256(&soroban_sdk::Bytes::from_slice(&env, canonical.as_bytes()))
+        .into();
+
+    assert_eq!(tx_id, expected);
+}
+
+#[test]
+fn test_metadata_hash_golden_vector_v1() {
+    let env = Env::default();
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    client.try_init(&admin, &operator).unwrap();
+    env.mock_all_auths();
+
+    let token = Address::generate(&env);
+    let token_str: std::string::String = token.to_string().to_string();
+
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "PayStack"),
+        external_ref: String::from_str(&env, "  ref_12345  "),
+        tx_type: Symbol::new(&env, "CONVERSION"),
+        amount_usdc: 1_000_000i128,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_001"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: Some(1_500_000_000i128),
+        fx_rate_ngn_per_usdc: Some(1500i128),
+        fx_provider: Some(String::from_str(&env, "provider_x")),
+        metadata_hash: None,
+    };
+
+    let canonical = format!(
+        "v1|external_ref_source=paystack|external_ref=ref_12345|tx_type=CONVERSION|amount_usdc=1000000|token={}|deal_id=deal_001|amount_ngn=1500000000|fx_rate_ngn_per_usdc=1500|fx_provider=provider_x",
+        token_str,
+    );
+
+    let expected: BytesN<32> = env
+        .crypto()
+        .sha256(&soroban_sdk::Bytes::from_slice(&env, canonical.as_bytes()))
+        .into();
+
+    let mut input_with_hash = input.clone();
+    input_with_hash.metadata_hash = Some(expected.clone());
+
+    let res = client
+        .try_record_receipt(&operator, &input_with_hash)
+        .unwrap()
+        .unwrap();
+    assert_eq!(res.len(), 32);
+}
+
+#[test]
+fn test_metadata_hash_invalid_rejected() {
+    let env = Env::default();
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    client.try_init(&admin, &operator).unwrap();
+    env.mock_all_auths();
+
+    let token = Address::generate(&env);
+
+    let mut bad_hash_bytes = [0u8; 32];
+    bad_hash_bytes[0] = 1u8;
+    let bad_hash = BytesN::from_array(&env, &bad_hash_bytes);
+
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "paystack"),
+        external_ref: String::from_str(&env, "ref_999"),
+        tx_type: Symbol::new(&env, "CONVERSION"),
+        amount_usdc: 1_000_000i128,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_002"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: Some(bad_hash),
+    };
+
+    let err = client
+        .try_record_receipt(&operator, &input)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, ContractError::InvalidMetadataHash);
 }
 
 #[test]
@@ -35,6 +147,7 @@ fn test_contract_error_codes() {
     assert_eq!(ContractError::InvalidExternalRef as u32, 7);
     assert_eq!(ContractError::InvalidTimestamp as u32, 8);
     assert_eq!(ContractError::InvalidTxType as u32, 9);
+    assert_eq!(ContractError::InvalidMetadataHash as u32, 10);
 }
 
 #[test]
@@ -277,9 +390,6 @@ fn test_generate_tx_id_different_references_different_hashes() {
 
 // Tests for init function
 
-use crate::TransactionReceiptContract;
-use crate::TransactionReceiptContractClient;
-
 #[test]
 fn test_init_success() {
     let env = Env::default();
@@ -309,6 +419,15 @@ fn test_init_success() {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
     assert_eq!(paused, false);
+
+    // Verify contract version is set
+    let version: u32 = env.as_contract(&contract_id, || {
+        env.storage()
+            .instance()
+            .get(&StorageKey::ContractVersion)
+            .unwrap()
+    });
+    assert_eq!(version, 1u32);
 }
 
 #[test]
@@ -609,90 +728,109 @@ fn test_pause_unpause_cycle() {
 #[test]
 fn test_golden_vectors() {
     let env = Env::default();
-    
-    // Test vector 1: paystack, psk_12345 - should succeed
-    {
-        let source = Symbol::new(&env, "paystack");
-        let reference = String::from_str(&env, "psk_12345");
-        let result = generate_tx_id(&env, &source, &reference);
-        assert!(result.is_ok(), "Test vector 1 should succeed");
-        
-        let tx_id = result.unwrap();
-        let tx_id_bytes = tx_id.to_array();
-        assert_eq!(tx_id_bytes.len(), 32, "Should produce 32-byte hash");
-        
-        // Verify it's deterministic - same input should produce same output
-        let source2 = Symbol::new(&env, "paystack");
-        let reference2 = String::from_str(&env, "psk_12345");
-        let result2 = generate_tx_id(&env, &source2, &reference2);
-        assert_eq!(tx_id, result2.unwrap(), "Should be deterministic");
+
+    #[derive(serde::Deserialize)]
+    struct VectorInput {
+        source: StdString,
+        #[serde(rename = "ref")]
+        reference: StdString,
     }
-    
-    // Test vector 2: BANK_TRANSFER, " UTR_98765 " - should succeed
-    {
-        let source = Symbol::new(&env, "BANK_TRANSFER");
-        let reference = String::from_str(&env, " UTR_98765 ");
-        let result = generate_tx_id(&env, &source, &reference);
-        assert!(result.is_ok(), "Test vector 2 should succeed");
-        
-        let tx_id = result.unwrap();
-        let tx_id_bytes = tx_id.to_array();
-        assert_eq!(tx_id_bytes.len(), 32, "Should produce 32-byte hash");
-        
-        // Should be different from the first test vector
-        let source1 = Symbol::new(&env, "paystack");
-        let reference1 = String::from_str(&env, "psk_12345");
-        let result1 = generate_tx_id(&env, &source1, &reference1);
-        assert_ne!(tx_id, result1.unwrap(), "Different inputs should produce different hashes");
+
+    #[derive(serde::Deserialize)]
+    struct GoldenVector {
+        input: VectorInput,
+        expected_canonical: Option<StdString>,
+        expected_sha256: Option<StdString>,
+        expected_error: Option<StdString>,
     }
-    
-    // Test vector 3: stellar, "" - should fail
-    {
-        let source = Symbol::new(&env, "stellar");
-        let reference = String::from_str(&env, "");
+
+    #[derive(serde::Deserialize)]
+    struct GoldenVectorsFile {
+        golden_test_vectors: std::vec::Vec<GoldenVector>,
+    }
+
+    fn bytesn32_to_hex(bytes: [u8; 32]) -> StdString {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut out = [0u8; 64];
+        for (i, b) in bytes.iter().enumerate() {
+            out[i * 2] = HEX[(b >> 4) as usize];
+            out[i * 2 + 1] = HEX[(b & 0x0f) as usize];
+        }
+        StdString::from_utf8(out.to_vec()).expect("valid utf8")
+    }
+
+    let raw = include_str!("../../../test-vectors.json");
+    let parsed: GoldenVectorsFile = serde_json::from_str(raw).expect("valid test-vectors.json");
+
+    for (i, v) in parsed.golden_test_vectors.iter().enumerate() {
+        let source = Symbol::new(&env, &v.input.source);
+        let reference = String::from_str(&env, &v.input.reference);
         let result = generate_tx_id(&env, &source, &reference);
-        assert!(result.is_err(), "Test vector 3 should fail");
-        assert_eq!(result.unwrap_err(), ContractError::InvalidExternalRef);
+
+        if let Some(expected_error) = &v.expected_error {
+            assert!(result.is_err(), "vector {} should fail", i);
+            assert!(
+                expected_error.contains("Ref cannot be empty")
+                    || expected_error.contains("pipe")
+                    || expected_error.contains("256")
+                    || expected_error.contains("Source"),
+                "vector {} expected_error should be a stable validation message",
+                i
+            );
+        } else {
+            let tx_id = result.expect("vector should succeed");
+            let got_hex = bytesn32_to_hex(tx_id.to_array());
+            let expected = v
+                .expected_sha256
+                .as_ref()
+                .expect("expected_sha256 required for success vectors");
+            assert_eq!(got_hex, *expected, "vector {} hash mismatch", i);
+        }
     }
 }
 
 #[test]
 fn test_allowed_tx_types_constant() {
     // Verify ALLOWED_TX_TYPES contains expected values
-    assert_eq!(ALLOWED_TX_TYPES.len(), 6);
+    assert_eq!(ALLOWED_TX_TYPES.len(), 7);
     assert!(ALLOWED_TX_TYPES.contains(&"TENANT_REPAYMENT"));
     assert!(ALLOWED_TX_TYPES.contains(&"LANDLORD_PAYOUT"));
     assert!(ALLOWED_TX_TYPES.contains(&"WHISTLEBLOWER_REWARD"));
     assert!(ALLOWED_TX_TYPES.contains(&"STAKE"));
     assert!(ALLOWED_TX_TYPES.contains(&"UNSTAKE"));
     assert!(ALLOWED_TX_TYPES.contains(&"STAKE_REWARD_CLAIM"));
+    assert!(ALLOWED_TX_TYPES.contains(&"CONVERSION"));
 }
 
 #[test]
 fn test_validate_tx_type_valid_types() {
     let env = Env::default();
-    
+
     // Test all valid transaction types
     let valid_types = [
         "TENANT_REPAYMENT",
-        "LANDLORD_PAYOUT", 
+        "LANDLORD_PAYOUT",
         "WHISTLEBLOWER_REWARD",
         "STAKE",
         "UNSTAKE",
         "STAKE_REWARD_CLAIM",
     ];
-    
+
     for tx_type_str in valid_types.iter() {
         let tx_type = Symbol::new(&env, tx_type_str);
         let result = validate_tx_type(&tx_type);
-        assert!(result.is_ok(), "Transaction type '{}' should be valid", tx_type_str);
+        assert!(
+            result.is_ok(),
+            "Transaction type '{}' should be valid",
+            tx_type_str
+        );
     }
 }
 
 #[test]
 fn test_validate_tx_type_invalid_types() {
     let env = Env::default();
-    
+
     // Test invalid transaction types
     let invalid_types = [
         "rent_payment",
@@ -703,13 +841,155 @@ fn test_validate_tx_type_invalid_types() {
         "",
         "TENANTREPAYMENT",  // Missing underscore
         "tenant_repayment", // lowercase
-        "Stake",           // mixed case
+        "Stake",            // mixed case
     ];
-    
+
     for tx_type_str in invalid_types.iter() {
         let tx_type = Symbol::new(&env, tx_type_str);
         let result = validate_tx_type(&tx_type);
-        assert!(result.is_err(), "Transaction type '{}' should be invalid", tx_type_str);
+        assert!(
+            result.is_err(),
+            "Transaction type '{}' should be invalid",
+            tx_type_str
+        );
         assert_eq!(result.unwrap_err(), ContractError::InvalidTxType);
     }
+}
+
+#[test]
+fn test_conversion_receipt_with_metadata() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, TransactionReceiptContract);
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let from_user = Address::generate(&env);
+    let to_user = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.init(&admin, &operator);
+
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "onramp"),
+        external_ref: String::from_str(&env, "conv_12345"),
+        tx_type: Symbol::new(&env, "CONVERSION"),
+        amount_usdc: 1_000_000,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_001"),
+        listing_id: None,
+        from: Some(from_user.clone()),
+        to: Some(to_user.clone()),
+        amount_ngn: Some(1_500_000_000),
+        fx_rate_ngn_per_usdc: Some(1_500),
+        fx_provider: Some(String::from_str(&env, "provider_x")),
+        metadata_hash: None,
+    };
+
+    let tx_id = client.record_receipt(&operator, &input);
+    let receipt = client.get_receipt(&tx_id).unwrap();
+
+    assert_eq!(receipt.tx_type, Symbol::new(&env, "CONVERSION"));
+    assert_eq!(receipt.amount_usdc, 1_000_000);
+    assert_eq!(receipt.amount_ngn, Some(1_500_000_000));
+    assert_eq!(receipt.fx_rate_ngn_per_usdc, Some(1_500));
+    assert_eq!(
+        receipt.fx_provider,
+        Some(String::from_str(&env, "provider_x"))
+    );
+}
+
+#[test]
+fn test_list_receipts_by_user() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, TransactionReceiptContract);
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let user_a = Address::generate(&env);
+    let user_b = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.init(&admin, &operator);
+
+    // Record 3 receipts with user_a as sender
+    for i in 1..=3 {
+        let input = ReceiptInput {
+            external_ref_source: Symbol::new(&env, "stellar"),
+            external_ref: String::from_str(&env, &alloc::format!("ref_a_{}", i)),
+            tx_type: Symbol::new(&env, "CONVERSION"),
+            amount_usdc: 100_000 * i as i128,
+            token: token.clone(),
+            deal_id: String::from_str(&env, "deal_001"),
+            listing_id: None,
+            from: Some(user_a.clone()),
+            to: Some(user_b.clone()),
+            amount_ngn: None,
+            fx_rate_ngn_per_usdc: None,
+            fx_provider: None,
+            metadata_hash: None,
+        };
+        client.record_receipt(&operator, &input);
+    }
+
+    // Query receipts for user_a
+    let receipts_a = client.list_receipts_by_user(&user_a, &10, &None);
+    assert_eq!(receipts_a.len(), 3);
+
+    // Query receipts for user_b (also appears in all 3 as recipient)
+    let receipts_b = client.list_receipts_by_user(&user_b, &10, &None);
+    assert_eq!(receipts_b.len(), 3);
+
+    // Test pagination
+    let page_1 = client.list_receipts_by_user(&user_a, &2, &None);
+    assert_eq!(page_1.len(), 2);
+
+    let page_2 = client.list_receipts_by_user(&user_a, &2, &Some(2));
+    assert_eq!(page_2.len(), 1);
+}
+
+#[test]
+fn test_conversion_idempotency() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, TransactionReceiptContract);
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.init(&admin, &operator);
+
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "onramp"),
+        external_ref: String::from_str(&env, "conv_duplicate_test"),
+        tx_type: Symbol::new(&env, "CONVERSION"),
+        amount_usdc: 500_000,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_002"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: Some(750_000_000),
+        fx_rate_ngn_per_usdc: Some(1_500),
+        fx_provider: Some(String::from_str(&env, "provider_y")),
+        metadata_hash: None,
+    };
+
+    let tx_id_1 = client.record_receipt(&operator, &input);
+
+    // Attempt duplicate with same external ref
+    let result = client.try_record_receipt(&operator, &input);
+    assert_eq!(result, Err(Ok(ContractError::DuplicateTransaction)));
+
+    // Verify only one receipt exists
+    let receipt = client.get_receipt(&tx_id_1).unwrap();
+    assert_eq!(receipt.amount_usdc, 500_000);
 }

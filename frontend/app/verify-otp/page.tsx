@@ -7,11 +7,13 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { verifyOtp } from "@/lib/authApi";
+import { handleAuthRedirect } from "@/lib/auth";
 
 function VerifyOtpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
+  const returnTo = searchParams.get("returnTo");
 
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,13 +26,19 @@ function VerifyOtpForm() {
 
     try {
       const res = await verifyOtp(email, otp);
-      // Redirect based on role
-      const roleRoutes: Record<string, string> = {
-        tenant: "/dashboard/tenant",
-        landlord: "/dashboard/landlord",
-        agent: "/dashboard/agent",
-      };
-      router.push(roleRoutes[res.user.role] ?? "/dashboard/tenant");
+      
+      // Use handleAuthRedirect to handle returnTo or default to role-based dashboard
+      if (returnTo) {
+        handleAuthRedirect(returnTo);
+      } else {
+        // Fallback to role-based dashboard routing
+        const roleRoutes: Record<string, string> = {
+          tenant: "/dashboard/tenant",
+          landlord: "/dashboard/landlord",
+          agent: "/dashboard/agent",
+        };
+        router.push(roleRoutes[res.user.role] ?? "/dashboard/tenant");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid OTP");
     } finally {

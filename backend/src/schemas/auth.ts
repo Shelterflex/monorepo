@@ -10,10 +10,10 @@ export const verifyOtpSchema = z.object({
 })
 
 export const walletChallengeSchema = z.object({
-  address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
+  address: z.string().regex(/^G[A-Z0-9]{55}$/, 'Invalid Stellar public key'),
 })
 
 export const walletVerifySchema = z.object({
-  address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
-  signature: z.string(),
+  address: z.string().regex(/^G[A-Z0-9]{55}$/, 'Invalid Stellar public key'),
+  signedChallengeXdr: z.string(),
 })

@@ -32,6 +32,15 @@ npm run test:coverage
 
 Tests are located in `src/**/*.test.ts` files and use Vitest + Supertest. They do not require external network access — all blockchain interactions are stubbed.
 
+## Database migrations
+
+SQL migrations live in `migrations/` and are applied in filename order.
+
+The repository includes a migration runner script in `src/repositories/test.ts` that:
+
+- creates a `schema_migrations` table if missing
+- applies any `.sql` files not yet recorded
+
 ## Documentation
 
 | Topic | File |

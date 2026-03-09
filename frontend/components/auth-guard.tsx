@@ -1,25 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 
 type AuthState = "checking" | "authed" | "redirecting";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [authState, setAuthState] = useState<AuthState>("checking");
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!isAuthenticated()) {
-        router.replace("/login");
+        // Preserve the target URL for redirect after authentication
+        const returnTo = encodeURIComponent(pathname);
+        router.replace(`/verify-otp?returnTo=${returnTo}`);
       } else {
         setAuthState("authed");
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [router]);
+  }, [router, pathname]);
 
   if (authState === "checking" || authState === "redirecting") {
     return (

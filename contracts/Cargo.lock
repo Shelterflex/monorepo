@@ -1588,6 +1588,8 @@ dependencies = [
 name = "staking_pool"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "soroban-sdk",
 ]
 
@@ -1734,6 +1736,8 @@ name = "transaction-receipt-contract"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "serde",
+ "serde_json",
  "soroban-sdk",
 ]
 

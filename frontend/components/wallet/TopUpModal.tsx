@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Copy, ExternalLink, ArrowRight, AlertCircle, Check, Loader2 } from "lucide-react";
+import { handleError, showSuccessToast } from "@/lib/toast";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -114,8 +115,12 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
       });
       setTopUpResult(result);
       setStep("confirmation");
+      showSuccessToast("Top-up initiated successfully");
       onSuccess?.();
     } catch (err) {
+      // Show toast for API errors
+      handleError(err, "Failed to initiate top-up");
+      // Also set inline error for form display
       const message = err instanceof Error ? err.message : "Failed to initiate top-up";
       setErrorMessage(message);
       setStep("error");

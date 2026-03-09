@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createTestAgent, expectErrorShape } from '../test-helpers.js'
-import { otpChallengeStore, sessionStore, userStore } from '../models/authStore.js'
+import { otpChallengeStore, sessionStore, userStore, walletChallengeStore } from '../models/authStore.js'
 import { _testOnly_clearAuthRateLimits } from '../middleware/authRateLimit.js'
 
 vi.mock('../utils/tokens.js', async (importOriginal) => {
@@ -19,9 +19,11 @@ describe('Auth Routes (OTP)', () => {
     otpChallengeStore.clear()
     sessionStore.clear()
     userStore.clear()
+    walletChallengeStore.clear()
     _testOnly_clearAuthRateLimits()
     vi.useRealTimers()
     // Reset request count for test agent by creating fresh instance
+    vi.stubEnv('STELLAR_SERVER_SECRET_KEY', 'SBQWY3DNPFWGSQZ7BHHCQLZNX35O6W23DMU4Y3FJ3A6BKGWXOQ5F3Z2O')
   })
 
   it('POST /api/auth/request-otp should create hashed challenge (no plaintext stored)', async () => {
@@ -78,5 +80,90 @@ describe('Auth Routes (OTP)', () => {
 
   it.skip('GET /api/auth/me should require auth and return user when authenticated', async () => {
     // TODO: Fix rate limiting test interference
+  })
+})
+
+describe('Auth Routes (Wallet)', () => {
+  const request = createTestAgent()
+
+  beforeEach(() => {
+    otpChallengeStore.clear()
+    sessionStore.clear()
+    userStore.clear()
+    walletChallengeStore.clear()
+    _testOnly_clearAuthRateLimits()
+    vi.useRealTimers()
+    vi.stubEnv('STELLAR_SERVER_SECRET_KEY', 'SBQWY3DNPFWGSQZ7BHHCQLZNX35O6W23DMU4Y3FJ3A6BKGWXOQ5F3Z2O')
+  })
+
+  it('POST /api/auth/wallet/challenge should create challenge XDR', async () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+
+    const res = await request.post('/api/auth/wallet/challenge').send({ address })
+    expect(res.status).toBe(200)
+
+    expect(res.body).toHaveProperty('challengeXdr')
+    expect(res.body).toHaveProperty('expiresAt')
+
+    const challenge = walletChallengeStore.getByAddress(address.toLowerCase())
+    expect(challenge).toBeDefined()
+    expect(challenge!.address).toBe(address.toLowerCase())
+    expect(typeof challenge!.challengeXdr).toBe('string')
+    expect(challenge!.attempts).toBe(0)
+  })
+
+  it.skip('POST /api/auth/wallet/verify should return session token on success', async () => {
+    // TODO: Implement with proper mocking of Stellar SDK
+  })
+
+  it('POST /api/auth/wallet/verify should fail with expired challenge', async () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+
+    // Create an expired challenge
+    const expiredChallenge = {
+      address: address.toLowerCase(),
+      challengeXdr: 'mock-xdr',
+      nonce: 'mock-nonce',
+      expiresAt: new Date(Date.now() - 1000), // Already expired
+      attempts: 0,
+    }
+    walletChallengeStore.set(expiredChallenge)
+
+    const res = await request.post('/api/auth/wallet/verify').send({
+      address,
+      signedChallengeXdr: 'mock-signed-xdr',
+    })
+
+    expect(res.status).toBe(401)
+    expect(res.body.message).toBe('Challenge has expired')
+  })
+
+  it('verify should increment attempts and eventually fail after too many attempts', async () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+
+    // Create a challenge
+    const challenge = {
+      address: address.toLowerCase(),
+      challengeXdr: 'mock-xdr',
+      nonce: 'mock-nonce',
+      expiresAt: new Date(Date.now() + 60000),
+      attempts: 0,
+    }
+    walletChallengeStore.set(challenge)
+
+    for (let i = 0; i < 3; i++) {
+      const res = await request.post('/api/auth/wallet/verify').send({
+        address,
+        signedChallengeXdr: 'invalid-xdr',
+      })
+      expect(res.status).toBe(401)
+    }
+
+    const res = await request.post('/api/auth/wallet/verify').send({
+      address,
+      signedChallengeXdr: 'still-invalid-xdr',
+    })
+    expect(res.status).toBe(401)
+    expect(res.body.message).toBe('Too many failed attempts')
   })
 })

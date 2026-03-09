@@ -87,7 +87,7 @@ export class StubSorobanAdapter implements SorobanAdapter {
                ledger, txHash: `stub_${ledger}`, contractId: this.config.contractId ?? 'stub',
                data: {
                     tx_id: `txid_${ledger}`, tx_type: 'PAYMENT', deal_id: `deal_${ledger % 5}`,
-                    amount_usdc: '10000000', external_ref_hash: `hash_${ledger}`
+                    amount_usdc: '10000000', external_ref: `txid_${ledger}` // Contract stores as 'external_ref' (same as tx_id)
                }
           }]
      }

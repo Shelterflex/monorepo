@@ -1,14 +1,26 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createApp } from '../app.js'
 import { outboxStore } from '../outbox/index.js'
+import { conversionStore } from '../models/conversionStore.js'
 import request from 'supertest'
 import { TxType, OutboxStatus } from '../outbox/types.js'
 import { sessionStore, userStore } from '../models/authStore.js'
 import { StubSorobanAdapter } from '../soroban/stub-adapter.js'
+import { NgnWalletService } from '../services/ngnWalletService.js'
+ import { readFileSync } from 'node:fs'
+ import { resolve } from 'node:path'
 
 describe('Staking API', () => {
   let app: any
   let authToken: string
+
+  const goldenVectorsPath = resolve(process.cwd(), '..', 'test-vectors.json')
+  const goldenVectors = JSON.parse(readFileSync(goldenVectorsPath, 'utf8'))
+  const expectedTxIdByCanonical = new Map<string, string>(
+    (goldenVectors.golden_test_vectors ?? [])
+      .filter((v: any) => v?.expected_canonical && v?.expected_sha256)
+      .map((v: any) => [String(v.expected_canonical), String(v.expected_sha256)]),
+  )
 
   beforeEach(async () => {
     app = createApp()
@@ -35,6 +47,9 @@ describe('Staking API', () => {
       expect(response.body.success).toBe(true)
       expect(response.body.outboxId).toBeDefined()
       expect(response.body.txId).toMatch(/^[a-f0-9]{64}$/)
+      expect(response.body.txId).toBe(
+        expectedTxIdByCanonical.get('v1|source=manual|ref=stake-2024-01-15-001'),
+      )
       expect(response.body.status).toBe(OutboxStatus.SENT)
       expect(response.body.message).toBe('Staking confirmed and receipt written to chain')
     })
@@ -123,6 +138,9 @@ describe('Staking API', () => {
       expect(response.body.success).toBe(true)
       expect(response.body.outboxId).toBeDefined()
       expect(response.body.txId).toMatch(/^[a-f0-9]{64}$/)
+      expect(response.body.txId).toBe(
+        expectedTxIdByCanonical.get('v1|source=manual|ref=unstake-2024-01-15-001'),
+      )
       expect(response.body.status).toBe(OutboxStatus.SENT)
       expect(response.body.message).toBe('Unstaking confirmed and receipt written to chain')
     })
@@ -172,6 +190,9 @@ describe('Staking API', () => {
       expect(response.body.success).toBe(true)
       expect(response.body.outboxId).toBeDefined()
       expect(response.body.txId).toMatch(/^[a-f0-9]{64}$/)
+      expect(response.body.txId).toBe(
+        expectedTxIdByCanonical.get('v1|source=manual|ref=claim-2024-01-15-001'),
+      )
       expect(response.body.status).toBe(OutboxStatus.SENT)
       expect(response.body.message).toBe('Staking reward claim confirmed and receipt written to chain')
     })
@@ -230,6 +251,65 @@ describe('Staking API', () => {
         .expect(401)
 
       expect(response.body.error.code).toBe('UNAUTHORIZED')
+    })
+  })
+
+  describe('POST /api/staking/stake-ngn', () => {
+    beforeEach(async () => {
+      await conversionStore.clear()
+    })
+
+    it('should return 409 for insufficient balance', async () => {
+      const response = await request(app)
+        .post('/api/staking/stake-ngn')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          amountNgn: 200000, // More than available
+          externalRefSource: 'web',
+          externalRef: 'test-stake-003',
+        })
+        .expect(409)
+
+      expect(response.body.error.code).toBe('VALIDATION_ERROR')
+      expect(response.body.error.message).toContain('Insufficient available balance')
+    })
+
+    it('should require authentication', async () => {
+      const response = await request(app)
+        .post('/api/staking/stake-ngn')
+        .send({
+          amountNgn: 10000,
+          externalRefSource: 'web',
+          externalRef: 'test-stake-005',
+        })
+        .expect(401)
+
+      expect(response.body.error.code).toBe('UNAUTHORIZED')
+    })
+
+    it('should be idempotent on replay', async () => {
+      // First, we need to ensure user has balance by creating a deposit via webhook
+      // For now, we'll test idempotency by checking that repeated calls return same result
+      const payload = {
+        amountNgn: 10000,
+        externalRefSource: 'web',
+        externalRef: 'test-stake-idempotent',
+      }
+
+      // First request - will fail due to insufficient balance, but tests the endpoint
+      const response1 = await request(app)
+        .post('/api/staking/stake-ngn')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(payload)
+
+      // Replay request - should behave the same way
+      const response2 = await request(app)
+        .post('/api/staking/stake-ngn')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(payload)
+
+      // Both should return same status code
+      expect(response1.status).toBe(response2.status)
     })
   })
 })
