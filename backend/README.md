@@ -251,7 +251,7 @@ SOROBAN_CONTRACT_ID=
 **Important Notes:**
 - `USDC_TOKEN_ADDRESS` is **required** in `production` and `test` environments
 - In `development`, the address can be omitted (uses mock address for testing)
-- The address must be a valid Ethereum address format: `0x` followed by 40 hex characters
+- The address must be a valid Soroban contract ID (a 56-character Stellar StrKey starting with `C`)
 - Server will refuse to start if `USDC_TOKEN_ADDRESS` is missing in non-development environments
 
 ## Soroban integration
