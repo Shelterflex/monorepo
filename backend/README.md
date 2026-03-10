@@ -10,6 +10,13 @@ cp .env.example .env
 npm run dev
 ```
 
+## Indexer configuration
+
+The backend receipt indexer polls Soroban for new events. Configure it with:
+
+- `INDEXER_POLL_MS` (default: `5000`) — polling interval in milliseconds.
+- `INDEXER_START_LEDGER` (optional) — ledger sequence to start from when no checkpoint exists. Leave blank to start from the latest ledger.
+
 ## Testing
 
 Run the integration test suite:
