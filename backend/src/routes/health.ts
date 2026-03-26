@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express"
 import { env } from "../schemas/env.js"
+import { getPool } from "../db.js"
 
 const router = Router()
 
@@ -11,17 +12,26 @@ router.get("/", (req: Request, res: Response) => {
   })
 })
 
-router.get("/details", (req: Request, res: Response) => {
-  const sorobanAdapterMode = (process.env.SOROBAN_ADAPTER_MODE ?? 'stub') === 'real'
-    ? 'real'
-    : 'stub'
+router.get("/details", async (req: Request, res: Response) => {
+  let dbConnected = false
+  try {
+    const pool = await getPool()
+    if (pool) {
+      await pool.query("SELECT 1")
+      dbConnected = true
+    }
+  } catch (error) {
+    // Log error but don't expose details in response
+    console.error("[health] Database connection check failed:", error)
+    dbConnected = false
+  }
 
   res.json({
     version: env.VERSION,
     nodeEnv: env.NODE_ENV,
-    sorobanAdapterMode,
-    databaseEnabled: !!process.env.DATABASE_URL,
+    uptimeSeconds: Math.floor(process.uptime()),
     requestId: req.requestId,
+    dbConnected,
   })
 })
 
