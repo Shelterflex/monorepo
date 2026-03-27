@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { setRetryAfterHeaders } from './rateLimit.js'
 
 type Counter = {
   count: number
@@ -46,6 +47,7 @@ export function otpRequestRateLimit(options?: {
     if (email) {
       const c = bumpCounter(emailOtpRequestCounters, email.toLowerCase(), windowMs)
       if (c.count > maxPerEmail) {
+        setRetryAfterHeaders(_res, new Date(c.resetAtMs))
         return next(
           new AppError(
             ErrorCode.TOO_MANY_REQUESTS,
@@ -59,6 +61,7 @@ export function otpRequestRateLimit(options?: {
     if (ip) {
       const c = bumpCounter(ipOtpRequestCounters, ip, windowMs)
       if (c.count > maxPerIp) {
+        setRetryAfterHeaders(_res, new Date(c.resetAtMs))
         return next(
           new AppError(
             ErrorCode.TOO_MANY_REQUESTS,
@@ -89,6 +92,7 @@ export function walletAuthRateLimit(options?: {
     if (address) {
       const c = bumpCounter(walletChallengeRequestCounters, address.toLowerCase(), windowMs)
       if (c.count > maxPerAddress) {
+        setRetryAfterHeaders(_res, new Date(c.resetAtMs))
         return next(
           new AppError(
             ErrorCode.TOO_MANY_REQUESTS,
@@ -102,6 +106,7 @@ export function walletAuthRateLimit(options?: {
     if (ip) {
       const c = bumpCounter(ipWalletChallengeRequestCounters, ip, windowMs)
       if (c.count > maxPerIp) {
+        setRetryAfterHeaders(_res, new Date(c.resetAtMs))
         return next(
           new AppError(
             ErrorCode.TOO_MANY_REQUESTS,

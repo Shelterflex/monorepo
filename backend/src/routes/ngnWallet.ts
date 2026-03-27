@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express'
+import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
 import { validate } from '../middleware/validate.js'
 import { NgnWalletService } from '../services/ngnWalletService.js'
 import { 
@@ -17,7 +17,13 @@ import { ngnTopupInitiateSchema, ngnTopupInitiateResponseSchema, type NgnTopupIn
 import { ngnDepositStore } from '../models/ngnDepositStore.js'
 import { getPaymentProvider } from '../payments/index.js'
 
-export function createNgnWalletRouter(ngnWalletService: NgnWalletService): Router {
+export function createNgnWalletRouter(
+  ngnWalletService: NgnWalletService,
+  options?: {
+    withdrawRateLimit?: RequestHandler
+    topupRateLimit?: RequestHandler
+  },
+): Router {
   const router = Router()
 
   /**
@@ -85,6 +91,7 @@ export function createNgnWalletRouter(ngnWalletService: NgnWalletService): Route
    */
   router.post(
     '/withdraw/initiate',
+    ...(options?.withdrawRateLimit ? [options.withdrawRateLimit] : []),
     authenticateToken,
     requireNotFrozen,
     validate(withdrawalRequestSchema, 'body'),
@@ -172,6 +179,7 @@ export function createNgnWalletRouter(ngnWalletService: NgnWalletService): Route
 
   router.post(
     '/topup/initiate',
+    ...(options?.topupRateLimit ? [options.topupRateLimit] : []),
     authenticateToken,
     validate(ngnTopupInitiateSchema, 'body'),
     async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

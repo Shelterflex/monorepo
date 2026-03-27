@@ -29,6 +29,22 @@ vi.mock('@stellar/stellar-sdk', async () => {
     getTransaction = vi.fn()
   }
   
+  class MockAddress {
+    constructor(public readonly address: string) {}
+
+    toString() {
+      return this.address
+    }
+
+    toScAddress() {
+      return {} as any
+    }
+
+    static fromString(address: string) {
+      return new MockAddress(address)
+    }
+  }
+
   return {
     ...actual,
     rpc: {
@@ -38,11 +54,8 @@ vi.mock('@stellar/stellar-sdk', async () => {
         isSimulationRestore: vi.fn(),
       },
     },
-    Address: {
-      fromString: vi.fn().mockReturnValue({
-        toScAddress: vi.fn().mockReturnValue({}),
-      }),
-    },
+    Address: MockAddress,
+    nativeToScVal: vi.fn().mockImplementation((val) => val),
     scValToNative: vi.fn().mockImplementation((val) => {
       // Return the value if it has a value() method, otherwise return the val itself
       if (val && typeof val.value === 'function') {
@@ -65,6 +78,7 @@ vi.mock('../utils/logger.js', () => ({
 describe('RealSorobanAdapter', () => {
   let adapter: RealSorobanAdapter
   let mockServer: any
+  const VALID_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
 
   const mockConfig: SorobanConfig = {
     rpcUrl: 'https://soroban-testnet.stellar.org',
@@ -102,7 +116,7 @@ describe('RealSorobanAdapter', () => {
         usdcTokenId: undefined,
       })
 
-      await expect(adapterWithoutUsdc.getBalance('GABC123')).rejects.toThrow(ConfigurationError)
+      await expect(adapterWithoutUsdc.getBalance(VALID_ACCOUNT)).rejects.toThrow(ConfigurationError)
     })
 
     it('should call balance method on USDC token contract', async () => {
@@ -119,7 +133,7 @@ describe('RealSorobanAdapter', () => {
         },
       })
 
-      const balance = await adapter.getBalance('GABC123')
+      const balance = await adapter.getBalance(VALID_ACCOUNT)
       
       expect(mockServer.simulateTransaction).toHaveBeenCalled()
       expect(balance).toBe(1000000n)
@@ -134,7 +148,7 @@ describe('RealSorobanAdapter', () => {
         error: 'Simulation failed',
       })
 
-      await expect(adapter.getBalance('GABC123')).rejects.toThrow(ContractError)
+      await expect(adapter.getBalance(VALID_ACCOUNT)).rejects.toThrow(ContractError)
     })
   })
 
@@ -145,7 +159,7 @@ describe('RealSorobanAdapter', () => {
         stakingPoolId: undefined,
       })
 
-      await expect(adapterWithoutPool.getStakedBalance('GABC123')).rejects.toThrow(ConfigurationError)
+      await expect(adapterWithoutPool.getStakedBalance(VALID_ACCOUNT)).rejects.toThrow(ConfigurationError)
     })
 
     it('should return staked balance from staking pool contract', async () => {
@@ -161,7 +175,7 @@ describe('RealSorobanAdapter', () => {
         },
       })
 
-      const balance = await adapter.getStakedBalance('GABC123')
+      const balance = await adapter.getStakedBalance(VALID_ACCOUNT)
       
       expect(mockServer.simulateTransaction).toHaveBeenCalled()
       expect(balance).toBe(5000000000n)
@@ -175,7 +189,7 @@ describe('RealSorobanAdapter', () => {
         stakingRewardsId: undefined,
       })
 
-      await expect(adapterWithoutRewards.getClaimableRewards('GABC123')).rejects.toThrow(ConfigurationError)
+      await expect(adapterWithoutRewards.getClaimableRewards(VALID_ACCOUNT)).rejects.toThrow(ConfigurationError)
     })
 
     it('should return claimable rewards from rewards contract', async () => {
@@ -191,7 +205,7 @@ describe('RealSorobanAdapter', () => {
         },
       })
 
-      const rewards = await adapter.getClaimableRewards('GABC123')
+      const rewards = await adapter.getClaimableRewards(VALID_ACCOUNT)
       
       expect(mockServer.simulateTransaction).toHaveBeenCalled()
       expect(rewards).toBe(250000000n)

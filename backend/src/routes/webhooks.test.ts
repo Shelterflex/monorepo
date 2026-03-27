@@ -54,8 +54,9 @@ describe('Payments webhook', () => {
     await request(app).post('/api/webhooks/payments/paystack').send(payload).expect(200)
 
     const items = await outboxStore.listAll(10)
-    expect(items.length).toBe(1)
-    expect(items[0].payload.txType).toBe('stake')
+    expect(items.length).toBe(2)
+    expect(items.filter((item) => item.payload.txType === 'conversion')).toHaveLength(1)
+    expect(items.filter((item) => item.payload.txType === 'stake')).toHaveLength(1)
   })
 
   it('rejects invalid signature when enabled', async () => {

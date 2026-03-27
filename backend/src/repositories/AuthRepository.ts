@@ -24,6 +24,8 @@ export interface Session {
   token: string
   email: string
   createdAt: Date
+  expiresAt?: Date
+  userAgent?: string
 }
 
 export interface WalletChallenge {
@@ -166,7 +168,7 @@ export class PostgresSessionRepository {
       throw new Error('User not found')
     }
 
-    const defaultExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+    const defaultExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     await pool.query(
       `INSERT INTO sessions (token_hash, user_id, expires_at, created_ip, user_agent)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -179,7 +181,7 @@ export class PostgresSessionRepository {
     const tokenHash = this.hashToken(token)
     
     const { rows } = await pool.query(
-      `SELECT s.token_hash, s.created_at, s.user_id, u.email
+      `SELECT s.token_hash, s.created_at, s.expires_at, s.user_id, s.user_agent, u.email
        FROM sessions s
        JOIN users u ON s.user_id = u.id
        WHERE s.token_hash = $1 
@@ -195,6 +197,8 @@ export class PostgresSessionRepository {
       token, // Return original token for compatibility
       email: row.email,
       createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      userAgent: row.user_agent ?? undefined,
       userId: row.user_id
     }
   }

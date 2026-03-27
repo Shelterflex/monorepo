@@ -1,4 +1,4 @@
-import { Router, type Response, type NextFunction } from 'express'
+import { Router, type Response, type NextFunction, type RequestHandler } from 'express'
 import { z } from 'zod'
 import { validate } from '../middleware/validate.js'
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth.js'
@@ -11,8 +11,17 @@ const rejectWithdrawalSchema = z.object({
   reason: z.string().min(1, 'Reason is required'),
 })
 
-export function createAdminWithdrawalsRouter(ngnWalletService: NgnWalletService): Router {
+export function createAdminWithdrawalsRouter(
+  ngnWalletService: NgnWalletService,
+  options?: {
+    rateLimit?: RequestHandler
+  },
+): Router {
   const router = Router()
+
+  if (options?.rateLimit) {
+    router.use(options.rateLimit)
+  }
 
   router.post(
     '/withdrawals/:id/approve',

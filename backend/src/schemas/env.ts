@@ -9,6 +9,24 @@ export const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
+  RATE_LIMIT_STORE: z.enum(['memory', 'redis']).default('memory'),
+  RATE_LIMIT_REDIS_URL: z.string().optional(),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60_000),
+  AUTH_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(30),
+  ADMIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  ADMIN_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(30),
+  ADMIN_RISK_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  ADMIN_RISK_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
+  ADMIN_RECONCILIATION_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  ADMIN_RECONCILIATION_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
+  WALLET_CREATE_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  WALLET_CREATE_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(10),
+  WALLET_SIGN_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  WALLET_SIGN_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(10),
+  NGN_WITHDRAW_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  NGN_WITHDRAW_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(5),
+  NGN_TOPUP_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  NGN_TOPUP_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(10),
   SOROBAN_RPC_URL: z.string().url().default('https://soroban-testnet.stellar.org'),
   SOROBAN_NETWORK_PASSPHRASE: z.string().default('Test SDF Network ; September 2015'),
   SOROBAN_CONTRACT_ID: z.string().optional(),
@@ -117,6 +135,13 @@ export const envSchema = z.object({
   }, {
     message: 'RESEND_API_KEY and RESEND_FROM_EMAIL are required when OTP_DELIVERY_PROVIDER is "email"',
     path: ['RESEND_API_KEY'],
+  })
+  .refine((data) => {
+    if (data.RATE_LIMIT_STORE !== 'redis') return true
+    return !!data.RATE_LIMIT_REDIS_URL
+  }, {
+    message: 'RATE_LIMIT_REDIS_URL is required when RATE_LIMIT_STORE is "redis"',
+    path: ['RATE_LIMIT_REDIS_URL'],
   })
 
 export type Env = z.infer<typeof envSchema>

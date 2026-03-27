@@ -307,20 +307,43 @@ x-request-id: abc-123
 }
 ## Rate limiting
 
-Public endpoints (`GET /health`, `GET /soroban/config`) are rate limited per IP to reduce abuse and protect uptime.
+Sensitive endpoints are rate limited with middleware so high-risk actions cannot be spammed from a single client IP. Health checks remain exempt because `/health` is mounted outside the rate-limited paths.
+
+The limiter can use either in-memory counters or Redis-backed counters:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RATE_LIMIT_WINDOW_MS` | Time window in milliseconds | `60000` (1 minute) |
-| `RATE_LIMIT_MAX_REQUESTS` | Max requests per IP per window | `100` |
+| `RATE_LIMIT_STORE` | Storage backend: `memory` or `redis` | `memory` |
+| `RATE_LIMIT_REDIS_URL` | Redis connection string when `RATE_LIMIT_STORE=redis` | unset |
 
-When a client exceeds the limit, the server responds with **429 Too Many Requests** and a JSON body in the standard error format:
+Public routes still use a shared IP-based limiter:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RATE_LIMIT_WINDOW_MS` | Time window in milliseconds | `60000` |
+| `RATE_LIMIT_MAX_REQUESTS` | Max requests per IP per window | `100` |
+| `AUTH_RATE_LIMIT_WINDOW_MS` | Global auth limiter window | `900000` |
+| `AUTH_RATE_LIMIT_MAX_REQUESTS` | Global auth limiter max requests | `30` |
+
+Sensitive route defaults are configurable per endpoint group:
+
+| Variable | Endpoint group | Default |
+|----------|----------------|---------|
+| `ADMIN_RATE_LIMIT_WINDOW_MS` / `ADMIN_RATE_LIMIT_MAX_REQUESTS` | `/api/admin/*` | `60000` / `30` |
+| `ADMIN_RISK_RATE_LIMIT_WINDOW_MS` / `ADMIN_RISK_RATE_LIMIT_MAX_REQUESTS` | `/api/admin/risk/*` | `60000` / `20` |
+| `ADMIN_RECONCILIATION_RATE_LIMIT_WINDOW_MS` / `ADMIN_RECONCILIATION_RATE_LIMIT_MAX_REQUESTS` | `/api/admin/reconciliation/*` | `60000` / `20` |
+| `WALLET_CREATE_RATE_LIMIT_WINDOW_MS` / `WALLET_CREATE_RATE_LIMIT_MAX_REQUESTS` | `POST /api/wallet/create` | `60000` / `10` |
+| `WALLET_SIGN_RATE_LIMIT_WINDOW_MS` / `WALLET_SIGN_RATE_LIMIT_MAX_REQUESTS` | `POST /api/wallet/sign-*` | `60000` / `10` |
+| `NGN_WITHDRAW_RATE_LIMIT_WINDOW_MS` / `NGN_WITHDRAW_RATE_LIMIT_MAX_REQUESTS` | `POST /api/wallet/ngn/withdraw/initiate` | `60000` / `5` |
+| `NGN_TOPUP_RATE_LIMIT_WINDOW_MS` / `NGN_TOPUP_RATE_LIMIT_MAX_REQUESTS` | `POST /api/wallet/ngn/topup/initiate` | `60000` / `10` |
+
+When a client exceeds a limit, the server responds with **429 Too Many Requests**, includes a `Retry-After` header, and returns the standard error envelope:
 
 ```json
 {
-  "error": "Too many requests. Please try again later."
+  "error": {
+    "code": "TOO_MANY_REQUESTS",
+    "message": "Too many admin requests. Please try again later."
+  }
 }
 ```
-
-Defaults are suitable for local development; set lower limits in production if needed.
-

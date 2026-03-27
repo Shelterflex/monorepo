@@ -1,4 +1,4 @@
-import { Router, type Response, type NextFunction } from 'express'
+import { Router, type Response, type NextFunction, type RequestHandler } from 'express'
 import { validate } from '../middleware/validate.js'
 import { NgnWalletService } from '../services/ngnWalletService.js'
 import { userRiskStateStore } from '../models/userRiskStateStore.js'
@@ -15,8 +15,17 @@ import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth.js'
 
-export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Router {
+export function createAdminRiskRouter(
+  ngnWalletService: NgnWalletService,
+  options?: {
+    rateLimit?: RequestHandler
+  },
+): Router {
   const router = Router()
+
+  if (options?.rateLimit) {
+    router.use(options.rateLimit)
+  }
 
   /**
    * GET /api/admin/risk/frozen-users

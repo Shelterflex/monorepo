@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express'
+import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
 import { outboxStore, OutboxSender, OutboxStatus, TxType } from '../outbox/index.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 import { logger } from '../utils/logger.js'
@@ -21,9 +21,21 @@ import type { WalletStore } from '../models/wallet.js'
 import type { EncryptionService } from '../services/walletService.js'
 import { ReceiptIndexer } from '../indexer/worker.js'
 
-export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletStore, encryptionService?: EncryptionService, indexer?: ReceiptIndexer) {
+export function createAdminRouter(
+  adapter: SorobanAdapter,
+  walletStore?: WalletStore,
+  encryptionService?: EncryptionService,
+  indexer?: ReceiptIndexer,
+  options?: {
+    rateLimit?: RequestHandler
+  },
+) {
   const router = Router()
   const sender = new OutboxSender(adapter)
+
+  if (options?.rateLimit) {
+    router.use(options.rateLimit)
+  }
 
   // Admin auth guard helper
   function requireAdminSecret(req: Request) {

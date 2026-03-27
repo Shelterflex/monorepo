@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express'
+import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
 import { validate } from '../middleware/validate.js'
 import { env } from '../schemas/env.js'
 import { ngnDepositStore } from '../models/ngnDepositStore.js'
@@ -28,8 +28,17 @@ function requireAdminSecret(req: Request, _res: Response, next: NextFunction) {
   return next()
 }
 
-export function createAdminReconciliationRouter(ngnWalletService: NgnWalletService) {
+export function createAdminReconciliationRouter(
+  ngnWalletService: NgnWalletService,
+  options?: {
+    rateLimit?: RequestHandler
+  },
+) {
   const router = Router()
+
+  if (options?.rateLimit) {
+    router.use(options.rateLimit)
+  }
 
   router.get(
     '/deposits',
@@ -228,4 +237,3 @@ export function createAdminReconciliationRouter(ngnWalletService: NgnWalletServi
 
   return router
 }
-

@@ -98,6 +98,7 @@ describe('Auth Routes (OTP)', () => {
     const res = await agent.post('/api/auth/request-otp').send({ email })
     expect(res.status).toBe(429)
     expect(res.body.error.code).toBe('TOO_MANY_REQUESTS')
+    expect(res.headers['retry-after']).toBeDefined()
   })
 
   it('GET /api/auth/me should require auth and return user when authenticated', async () => {

@@ -5,7 +5,7 @@ import { requestIdMiddleware } from "./middleware/requestId.js"
 import { errorHandler } from "./middleware/errorHandler.js"
 import { createLogger } from "./middleware/logger.js"
 import healthRouter from "./routes/health.js"
-import { createPublicRateLimiter, createAuthRateLimiter, createWalletRateLimiter } from "./middleware/rateLimit.js"
+import { createPublicRateLimiter, createAuthRateLimiter, createSensitiveRateLimiters } from "./middleware/rateLimit.js"
 import publicRouter from "./routes/publicRoutes.js"
 import { AppError } from "./errors/AppError.js"
 import { ErrorCode } from "./errors/errorCodes.js"
@@ -49,6 +49,7 @@ import { OutboxWorker } from "./outbox/worker.js"
 
 export function createApp() {
   const app = express()
+  const sensitiveRateLimiters = createSensitiveRateLimiters(env)
 
   // Test database
   async function testDb() {
@@ -184,14 +185,32 @@ export function createApp() {
   app.use("/", publicRouter)
   app.use('/api', createBalanceRouter(sorobanAdapter))
   app.use('/api', createReceiptsRouter(receiptRepo))
-  app.use('/api/wallet', createWalletRateLimiter(env), createWalletRouter(walletService))
-  app.use('/api/wallet/ngn', createNgnWalletRouter(ngnWalletService))
+  app.use('/api/wallet', createWalletRouter(walletService, {
+    createRateLimit: sensitiveRateLimiters.walletCreate,
+    signingRateLimit: sensitiveRateLimiters.walletSigning,
+  }))
+  app.use('/api/wallet/ngn', createNgnWalletRouter(ngnWalletService, {
+    withdrawRateLimit: sensitiveRateLimiters.ngnWithdraw,
+    topupRateLimit: sensitiveRateLimiters.ngnTopup,
+  }))
   app.use('/api/risk', createRiskRouter(ngnWalletService))
-  app.use('/api/admin/risk', createAdminRiskRouter(ngnWalletService))
-  app.use('/api/admin', createAdminWithdrawalsRouter(ngnWalletService))
+  app.use('/api/admin/risk', createAdminRiskRouter(ngnWalletService, {
+    rateLimit: sensitiveRateLimiters.adminRisk,
+  }))
+  app.use('/api/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService, {
+    rateLimit: sensitiveRateLimiters.adminReconciliation,
+  }))
+  app.use('/api/admin', createAdminWithdrawalsRouter(ngnWalletService, {
+    rateLimit: sensitiveRateLimiters.admin,
+  }))
   app.use('/api/payments', createPaymentsRouter(sorobanAdapter))
-  app.use('/api/admin', createAdminRouter(sorobanAdapter, walletStore as any, encryptionService as any, indexer))
-  app.use('/api/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService))
+  app.use('/api/admin', createAdminRouter(
+    sorobanAdapter,
+    walletStore as any,
+    encryptionService as any,
+    indexer,
+    { rateLimit: sensitiveRateLimiters.admin },
+  ))
   app.use('/api/deals', createDealsRouter())
   app.use('/api/whistleblower', createWhistleblowerRouter(earningsService))
   app.use('/api/staking', createStakingRouter(sorobanAdapter, walletService, linkedAddressStore, ngnWalletService, conversionService, stakingService))

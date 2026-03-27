@@ -118,3 +118,32 @@ describe('envSchema — USDC token id requirements', () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe('envSchema — rate limit storage configuration', () => {
+  it('allows in-memory rate limiting without a redis url', async () => {
+    const envSchema = await loadEnvSchema()
+
+    const result = envSchema.safeParse({
+      NODE_ENV: 'development',
+      ENCRYPTION_KEY: 'a'.repeat(32),
+      RATE_LIMIT_STORE: 'memory',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('requires a redis url when redis-backed rate limiting is enabled', async () => {
+    const envSchema = await loadEnvSchema()
+
+    const result = envSchema.safeParse({
+      NODE_ENV: 'development',
+      ENCRYPTION_KEY: 'a'.repeat(32),
+      RATE_LIMIT_STORE: 'redis',
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.includes('RATE_LIMIT_REDIS_URL'))).toBe(true)
+    }
+  })
+})

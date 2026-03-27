@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express'
+import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
 import { validate } from '../middleware/validate.js'
 import { WalletService } from '../services/walletService.js'
 import { 
@@ -15,7 +15,13 @@ import { ErrorCode } from '../errors/errorCodes.js'
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth.js'
 import { requireCustodialMode, requireSigningEnabled } from '../middleware/custodial.js'
 
-export function createWalletRouter(walletService: WalletService): Router {
+export function createWalletRouter(
+  walletService: WalletService,
+  options?: {
+    createRateLimit?: RequestHandler
+    signingRateLimit?: RequestHandler
+  },
+): Router {
   const router = Router()
 
   /**
@@ -54,7 +60,7 @@ export function createWalletRouter(walletService: WalletService): Router {
    * Creates a new wallet for the user (if one doesn't exist)
    * This would typically be called after first successful OTP login
    */
-  router.post('/create', authenticateToken, requireCustodialMode, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  router.post('/create', ...(options?.createRateLimit ? [options.createRateLimit] : []), authenticateToken, requireCustodialMode, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id
 
@@ -80,6 +86,7 @@ export function createWalletRouter(walletService: WalletService): Router {
    */
   router.post(
     '/sign-message',
+    ...(options?.signingRateLimit ? [options.signingRateLimit] : []),
     authenticateToken,
     requireCustodialMode,
     requireSigningEnabled,
@@ -113,6 +120,7 @@ export function createWalletRouter(walletService: WalletService): Router {
    */
   router.post(
     '/sign-transaction',
+    ...(options?.signingRateLimit ? [options.signingRateLimit] : []),
     authenticateToken,
     requireCustodialMode,
     requireSigningEnabled,

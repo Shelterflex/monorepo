@@ -212,14 +212,18 @@ class SessionStore {
     token: string,
     auditInfo?: { ip?: string; userAgent?: string },
   ): Promise<Session> {
+    const createdAt = new Date()
+    const expiresAt = new Date(createdAt.getTime() + SESSION_TTL_MS)
     const session: Session = {
       token,
       email,
-      createdAt: new Date(),
+      createdAt,
+      expiresAt,
+      userAgent: auditInfo?.userAgent,
     }
 
     try {
-      await this.postgresRepo.create(email, token, undefined, auditInfo)
+      await this.postgresRepo.create(email, token, expiresAt, auditInfo)
     } catch (error) {
       console.warn('Postgres session creation failed, using fallback cache:', error)
       this.fallbackCache.set(token, session)
@@ -237,10 +241,18 @@ class SessionStore {
         token: session.token,
         email: session.email,
         createdAt: session.createdAt,
+        expiresAt: session.expiresAt,
+        userAgent: session.userAgent,
       }
     } catch (error) {
       console.warn('Postgres session lookup failed, using fallback cache:', error)
-      return this.fallbackCache.get(token)
+      const session = this.fallbackCache.get(token)
+      if (!session) return undefined
+      if (session.expiresAt && session.expiresAt.getTime() <= Date.now()) {
+        this.fallbackCache.delete(token)
+        return undefined
+      }
+      return session
     }
   }
 
@@ -251,6 +263,18 @@ class SessionStore {
       console.warn('Postgres session deletion failed, using fallback cache:', error)
       this.fallbackCache.delete(token)
     }
+  }
+
+  revokeByToken(token: string): void {
+    this.fallbackCache.delete(token)
+  }
+
+  getActiveSessionsByEmail(email: string): Session[] {
+    const now = Date.now()
+    return [...this.fallbackCache.values()]
+      .filter((session) => session.email === email)
+      .filter((session) => !session.expiresAt || session.expiresAt.getTime() > now)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
   }
 
   revokeAllByEmail(email: string): number {
