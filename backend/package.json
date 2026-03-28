@@ -19,6 +19,14 @@
     "test:integration:watch": "SOROBAN_INTEGRATION_TESTS=true vitest src/soroban/real-adapter.integration.test.ts"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.214.0",
+    "@opentelemetry/instrumentation-express": "^0.62.0",
+    "@opentelemetry/instrumentation-http": "^0.214.0",
+    "@opentelemetry/instrumentation-pg": "^0.66.0",
+    "@opentelemetry/resources": "^2.6.1",
+    "@opentelemetry/sdk-node": "^0.214.0",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
     "@stellar/stellar-sdk": "^14.6.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",

@@ -57,6 +57,11 @@ export const envSchema = z.object({
   // Resend configuration (required for email OTP delivery)
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
+  // Distributed Tracing (OpenTelemetry)
+  OTEL_SERVICE_NAME: z.string().default('shelterflex-backend'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().default('http://localhost:4318/v1/traces'),
+  OTEL_SAMPLING_RATIO: z.coerce.number().min(0).max(1).default(1.0),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
 }).refine((data) => {
   // Accept either field name; prefer SOROBAN_USDC_TOKEN_ID if provided
   const tokenId = data.SOROBAN_USDC_TOKEN_ID || data.USDC_TOKEN_ADDRESS

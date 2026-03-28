@@ -14,7 +14,7 @@ import { TxType } from '../outbox/types.js'
 // Mock @stellar/stellar-sdk
 vi.mock('@stellar/stellar-sdk', async () => {
   const actual = await vi.importActual('@stellar/stellar-sdk')
-  
+
   // Create a mock class for rpc.Server
   class MockServer {
     constructor(url: string) {
@@ -63,6 +63,28 @@ vi.mock('@stellar/stellar-sdk', async () => {
       }
       return 1000000n
     }), // Mock default return value
+    Account: vi.fn().mockImplementation(function (address, sequence) {
+      return {
+        accountId: () => address,
+        sequenceNumber: () => sequence,
+      }
+    }),
+    TransactionBuilder: vi.fn().mockImplementation(function () {
+      return {
+        addOperation: vi.fn().mockReturnThis(),
+        setTimeout: vi.fn().mockReturnThis(),
+        build: vi.fn().mockReturnValue({}),
+        sign: vi.fn().mockReturnThis(),
+      }
+    }),
+    Operation: {
+      invokeHostFunction: vi.fn().mockReturnValue({}),
+    },
+    Keypair: {
+      fromSecret: vi.fn().mockReturnValue({
+        publicKey: () => 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      }),
+    },
   }
 })
 
@@ -125,7 +147,7 @@ describe('RealSorobanAdapter', () => {
       // Mock successful simulation
       vi.mocked(rpc.Api.isSimulationSuccess).mockReturnValue(true)
       mockServer.simulateTransaction.mockResolvedValue({
-        result: { 
+        result: {
           retval: { // Mock ScVal object
             value: () => 1000000n,
             switch: () => ({ value: () => 'i128' })
@@ -167,7 +189,7 @@ describe('RealSorobanAdapter', () => {
 
       vi.mocked(rpc.Api.isSimulationSuccess).mockReturnValue(true)
       mockServer.simulateTransaction.mockResolvedValue({
-        result: { 
+        result: {
           retval: { // Mock ScVal object
             value: () => 5000000000n,
             switch: () => ({ value: () => 'i128' })
@@ -197,7 +219,7 @@ describe('RealSorobanAdapter', () => {
 
       vi.mocked(rpc.Api.isSimulationSuccess).mockReturnValue(true)
       mockServer.simulateTransaction.mockResolvedValue({
-        result: { 
+        result: {
           retval: { // Mock ScVal object
             value: () => 250000000n,
             switch: () => ({ value: () => 'i128' })

@@ -3,7 +3,9 @@ import cors from "cors"
 import { env } from "./schemas/env.js"
 import { requestIdMiddleware } from "./middleware/requestId.js"
 import { errorHandler } from "./middleware/errorHandler.js"
+import { traceResponseMiddleware } from "./middleware/traceResponse.js"
 import { createLogger } from "./middleware/logger.js"
+import { logger } from "./utils/logger.js"
 import { apiVersioning } from "./middleware/apiVersioning.js"
 import healthRouter from "./routes/health.js"
 import { createPublicRateLimiter, createAuthRateLimiter, createSensitiveRateLimiters } from "./middleware/rateLimit.js"
@@ -172,11 +174,11 @@ export function createApp() {
   // Graceful shutdown orchestration
   if (env.NODE_ENV !== 'test') {
     const shutdown = async (signal: string) => {
-      createLogger().info(`Received ${signal}, starting graceful shutdown...`)
-      
+      logger.info(`Received ${signal}, starting graceful shutdown...`)
+
       const timeoutMs = 30000
       const timeout = setTimeout(() => {
-        createLogger().error(`Graceful shutdown timed out after ${timeoutMs}ms, forcing exit`)
+        logger.error(`Graceful shutdown timed out after ${timeoutMs}ms, forcing exit`)
         process.exit(1)
       }, timeoutMs)
 
@@ -188,10 +190,10 @@ export function createApp() {
         // Stop all workers
         await Promise.all(workers.map(w => w.stop()))
         clearTimeout(timeout)
-        createLogger().info('Graceful shutdown completed successfully')
+        logger.info('Graceful shutdown completed successfully')
         process.exit(0)
       } catch (err) {
-        createLogger().error('Error during graceful shutdown', { error: err instanceof Error ? err.message : String(err) })
+        logger.error('Error during graceful shutdown', { error: err instanceof Error ? err.message : String(err) })
         process.exit(1)
       }
     }
@@ -202,6 +204,7 @@ export function createApp() {
 
   // Core middleware
   app.use(requestIdMiddleware)
+  app.use(traceResponseMiddleware)
 
   // Secret rotation middleware
   app.use(secretRotationMiddleware)

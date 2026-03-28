@@ -1,3 +1,4 @@
+import "./tracing.js"
 import "dotenv/config"
 import { createApp } from "./app.js"
 import { maybeStartOutboxWorker } from "./outbox/workerEntry.js"
