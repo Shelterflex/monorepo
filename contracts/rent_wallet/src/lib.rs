@@ -106,6 +106,10 @@ impl RentWallet {
             .unwrap_or(0u32)
     }
 
+    pub fn version(env: Env) -> u32 {
+        Self::contract_version(env)
+    }
+
     pub fn credit(
         env: Env,
         admin: Address,
@@ -229,7 +233,6 @@ impl RentWallet {
 }
 
 #[cfg(test)]
-
 mod test {
 
     extern crate std;
@@ -247,7 +250,7 @@ mod test {
         Address,
         Address,
     ) {
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
 
         let client = RentWalletClient::new(env, &contract_id);
 
@@ -269,7 +272,7 @@ mod test {
     #[test]
     fn init_sets_admin() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
 
@@ -293,9 +296,22 @@ mod test {
     }
 
     #[test]
+    fn version_matches_contract_version() {
+        let env = Env::default();
+        let contract_id = env.register(RentWallet, ());
+        let client = RentWalletClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.try_init(&admin).unwrap().unwrap();
+
+        assert_eq!(client.version(), 1u32);
+        assert_eq!(client.version(), client.contract_version());
+    }
+
+    #[test]
     fn init_initializes_empty_balances() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         let user = Address::generate(&env);
@@ -309,7 +325,7 @@ mod test {
     #[test]
     fn init_cannot_be_called_twice() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
 
@@ -654,6 +670,124 @@ mod test {
     }
 
     // ============================================================================
+    // Balance Invariant Tests
+    // ============================================================================
+
+    #[test]
+    fn invariant_balance_never_negative_after_failed_debit() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "debit",
+                args: (admin.clone(), user.clone(), 1i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let err = client
+            .try_debit(&admin, &user, &1i128)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InsufficientBalance);
+        assert!(client.balance(&user) >= 0i128);
+    }
+
+    #[test]
+    fn invariant_credit_strictly_increases_balance() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        let before = client.balance(&user);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 25i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &25i128).unwrap().unwrap();
+
+        let after = client.balance(&user);
+        assert_eq!(after, before + 25i128);
+        assert!(after > before);
+    }
+
+    #[test]
+    fn invariant_debit_strictly_decreases_balance() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 100i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &100i128).unwrap().unwrap();
+
+        let before = client.balance(&user);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "debit",
+                args: (admin.clone(), user.clone(), 40i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_debit(&admin, &user, &40i128).unwrap().unwrap();
+
+        let after = client.balance(&user);
+        assert_eq!(after, before - 40i128);
+        assert!(after < before);
+    }
+
+    #[test]
+    fn invariant_debit_insufficient_fails_and_preserves_balance() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 30i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &30i128).unwrap().unwrap();
+        let before = client.balance(&user);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "debit",
+                args: (admin.clone(), user.clone(), 31i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let err = client
+            .try_debit(&admin, &user, &31i128)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InsufficientBalance);
+        assert_eq!(client.balance(&user), before);
+    }
+
+    // ============================================================================
     // Admin Authorization Tests
     // ============================================================================
 
@@ -742,6 +876,22 @@ mod test {
             .unwrap()
             .unwrap();
         assert_eq!(client.balance(&user), 50i128);
+
+        // Old admin should lose permissions
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 50i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let err = client
+            .try_credit(&admin, &user, &50i128)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
     }
 
     #[test]
@@ -1077,5 +1227,137 @@ mod test {
 
         let data: i128 = event.2.try_into_val(&env).unwrap();
         assert_eq!(data, 50i128);
+    }
+
+    // ============================================================================
+    // require_auth Failure Tests (no mock auth provided)
+    //
+    // These verify that calling privileged methods without providing any
+    // authentication (no mock_auths call) fails. In the Soroban test env,
+    // require_auth() without a matching mock returns a host error via
+    // try_* methods rather than panicking.
+    // ============================================================================
+
+    #[test]
+    fn credit_fails_without_auth() {
+        let env = Env::default();
+        // Do NOT call env.mock_all_auths() or env.mock_auths()
+        let (_, client, admin, user, _) = setup(&env);
+        let result = client.try_credit(&admin, &user, &100i128);
+        assert!(result.is_err(), "credit without auth must fail");
+    }
+
+    #[test]
+    fn debit_fails_without_auth() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _) = setup(&env);
+        // Credit first (with auth)
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 100i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &100i128).unwrap().unwrap();
+
+        // Debit without auth must fail
+        let result = client.try_debit(&admin, &user, &50i128);
+        assert!(result.is_err(), "debit without auth must fail");
+    }
+
+    #[test]
+    fn set_admin_fails_without_auth() {
+        let env = Env::default();
+        let (_, client, admin, _, _) = setup(&env);
+        let new_admin = Address::generate(&env);
+        let result = client.try_set_admin(&admin, &new_admin);
+        assert!(result.is_err(), "set_admin without auth must fail");
+    }
+
+    #[test]
+    fn pause_fails_without_auth() {
+        let env = Env::default();
+        let (_, client, admin, _, _) = setup(&env);
+        let result = client.try_pause(&admin);
+        assert!(result.is_err(), "pause without auth must fail");
+    }
+
+    #[test]
+    fn unpause_fails_without_auth() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+        // Pause first (with auth)
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "pause",
+                args: (admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_pause(&admin).unwrap().unwrap();
+
+        // Unpause without auth must fail
+        let result = client.try_unpause(&admin);
+        assert!(result.is_err(), "unpause without auth must fail");
+    }
+
+    // ============================================================================
+    // Authorized success tests (one per category)
+    // ============================================================================
+
+    #[test]
+    fn admin_credit_with_proper_auth_succeeds() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _) = setup(&env);
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 42i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &42i128).unwrap().unwrap();
+        assert_eq!(client.balance(&user), 42i128);
+    }
+
+    #[test]
+    fn admin_set_admin_with_proper_auth_succeeds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+        let new_admin = Address::generate(&env);
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "set_admin",
+                args: (admin.clone(), new_admin.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_set_admin(&admin, &new_admin).unwrap().unwrap();
+    }
+
+    #[test]
+    fn admin_pause_with_proper_auth_succeeds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "pause",
+                args: (admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_pause(&admin).unwrap().unwrap();
+        assert!(client.is_paused());
     }
 }

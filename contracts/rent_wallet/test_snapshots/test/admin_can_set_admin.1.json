@@ -1,7 +1,7 @@
 {
   "generators": {
     "address": 5,
-    "nonce": 2
+    "nonce": 3
   },
   "auth": [
     [],
@@ -58,6 +58,8 @@
         }
       ]
     ],
+    [],
+    [],
     []
   ],
   "ledger": {
@@ -127,6 +129,18 @@
                               }
                             }
                           ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "ContractVersion"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1
                         }
                       }
                     ]

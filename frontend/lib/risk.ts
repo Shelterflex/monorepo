@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiGet } from "./apiClient";
 
 export interface RiskState {
   isFrozen: boolean;
@@ -37,7 +37,7 @@ export function humanizeFreezeReason(reason?: string | null): string | null {
 
 export async function getRiskState(): Promise<RiskState> {
   try {
-    const risk = await apiFetch<RiskStateResponse>("/api/risk/state");
+    const risk = await apiGet<RiskStateResponse>("/api/risk/state");
     return {
       isFrozen: Boolean(risk.isFrozen),
       freezeReason: humanizeFreezeReason(risk.freezeReason),
@@ -49,7 +49,7 @@ export async function getRiskState(): Promise<RiskState> {
   }
 
   try {
-    const me = await apiFetch<MeResponse>("/api/auth/me");
+    const me = await apiGet<MeResponse>("/api/auth/me");
     return {
       isFrozen: Boolean(me.user?.isFrozen),
       freezeReason: humanizeFreezeReason(me.user?.freezeReason),

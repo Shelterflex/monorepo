@@ -122,5 +122,77 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Prevent zoom on input focus in iOS */
+    -webkit-text-size-adjust: 100%;
+    /* Prevent pull-to-refresh in Chrome */
+    overscroll-behavior-y: contain;
+  }
+  
+  /* Mobile-specific optimizations */
+  @media (max-width: 768px) {
+    html {
+      /* Prevent horizontal scrolling */
+      overflow-x: hidden;
+    }
+    
+    body {
+      /* Optimize for touch */
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    
+    /* Allow text selection for inputs and text areas */
+    input, textarea, [contenteditable] {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+  }
+  
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [role='button']:focus-visible,
+  [role='tab']:focus-visible,
+  [tabindex]:not([tabindex='-1']):focus-visible {
+    @apply outline-2 outline-offset-2 outline-foreground;
+  }
+  
+  /* Touch-friendly tap targets */
+  @media (pointer: coarse) {
+    button, a, input, select, textarea, [role="button"], [role="tab"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+  
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    :root {
+      --border: #000000;
+      --foreground: #000000;
+      --background: #ffffff;
+    }
+    
+    .dark {
+      --border: #ffffff;
+      --foreground: #ffffff;
+      --background: #000000;
+    }
+  }
+  
+  /* Reduce motion for users who prefer it */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

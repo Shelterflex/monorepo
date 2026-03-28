@@ -186,6 +186,48 @@ git remote -v
 
 ## PR process
 
+## PR description requirements (to pass CI)
+
+This repo runs a **PR Validation** check on every Pull Request. Your PR will fail if the PR description is empty or missing required sections.
+
+Minimum requirements:
+
+- The PR description must not be empty.
+- The PR description must include these headings (exact text):
+  - `## Summary`
+  - `## Changes`
+  - `## Checklist`
+
+Strongly recommended:
+
+- Link an issue in the PR description (example: `Closes #123`).
+
+If your PR is a **contract upgrade / deploy**, the validator will also require these headings:
+
+- `### Network`
+- `### New Contract`
+- `### Upgrade Governance`
+- `### Verification Steps`
+
+Copy/paste PR description example (passes validation):
+
+```md
+## Summary
+What does this PR do and why?
+
+## Linked issue
+Closes #123
+
+## Changes
+- Change 1
+- Change 2
+
+## Checklist
+- [ ] I tested locally
+- [ ] I did not commit secrets
+- [ ] I updated docs if needed
+```
+
 ### 0) Fork the repo (recommended for public contributions)
 
 - Click **Fork** on GitHub to create your own copy of the repo.

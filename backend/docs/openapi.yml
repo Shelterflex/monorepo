@@ -1962,10 +1962,21 @@ paths:
   /api/staking/deposit/initiate:
     post:
       summary: Initiate NGN deposit for staking
-      description: Creates a payment intent for NGN deposit. Returns PSP redirect URL or bank details.
+      description: >-
+        Creates a payment intent for NGN deposit. Returns PSP redirect URL or bank details.
+        The x-user-id header is intended for trusted internal/BFF usage only in this MVP flow;
+        public clients should prefer authenticated token-based identity.
       operationId: initiateStakingDeposit
       tags:
         - Staking
+      parameters:
+        - in: header
+          name: x-user-id
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{3,128}$'
+          description: Internal-only user identifier header for trusted callers.
       requestBody:
         required: true
         content:

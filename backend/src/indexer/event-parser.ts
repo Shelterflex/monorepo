@@ -19,6 +19,20 @@ export function parseReceiptEvent(raw: RawReceiptEvent): IndexedReceipt {
      }
 }
 
+/**
+ * Attempt to parse a raw receipt event, returning null for malformed events
+ * instead of throwing. Extra fields in the data object are safely ignored.
+ */
+export function tryParseReceiptEvent(raw: RawReceiptEvent): IndexedReceipt | null {
+     try {
+          if (!raw || !raw.data || typeof raw.data !== 'object') return null
+          if (typeof raw.ledger !== 'number') return null
+          return parseReceiptEvent(raw)
+     } catch {
+          return null
+     }
+}
+
 function req(d: Record<string, unknown>, k: string): string {
      const v = d[k]; if (typeof v !== 'string' || !v) throw new Error(`Missing '${k}'`); return v
 }

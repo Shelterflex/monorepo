@@ -9,3 +9,7 @@ members = [
   "mvp_staking_pool",
   "whistleblower_rewards",
 ]
+
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true

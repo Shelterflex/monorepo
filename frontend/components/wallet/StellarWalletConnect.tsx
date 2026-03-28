@@ -9,11 +9,11 @@ import { stellarWallet } from "@/lib/stellar-wallet";
 import { requestWalletChallenge, verifyWalletSignature } from "@/lib/authApi";
 import { useRouter } from "next/navigation";
 
-interface WalletConnectProps {
+interface StellarWalletConnectProps {
   onSuccess?: () => void;
 }
 
-export function WalletConnect({ onSuccess }: WalletConnectProps) {
+export function StellarWalletConnect({ onSuccess }: StellarWalletConnectProps) {
   const router = useRouter();
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);

@@ -122,3 +122,10 @@ export function _testOnly_clearAuthRateLimits() {
   walletChallengeRequestCounters.clear()
   ipWalletChallengeRequestCounters.clear()
 }
+
+export function _testOnly_prefillEmailOtpCounter(email: string, count: number) {
+  emailOtpRequestCounters.set(email.toLowerCase(), {
+    count,
+    resetAtMs: nowMs() + 15 * 60 * 1000,
+  })
+}

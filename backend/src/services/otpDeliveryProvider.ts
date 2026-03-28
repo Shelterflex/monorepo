@@ -21,6 +21,7 @@ export interface OtpDeliveryProvider {
 export interface OtpEmailTemplate {
   subject: string
   body: string
+  html: string
 }
 
 /**
@@ -42,5 +43,19 @@ Security tip: Never share this code with anyone. We will never ask for it via ph
 If you didn't request this code, please ignore this message.
 `.trim()
 
-  return { subject, body }
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+      <h2 style="color: #333; text-align: center;">Verification Code</h2>
+      <p style="font-size: 16px; color: #666;">Your verification code is:</p>
+      <div style="background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #000; border-radius: 5px; margin: 20px 0;">
+        ${otp}
+      </div>
+      <p style="font-size: 14px; color: #999;">This code will expire in <strong>${ttlMinutes} minutes</strong>.</p>
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+      <p style="font-size: 12px; color: #999;"><strong>Security tip:</strong> Never share this code with anyone. We will never ask for it via phone or email.</p>
+      <p style="font-size: 12px; color: #999;">If you didn't request this code, please ignore this message.</p>
+    </div>
+  `.trim()
+
+  return { subject, body, html }
 }

@@ -33,13 +33,13 @@ function buildApp(rateLimitOptions?: { maxPerAddress?: number; maxPerIp?: number
     '/api/auth/wallet/challenge',
     validate(walletChallengeSchema, 'body'),
     walletAuthRateLimit(rateLimitOptions),
-    (req, res) => {
+    async (req, res) => {
       const address = req.body.address as string
       const normalizedAddress = address.toLowerCase()
       const nonce = generateNonce()
       const challengeXdr = generateChallengeXdr(address, nonce)
       const expiresAt = new Date(Date.now() + WALLET_TTL_MS)
-      walletChallengeStore.set({ address: normalizedAddress, challengeXdr, nonce, expiresAt, attempts: 0 })
+      await walletChallengeStore.set({ address: normalizedAddress, challengeXdr, nonce, expiresAt, attempts: 0 })
       res.json({ challengeXdr, expiresAt })
     },
   )
@@ -54,16 +54,16 @@ function buildApp(rateLimitOptions?: { maxPerAddress?: number; maxPerIp?: number
         const signedChallengeXdr = req.body.signedChallengeXdr as string
         const normalizedAddress = address.toLowerCase()
 
-        const challenge = walletChallengeStore.getByAddress(normalizedAddress)
+        const challenge = await walletChallengeStore.getByAddress(normalizedAddress)
         if (!challenge) throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Invalid address or signature')
 
         if (new Date() > challenge.expiresAt) {
-          walletChallengeStore.deleteByAddress(normalizedAddress)
+          await walletChallengeStore.deleteByAddress(normalizedAddress)
           throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Invalid address or signature')
         }
 
         if (challenge.attempts >= WALLET_MAX_ATTEMPTS) {
-          walletChallengeStore.deleteByAddress(normalizedAddress)
+          await walletChallengeStore.deleteByAddress(normalizedAddress)
           throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Invalid address or signature')
         }
 
@@ -71,15 +71,15 @@ function buildApp(rateLimitOptions?: { maxPerAddress?: number; maxPerIp?: number
         const isValid = verifySignedChallenge(address, signedChallengeXdr, challenge.nonce)
         if (!isValid) {
           challenge.attempts += 1
-          walletChallengeStore.set(challenge)
+          await walletChallengeStore.set(challenge)
           throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Invalid address or signature')
         }
 
-        walletChallengeStore.deleteByAddress(normalizedAddress)
+        await walletChallengeStore.deleteByAddress(normalizedAddress)
         const token = generateToken()
         const placeholderEmail = `${normalizedAddress}@wallet.user`
-        userStore.getOrCreateByEmail(placeholderEmail)
-        sessionStore.create(placeholderEmail, token)
+        await userStore.getOrCreateByEmail(placeholderEmail)
+        await sessionStore.create(placeholderEmail, token)
         res.json({ token })
       } catch (err) {
         next(err)
@@ -135,7 +135,7 @@ describe('Wallet Auth Abuse Protection', () => {
     const res = await request.post('/api/auth/wallet/verify').send({ address, signedChallengeXdr })
     expect(res.status).toBe(401)
     expect(res.body.error.message).toBe('Invalid address or signature')
-    expect(walletChallengeStore.getByAddress(address.toLowerCase())).toBeUndefined()
+    await expect(walletChallengeStore.getByAddress(address.toLowerCase())).resolves.toBeUndefined()
   })
 
   it('brute force: should lock out after too many wrong-key attempts', async () => {
@@ -159,7 +159,7 @@ describe('Wallet Auth Abuse Protection', () => {
     const validXdr = await signChallengeXdr(legitKeypair, body.challengeXdr)
     const res = await request.post('/api/auth/wallet/verify').send({ address, signedChallengeXdr: validXdr })
     expect(res.status).toBe(401)
-    expect(walletChallengeStore.getByAddress(address.toLowerCase())).toBeUndefined()
+    await expect(walletChallengeStore.getByAddress(address.toLowerCase())).resolves.toBeUndefined()
   })
 
   it('rate limit: should throttle challenge requests per address', async () => {

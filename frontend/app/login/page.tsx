@@ -7,7 +7,7 @@ import { ArrowRight, Loader2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requestOtp } from "@/lib/authApi";
-import { WalletConnect } from "@/components/wallet/WalletConnect";
+import { StellarWalletConnect } from "@/components/wallet/StellarWalletConnect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function LoginForm() {
@@ -108,7 +108,7 @@ function LoginForm() {
             </TabsContent>
 
             <TabsContent value="wallet">
-              <WalletConnect />
+              <StellarWalletConnect />
             </TabsContent>
           </Tabs>
 

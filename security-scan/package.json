@@ -1,0 +1,19 @@
+{
+  "name": "security-scan",
+  "version": "1.0.0",
+  "description": "Automated security scanning for CI/CD pipeline",
+  "main": "dist/orchestrator.js",
+  "scripts": {
+    "build": "tsc",
+    "scan": "node dist/orchestrator.js"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.0.0",
+    "eslint-plugin-security": "^2.1.0"
+  }
+}

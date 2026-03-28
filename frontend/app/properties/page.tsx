@@ -11,6 +11,7 @@ import {
   Search,
   SlidersHorizontal,
   Home,
+  SearchX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -227,12 +228,24 @@ export default function PropertiesPage() {
 
           {filteredProperties.length === 0 ? (
             <div className="border-3 border-foreground bg-muted p-12 text-center shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-              <p className="font-mono text-xl font-bold mb-2">
+              <SearchX className="mx-auto h-16 w-16 text-muted-foreground" />
+              <p className="font-mono text-xl font-bold mb-2 mt-4">
                 No properties found
               </p>
               <p className="text-muted-foreground">
                 Try adjusting your filters or search query.
               </p>
+              <Button
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedLocation("All Locations");
+                  setSelectedPrice("Any Price");
+                  setSelectedBeds("Any");
+                }}
+                className="mt-6 border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+              >
+                Clear Filters
+              </Button>
             </div>
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

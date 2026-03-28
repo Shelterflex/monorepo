@@ -29,7 +29,6 @@ import {
   type BankAccountDetails,
 } from "@/lib/walletApi";
 import { ACCOUNT_FROZEN_MESSAGE, isAccountFrozenError } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
 
 interface WithdrawalModalProps {
   open: boolean;
@@ -85,7 +84,6 @@ export function WithdrawalModal({
   deficitNgn = 0,
   onTopUpClick,
 }: WithdrawalModalProps) {
-  const { toast } = useToast();
   const [step, setStep] = useState<Step>("input");
   const [amount, setAmount] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState<string>("");
@@ -181,17 +179,10 @@ export function WithdrawalModal({
       showSuccessToast("Withdrawal initiated successfully");
       onSuccess?.();
     } catch (err) {
-      // Show toast for API errors
       handleError(err, "Failed to initiate withdrawal");
-      // Also set inline error for form display
-      const message = err instanceof Error ? err.message : "Failed to initiate withdrawal";
-      if (isAccountFrozenError(err)) {
-        toast({
-          title: "Account frozen",
-          description: ACCOUNT_FROZEN_MESSAGE,
-          variant: "destructive",
-        });
-      }
+      const message = isAccountFrozenError(err)
+        ? ACCOUNT_FROZEN_MESSAGE
+        : err instanceof Error ? err.message : "Failed to initiate withdrawal";
       setErrorMessage(message);
       setStep("error");
     } finally {

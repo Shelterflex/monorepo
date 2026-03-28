@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express"
 import { env } from "../schemas/env.js"
+import { getPoolMetrics } from "../db.js"
 
 const router = Router()
 
@@ -16,11 +17,14 @@ router.get("/details", (req: Request, res: Response) => {
     ? 'real'
     : 'stub'
 
+  const poolMetrics = getPoolMetrics()
+
   res.json({
     version: env.VERSION,
     nodeEnv: env.NODE_ENV,
     sorobanAdapterMode,
     databaseEnabled: !!process.env.DATABASE_URL,
+    ...(poolMetrics ? { databasePool: poolMetrics } : {}),
     requestId: req.requestId,
   })
 })

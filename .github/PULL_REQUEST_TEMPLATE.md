@@ -1,14 +1,18 @@
 ## Summary
-Briefly describe the change. If this is a contract upgrade, include:
+Briefly describe the change. This section is required for CI PR validation.
+If this is a contract upgrade, include:
 - Which contract is being upgraded
 - Why the upgrade is needed
 - Link to any discussion/issues
 
-## Linked issue
+## Linked issue (recommended)
+Example: `Closes #123`
 
 ## Changes
+This section is required for CI PR validation.
 
 ## Contract Upgrade Details (if applicable)
+This section is required for CI PR validation if this is a contract upgrade.
 
 ### Network
 - [ ] Testnet
@@ -32,11 +36,15 @@ Briefly describe the change. If this is a contract upgrade, include:
 - [ ] No breaking changes for existing integrations (or list them)
 
 ## How to test
+This section is required for CI PR validation.
+
 - [ ] All automated tests pass
 - [ ] Integration tests pass (if applicable)
 - [ ] Manual testing completed (describe what you tested)
 
 ## Security Considerations
+This section is required for CI PR validation.
+
 - [ ] No secrets or sensitive data are logged
 - [ ] No changes to authentication/authorization logic without review
 - [ ] No changes to admin/upgrade logic without review
@@ -44,6 +52,8 @@ Briefly describe the change. If this is a contract upgrade, include:
 ## Screenshots (if UI)
 
 ## Checklist
+This section is required for CI PR validation.
+
 - [ ] I linked an issue (or explained why one is not needed)
 - [ ] I tested locally
 - [ ] I did not commit secrets

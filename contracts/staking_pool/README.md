@@ -142,6 +142,26 @@ pub struct ReceiptInput {
 }
 ```
 
+## Interface
+
+| Method | Args | Auth | Emitted events |
+|---|---|---|---|
+| `init` | `admin: Address, token: Address` | public (one-time init) | `("staking_pool","init")` |
+| `contract_version` | none | public | none |
+| `set_operator` | `admin: Address, operator: Address, enabled: bool` | admin | `("staking_pool","set_operator", operator)` |
+| `is_operator` | `addr: Address` | public | none |
+| `stake` | `from: Address, amount: i128` | user (`from`) | `("staking_pool","stake", from)` |
+| `unstake` | `to: Address, amount: i128` | user (`to`) | `("staking_pool","unstake", to)` |
+| `staked_balance` | `user: Address` | public | none |
+| `total_staked` | none | public | none |
+| `pause` | `admin: Address` | admin | `("staking_pool","pause")` |
+| `unpause` | `admin: Address` | admin | `("staking_pool","unpause")` |
+| `is_paused` | none | public | none |
+| `set_lock_period` | `admin: Address, seconds: u64` | admin | `("staking_pool","set_lock_period")` |
+| `get_lock_period` | none | public | none |
+| `compute_metadata_hash` | `input: ReceiptInput` | public | none |
+| `verify_metadata_hash` | `input: ReceiptInput, expected_hash: BytesN<32>` | public | none |
+
 ## Event Shapes
 
 ### Stake Event

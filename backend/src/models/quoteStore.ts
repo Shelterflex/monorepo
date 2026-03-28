@@ -53,6 +53,8 @@ class QuoteStore {
     const existing = this.byId.get(quoteId)
     if (!existing) return null
     if (existing.status === 'expired') return existing
+    // 'used' status takes precedence over 'expired'
+    if (existing.status === 'used') return existing
     const now = new Date()
     const updated: QuoteRecord = { ...existing, status: 'expired', updatedAt: now }
     this.byId.set(quoteId, updated)

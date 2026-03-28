@@ -16,6 +16,7 @@ import {
   ImageIcon,
   File,
   ChevronLeft,
+  MessageSquareOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -107,7 +108,19 @@ export default function MessagesPage() {
         </div>
 
         <div className="h-[calc(100vh-180px)] overflow-y-auto">
-          {filteredConversations.map((conv) => (
+          {filteredConversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center border-3 border-foreground bg-muted">
+                <MessageSquareOff className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="mt-4 font-bold">No conversations found</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {searchQuery
+                  ? "Try a different search term"
+                  : "Your messages will appear here"}
+              </p>
+            </div>
+          ) : filteredConversations.map((conv) => (
             <button
               key={conv.id}
               onClick={() => handleSelectConversation(conv.id)}

@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Loader2, Wallet, Coins, AlertCircle, DollarSign } from "lucide-react";
 import { useRiskState } from "@/hooks/useRiskState";
 import { ACCOUNT_FROZEN_MESSAGE, isAccountFrozenError } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { handleError } from "@/lib/toast";
 import FrozenAccountBanner from "../FrozenAccountBanner";
 import { getQuote, type Quote, type StakingPosition as NgnStakingPosition } from "@/lib/ngnStakingApi";
 import { NgnStakingFlow } from "./ngn-flow/NgnStakingFlow";
@@ -20,7 +20,6 @@ import { NgnStakingFlow } from "./ngn-flow/NgnStakingFlow";
 type StakingMode = "ngn_deposit" | "ngn_balance" | "usdc";
 
 export default function StakingPage() {
-  const { toast } = useToast();
   const { isFrozen, freezeReason } = useRiskState();
   const [stakingPosition, setStakingPosition] = useState<StakingPositionReponse | null>(null);
   const [ngnBalance, setNgnBalance] = useState<NgnBalanceResponse | null>(null);
@@ -106,11 +105,7 @@ export default function StakingPage() {
 
     if (isFrozen && stakingMode === "ngn_balance") {
       setStatus(ACCOUNT_FROZEN_MESSAGE);
-      toast({
-        title: "Account frozen",
-        description: ACCOUNT_FROZEN_MESSAGE,
-        variant: "destructive",
-      });
+      handleError(new Error(ACCOUNT_FROZEN_MESSAGE), ACCOUNT_FROZEN_MESSAGE);
       return;
     }
 
@@ -160,14 +155,10 @@ export default function StakingPage() {
     } catch (err: any) {
       if (isAccountFrozenError(err)) {
         setStatus(ACCOUNT_FROZEN_MESSAGE);
-        toast({
-          title: "Account frozen",
-          description: ACCOUNT_FROZEN_MESSAGE,
-          variant: "destructive",
-        });
-        return;
+      } else {
+        setStatus(err.message || "Stake failed");
       }
-      setStatus(err.message || "Stake failed")
+      handleError(err, "Stake failed");
     } finally {
       setIsStaking(false)
     }
@@ -201,7 +192,8 @@ export default function StakingPage() {
       setUnstakeAmount("")
 
     } catch (err: any) {
-      setStatus(err.message || "Unstake failed")
+      setStatus(err.message || "Unstake failed");
+      handleError(err, "Unstake failed");
     }
   }
 
@@ -226,7 +218,8 @@ export default function StakingPage() {
       updatePosition({ claimableDelta: -claimable })
 
     } catch (err: any) {
-      setStatus(err.message || "Claim failed")
+      setStatus(err.message || "Claim failed");
+      handleError(err, "Claim failed");
     }
   }
 

@@ -129,11 +129,21 @@ List receipts for a deal with cursor-based pagination.
 #### `receipt_count(env: Env, deal_id: DealId) -> u64`
 Get the total number of receipts for a deal.
 
+## Interface
+
+| Method | Args | Auth | Emitted events |
+|---|---|---|---|
+| `init` | `admin: Address` | public (one-time init) | `("init")` |
+| `contract_version` | none | public | none |
+| `create_receipt` | `deal_id: DealId, amount: i128, payer: Address` | admin | `("receipt_created", deal_id)` |
+| `list_receipts_by_deal` | `deal_id: DealId, limit: u32, cursor: Option<Cursor>` | public | none |
+| `receipt_count` | `deal_id: DealId` | public | none |
+
 ## Error Handling
 
-- **Invalid limit**: Panics if limit is 0 or > 100
+- **Invalid limit**: Returns `ContractError::InvalidLimit` if limit is 0 or > 100
 - **Authentication**: `create_receipt` requires admin authentication
-- **Validation**: Amount must be positive
+- **Validation**: `create_receipt` returns `ContractError::InvalidAmount` if amount is not positive
 
 ## Testing
 

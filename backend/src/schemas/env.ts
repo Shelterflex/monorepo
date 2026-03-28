@@ -36,6 +36,9 @@ export const envSchema = z.object({
   QUOTE_SLIPPAGE_PERCENT: z.coerce.number().min(0).max(1).default(0.005),
   // OTP delivery provider: 'console' for dev, 'email' for production
   OTP_DELIVERY_PROVIDER: z.enum(['console', 'email']).default('console'),
+  // Resend configuration (required for email OTP delivery)
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().email().optional(),
 }).refine((data) => {
   // Accept either field name; prefer SOROBAN_USDC_TOKEN_ID if provided
   const tokenId = data.SOROBAN_USDC_TOKEN_ID || data.USDC_TOKEN_ADDRESS
@@ -107,6 +110,13 @@ export const envSchema = z.object({
   }, {
     message: 'MANUAL_ADMIN_SECRET is required in production for webhook signature validation',
     path: ['MANUAL_ADMIN_SECRET'],
+  })
+  .refine((data) => {
+    if (data.OTP_DELIVERY_PROVIDER !== 'email') return true
+    return !!data.RESEND_API_KEY && !!data.RESEND_FROM_EMAIL
+  }, {
+    message: 'RESEND_API_KEY and RESEND_FROM_EMAIL are required when OTP_DELIVERY_PROVIDER is "email"',
+    path: ['RESEND_API_KEY'],
   })
 
 export type Env = z.infer<typeof envSchema>

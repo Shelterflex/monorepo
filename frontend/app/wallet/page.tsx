@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { handleError, showSuccessToast } from "@/lib/toast";
 import { generateLedgerCsv, downloadCsv } from "@/lib/csvExport";
+import { featureFlags } from "@/lib/featureFlags";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -536,7 +537,7 @@ function WalletPageContent() {
                     <Download className="mr-2 h-4 w-4" />
                     Export all entries
                   </button>
-                  {hasActiveFilters && (
+                  {featureFlags.enableAdvancedWalletOps && hasActiveFilters && (
                     <button
                       onClick={() => handleExportCsv(true)}
                       className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-muted text-left"

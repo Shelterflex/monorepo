@@ -1,0 +1,103 @@
+title = "Gitleaks Security Scan Configuration"
+
+# Extend default Gitleaks rules
+[extend]
+useDefault = true
+
+# Custom rules for project-specific patterns
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey)['":\s]*[=:]\s*['"][a-zA-Z0-9_\-]{20,}['"]'''
+entropy = 3.5
+tags = ["key", "api"]
+
+[[rules]]
+id = "generic-secret"
+description = "Generic Secret"
+regex = '''(?i)(secret|password|passwd|pwd)['":\s]*[=:]\s*['"][^'"\s]{8,}['"]'''
+entropy = 3.0
+tags = ["secret", "password"]
+
+[[rules]]
+id = "database-connection-string"
+description = "Database Connection String"
+regex = '''(?i)(postgres|postgresql|mysql|mongodb|redis)://[^\s'"]+'''
+tags = ["database", "connection-string"]
+
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN\s+(RSA\s+)?PRIVATE KEY-----'''
+tags = ["key", "private"]
+
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key ID"
+regex = '''(?i)(aws_access_key_id|aws_secret_access_key)['":\s]*[=:]\s*['"][A-Z0-9]{20}['"]'''
+tags = ["aws", "key"]
+
+[[rules]]
+id = "github-token"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[a-zA-Z0-9]{36}'''
+tags = ["github", "token"]
+
+[[rules]]
+id = "github-oauth"
+description = "GitHub OAuth Token"
+regex = '''gho_[a-zA-Z0-9]{36}'''
+tags = ["github", "oauth"]
+
+[[rules]]
+id = "slack-token"
+description = "Slack Token"
+regex = '''xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}'''
+tags = ["slack", "token"]
+
+[[rules]]
+id = "stripe-api-key"
+description = "Stripe API Key"
+regex = '''(?i)sk_live_[a-zA-Z0-9]{24,}'''
+tags = ["stripe", "api-key"]
+
+[[rules]]
+id = "jwt-token"
+description = "JWT Token"
+regex = '''eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+'''
+entropy = 4.0
+tags = ["jwt", "token"]
+
+[[rules]]
+id = "stellar-secret-key"
+description = "Stellar Secret Key"
+regex = '''S[A-Z0-9]{55}'''
+tags = ["stellar", "secret-key", "blockchain"]
+
+# Allowlist for false positives
+[allowlist]
+description = "Allowlist for known false positives"
+paths = [
+    ".git/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    "*.test.ts",
+    "*.test.js",
+    "*.spec.ts",
+    "*.spec.js",
+    "examples/",
+    "docs/",
+    "*.md",
+]
+
+regexes = [
+    '''example\.com''',
+    '''your-api-key-here''',
+    '''YOUR_SECRET_HERE''',
+    '''<YOUR_.*>''',
+    '''\[YOUR_.*\]''',
+    '''REPLACE_WITH_''',
+    '''TODO:''',
+]

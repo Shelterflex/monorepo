@@ -11,7 +11,10 @@ use crate::{
     TransactionReceiptContract, TransactionReceiptContractClient, ALLOWED_SOURCES,
     ALLOWED_TX_TYPES,
 };
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String, Symbol};
+use soroban_sdk::{
+    testutils::{Address as _, Events as _},
+    Address, Bytes, BytesN, Env, IntoVal, String, Symbol, TryFromVal, TryIntoVal,
+};
 use std::string::String as StdString;
 
 #[test]
@@ -53,7 +56,7 @@ fn test_metadata_hash_golden_vector_v1() {
 
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
     env.mock_all_auths();
 
     let token = Address::generate(&env);
@@ -103,7 +106,7 @@ fn test_metadata_hash_invalid_rejected() {
 
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
     env.mock_all_auths();
 
     let token = Address::generate(&env);
@@ -133,6 +136,57 @@ fn test_metadata_hash_invalid_rejected() {
         .unwrap_err()
         .unwrap();
     assert_eq!(err, ContractError::InvalidMetadataHash);
+}
+
+#[test]
+fn test_metadata_hash_optional_none_is_accepted() {
+    let env = Env::default();
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    client.try_init(&admin, &operator).unwrap().unwrap();
+    env.mock_all_auths();
+
+    let token = Address::generate(&env);
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "paystack"),
+        external_ref: String::from_str(&env, "meta_none_ok"),
+        tx_type: Symbol::new(&env, "CONVERSION"),
+        amount_usdc: 1_000_000i128,
+        token,
+        deal_id: String::from_str(&env, "deal_meta_none"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+
+    let tx_id = client
+        .try_record_receipt(&operator, &input)
+        .unwrap()
+        .unwrap();
+    let receipt = client.get_receipt(&tx_id).unwrap();
+    assert_eq!(receipt.metadata_hash, None);
+}
+
+#[test]
+fn test_metadata_hash_invalid_length_rejected_at_type_boundary() {
+    let env = Env::default();
+
+    // Contract input requires Option<BytesN<32>>.
+    // A non-32-byte payload is rejected during Soroban value decoding/conversion.
+    let short_val: soroban_sdk::Val = Bytes::from_slice(&env, &[7u8; 31]).into_val(&env);
+    let short_res = BytesN::<32>::try_from_val(&env, &short_val);
+    assert!(short_res.is_err());
+
+    let long_val: soroban_sdk::Val = Bytes::from_slice(&env, &[9u8; 33]).into_val(&env);
+    let long_res = BytesN::<32>::try_from_val(&env, &long_val);
+    assert!(long_res.is_err());
 }
 
 #[test]
@@ -400,7 +454,7 @@ fn test_init_success() {
     let operator = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Verify admin is stored by checking storage directly
     let stored_admin: Address = env.as_contract(&contract_id, || {
@@ -418,7 +472,7 @@ fn test_init_success() {
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 
     // Verify contract version is set
     let version: u32 = env.as_contract(&contract_id, || {
@@ -431,6 +485,21 @@ fn test_init_success() {
 }
 
 #[test]
+fn test_version_matches_contract_version() {
+    let env = Env::default();
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+
+    client.try_init(&admin, &operator).unwrap().unwrap();
+
+    assert_eq!(client.version(), 1u32);
+    assert_eq!(client.version(), client.contract_version());
+}
+
+#[test]
 fn test_init_already_initialized() {
     let env = Env::default();
     let contract_id = env.register(TransactionReceiptContract, ());
@@ -440,7 +509,7 @@ fn test_init_already_initialized() {
     let operator = Address::generate(&env);
 
     // Initialize the contract first time
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Try to initialize again
     let admin2 = Address::generate(&env);
@@ -475,7 +544,7 @@ fn test_init_with_same_admin_and_operator() {
     let address = Address::generate(&env);
 
     // Initialize with same address for both admin and operator
-    client.try_init(&address, &address).unwrap();
+    client.try_init(&address, &address).unwrap().unwrap();
 
     // Verify both are stored correctly
     let stored_admin: Address = env.as_contract(&contract_id, || {
@@ -501,19 +570,19 @@ fn test_pause_success() {
     let operator = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock admin authentication
     env.mock_all_auths();
 
     // Pause the contract
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
 
     // Verify paused state is true
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 }
 
 #[test]
@@ -527,7 +596,7 @@ fn test_pause_not_authorized() {
     let unauthorized = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock authentication for unauthorized address
     env.mock_all_auths();
@@ -543,7 +612,7 @@ fn test_pause_not_authorized() {
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 }
 
 #[test]
@@ -556,28 +625,28 @@ fn test_pause_idempotent() {
     let operator = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock admin authentication
     env.mock_all_auths();
 
     // Pause the contract first time
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
 
     // Verify paused state is true
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 
     // Pause again (should succeed without error)
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
 
     // Verify paused state is still true
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 }
 
 #[test]
@@ -590,28 +659,28 @@ fn test_unpause_success() {
     let operator = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock admin authentication
     env.mock_all_auths();
 
     // Pause the contract first
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
 
     // Verify paused state is true
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 
     // Unpause the contract
-    client.try_unpause(&admin).unwrap();
+    client.try_unpause(&admin).unwrap().unwrap();
 
     // Verify paused state is false
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 }
 
 #[test]
@@ -625,13 +694,13 @@ fn test_unpause_not_authorized() {
     let unauthorized = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock authentication
     env.mock_all_auths();
 
     // Pause the contract first
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
 
     // Try to unpause with unauthorized address
     let result = client.try_unpause(&unauthorized);
@@ -644,7 +713,7 @@ fn test_unpause_not_authorized() {
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 }
 
 #[test]
@@ -657,28 +726,28 @@ fn test_unpause_idempotent() {
     let operator = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock admin authentication
     env.mock_all_auths();
 
     // Contract starts unpaused, unpause should succeed
-    client.try_unpause(&admin).unwrap();
+    client.try_unpause(&admin).unwrap().unwrap();
 
     // Verify paused state is false
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 
     // Unpause again (should succeed without error)
-    client.try_unpause(&admin).unwrap();
+    client.try_unpause(&admin).unwrap().unwrap();
 
     // Verify paused state is still false
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 }
 
 #[test]
@@ -691,7 +760,7 @@ fn test_pause_unpause_cycle() {
     let operator = Address::generate(&env);
 
     // Initialize the contract
-    client.try_init(&admin, &operator).unwrap();
+    client.try_init(&admin, &operator).unwrap().unwrap();
 
     // Mock admin authentication
     env.mock_all_auths();
@@ -700,28 +769,28 @@ fn test_pause_unpause_cycle() {
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 
     // Pause
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 
     // Unpause
-    client.try_unpause(&admin).unwrap();
+    client.try_unpause(&admin).unwrap().unwrap();
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, false);
+    assert!(!paused);
 
     // Pause again
-    client.try_pause(&admin).unwrap();
+    client.try_pause(&admin).unwrap().unwrap();
     let paused: bool = env.as_contract(&contract_id, || {
         env.storage().instance().get(&StorageKey::Paused).unwrap()
     });
-    assert_eq!(paused, true);
+    assert!(paused);
 }
 
 // Golden test vectors - shared with backend tests
@@ -739,7 +808,6 @@ fn test_golden_vectors() {
     #[derive(serde::Deserialize)]
     struct GoldenVector {
         input: VectorInput,
-        expected_canonical: Option<StdString>,
         expected_sha256: Option<StdString>,
         expected_error: Option<StdString>,
     }
@@ -861,7 +929,7 @@ fn test_conversion_receipt_with_metadata() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register_contract(None, TransactionReceiptContract);
+    let contract_id = env.register(TransactionReceiptContract, ());
     let client = TransactionReceiptContractClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
@@ -906,7 +974,7 @@ fn test_list_receipts_by_user() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register_contract(None, TransactionReceiptContract);
+    let contract_id = env.register(TransactionReceiptContract, ());
     let client = TransactionReceiptContractClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
@@ -958,7 +1026,7 @@ fn test_conversion_idempotency() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register_contract(None, TransactionReceiptContract);
+    let contract_id = env.register(TransactionReceiptContract, ());
     let client = TransactionReceiptContractClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
@@ -992,4 +1060,221 @@ fn test_conversion_idempotency() {
     // Verify only one receipt exists
     let receipt = client.get_receipt(&tx_id_1).unwrap();
     assert_eq!(receipt.amount_usdc, 500_000);
+}
+
+// Deterministic event vectors (encoding/decoding)
+
+#[test]
+fn test_event_vector_init_event_exact_shape() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+
+    client.try_init(&admin, &operator).unwrap().unwrap();
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 1);
+
+    let event = events.get(0).unwrap();
+    let topics: soroban_sdk::Vec<soroban_sdk::Val> = event.1.clone();
+    assert_eq!(topics.len(), 2);
+
+    let contract_sym: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+    let event_sym: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    assert_eq!(contract_sym, Symbol::new(&env, "transaction_receipt"));
+    assert_eq!(event_sym, Symbol::new(&env, "init"));
+
+    let data: (Address, Address, u32) = event.2.try_into_val(&env).unwrap();
+    assert_eq!(data, (admin, operator, 1u32));
+}
+
+#[test]
+fn test_event_vector_receipt_recorded_exact_shape() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.try_init(&admin, &operator).unwrap().unwrap();
+
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "paystack"),
+        external_ref: String::from_str(&env, "vector_ref_001"),
+        tx_type: Symbol::new(&env, "TENANT_REPAYMENT"),
+        amount_usdc: 1_000_000i128,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_vector"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+
+    let tx_id = client
+        .try_record_receipt(&operator, &input)
+        .unwrap()
+        .unwrap();
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 1);
+
+    let event = events.last().unwrap();
+    let topics: soroban_sdk::Vec<soroban_sdk::Val> = event.1.clone();
+    assert_eq!(topics.len(), 3);
+
+    let contract_sym: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+    let event_sym: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let event_tx_id: BytesN<32> = topics.get(2).unwrap().try_into_val(&env).unwrap();
+
+    assert_eq!(contract_sym, Symbol::new(&env, "transaction_receipt"));
+    assert_eq!(event_sym, Symbol::new(&env, "receipt_recorded"));
+    assert_eq!(event_tx_id, tx_id);
+
+    let data: Receipt = event.2.try_into_val(&env).unwrap();
+    assert_eq!(data.tx_id, tx_id);
+    assert_eq!(data.external_ref, tx_id);
+    assert_eq!(data.tx_type, Symbol::new(&env, "TENANT_REPAYMENT"));
+    assert_eq!(data.amount_usdc, 1_000_000i128);
+    assert_eq!(data.token, token);
+    assert_eq!(data.deal_id, String::from_str(&env, "deal_vector"));
+    assert_eq!(data.metadata_hash, None);
+}
+
+#[test]
+fn test_record_receipt_duplicate_transaction_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.try_init(&admin, &operator).unwrap().unwrap();
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "paystack"),
+        external_ref: String::from_str(&env, "dup_ref_001"),
+        tx_type: Symbol::new(&env, "TENANT_REPAYMENT"),
+        amount_usdc: 1_000_000i128,
+        token,
+        deal_id: String::from_str(&env, "deal_dup"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+
+    // First record succeeds
+    client
+        .try_record_receipt(&operator, &input)
+        .unwrap()
+        .unwrap();
+
+    let err = client
+        .try_record_receipt(&operator, &input)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, ContractError::DuplicateTransaction);
+}
+
+#[test]
+fn test_record_receipt_external_ref_too_long_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.try_init(&admin, &operator).unwrap().unwrap();
+
+    // 257-character external_ref exceeds the 256-char limit
+    let long_ref = "x".repeat(257);
+
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "paystack"),
+        external_ref: String::from_str(&env, &long_ref),
+        tx_type: Symbol::new(&env, "TENANT_REPAYMENT"),
+        amount_usdc: 1_000_000i128,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_longref"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+
+    let err = client
+        .try_record_receipt(&operator, &input)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, ContractError::InvalidExternalRef);
+
+    // Validation failures must not emit receipt events.
+    assert_eq!(env.events().all().len(), 0);
+}
+
+#[test]
+fn test_invalid_input_does_not_emit_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.init(&admin, &operator);
+
+    // Zero amount is invalid
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "paystack"),
+        external_ref: String::from_str(&env, "ref_invalid_amount"),
+        tx_type: Symbol::new(&env, "UNSTAKE"),
+        amount_usdc: 0,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_invalid"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+
+    let err = client
+        .try_record_receipt(&operator, &input)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, ContractError::InvalidAmount);
+
+    // No receipt events should be emitted when validation fails
+    assert_eq!(env.events().all().len(), 0);
 }

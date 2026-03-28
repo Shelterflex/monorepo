@@ -5,6 +5,7 @@ import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth
 import { NgnWalletService } from '../services/ngnWalletService.js'
 import { withdrawalResponseSchema } from '../schemas/ngnWallet.js'
 import { AppError } from '../errors/AppError.js'
+import { logger } from '../utils/logger.js'
 
 const rejectWithdrawalSchema = z.object({
   reason: z.string().min(1, 'Reason is required'),
@@ -20,6 +21,13 @@ export function createAdminWithdrawalsRouter(ngnWalletService: NgnWalletService)
       try {
         const { id } = req.params
         const withdrawal = await ngnWalletService.approveWithdrawal(id)
+        
+        logger.info('Withdrawal approved by admin', {
+          adminId: req.user!.id,
+          withdrawalId: id,
+          requestId: req.requestId,
+        })
+
         res.json(withdrawalResponseSchema.parse({ success: true, ...withdrawal }))
       } catch (error) {
         if (error instanceof AppError) {
@@ -40,6 +48,14 @@ export function createAdminWithdrawalsRouter(ngnWalletService: NgnWalletService)
         const { id } = req.params
         const { reason } = req.body as { reason: string }
         const withdrawal = await ngnWalletService.rejectWithdrawal(id, reason)
+
+        logger.info('Withdrawal rejected by admin', {
+          adminId: req.user!.id,
+          withdrawalId: id,
+          reason,
+          requestId: req.requestId,
+        })
+
         res.json(withdrawalResponseSchema.parse({ success: true, ...withdrawal }))
       } catch (error) {
         if (error instanceof AppError) {

@@ -11,7 +11,3 @@ soroban-sdk = "22"
 
 [dev-dependencies]
 soroban-sdk = { version = "22", features = ["testutils"] }
-
-[profile.release-with-logs]
-inherits = "release"
-debug-assertions = true

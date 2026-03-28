@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
 import { AppError } from '../errors/AppError.js'
-import { ErrorCode, type ErrorResponse } from '../errors/errorCodes.js'
+import { ErrorCode, classifyError, type ErrorResponse } from '../errors/errorCodes.js'
 import { formatZodIssues } from '../errors/utils.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -18,10 +18,25 @@ export function errorHandler(
    * Centralized response sender
    */
   const send = (status: number, body: ErrorResponse) => {
+    const classification = classifyError(body.error.code)
+    const retryable = classification === 'transient'
+
+    // Add Retry-After header for transient/rate-limit errors
+    if (retryable && !res.getHeader('retry-after')) {
+      res.setHeader('Retry-After', '5')
+    }
+
     res
       .status(status)
       .setHeader('x-request-id', requestId)
-      .json(body)
+      .json({
+        ...body,
+        error: {
+          ...body.error,
+          classification,
+          retryable,
+        },
+      })
   }
 
   /**

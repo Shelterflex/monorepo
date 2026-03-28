@@ -9,6 +9,7 @@ import {
   Settings,
   ArrowLeft,
   CheckCircle,
+  UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -92,7 +93,21 @@ export default function TenantsPage() {
 
           {/* Tenants Grid */}
           <div className="grid gap-6">
-            {tenants.map((tenant) => (
+            {tenants.length === 0 ? (
+              <Card className="border-3 border-foreground p-12 text-center shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+                <UserX className="mx-auto h-16 w-16 text-muted-foreground" />
+                <h3 className="mt-4 text-xl font-bold">No Tenants Yet</h3>
+                <p className="mt-2 text-muted-foreground">
+                  Tenants will appear here once they are assigned to your properties.
+                </p>
+                <Link href="/dashboard/landlord/properties" className="mt-6 inline-block">
+                  <Button className="border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+                    <Building2 className="mr-2 h-4 w-4" />
+                    Manage Properties
+                  </Button>
+                </Link>
+              </Card>
+            ) : tenants.map((tenant) => (
               <Card
                 key={tenant.id}
                 className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"

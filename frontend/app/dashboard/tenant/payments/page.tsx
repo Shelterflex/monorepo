@@ -15,6 +15,7 @@ import {
   FileText,
   Wallet,
   Plus,
+  Receipt,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -262,7 +263,17 @@ export default function TenantPaymentsPage() {
             <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
               <h3 className="mb-6 text-lg font-bold">Payment History</h3>
               <div className="space-y-3">
-                {pastPayments.map((payment) => (
+                {pastPayments.length === 0 ? (
+                  <div className="flex flex-col items-center py-12 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center border-3 border-foreground bg-muted">
+                      <Receipt className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="mt-4 font-bold">No payment history</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Your completed payments will appear here.
+                    </p>
+                  </div>
+                ) : pastPayments.map((payment) => (
                   <div
                     key={`${payment.month}-${payment.paidDate}-${payment.amount}`}
                     className="flex items-center justify-between border-b-2 border-foreground/10 pb-3 last:border-0"

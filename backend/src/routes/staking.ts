@@ -41,6 +41,24 @@ function formatAmount6(amountMicro: bigint): string {
   return `${negative ? '-' : ''}${whole.toString()}.${frac}`
 }
 
+function getValidatedUserIdHeader(req: Request): string {
+  const rawUserId = req.headers['x-user-id']
+  if (typeof rawUserId !== 'string') {
+    throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Missing x-user-id header')
+  }
+
+  const userId = rawUserId.trim()
+  if (userId.length === 0 || !/^[A-Za-z0-9_-]{3,128}$/.test(userId)) {
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      400,
+      'Invalid x-user-id header: expected 3-128 chars of letters, numbers, underscore, or hyphen',
+    )
+  }
+
+  return userId
+}
+
 export function createStakingRouter(
   adapter: SorobanAdapter,
   walletService: WalletService,
@@ -99,10 +117,7 @@ export function createStakingRouter(
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { quoteId, paymentRail, customerMeta } = req.body as DepositInitiateRequest
-        const userId = req.headers['x-user-id']
-        if (typeof userId !== 'string' || userId.length === 0) {
-          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Missing x-user-id header')
-        }
+        const userId = getValidatedUserIdHeader(req)
 
         const quote = await quoteStore.getById(quoteId)
         if (!quote) {
@@ -199,6 +214,14 @@ export function createStakingRouter(
         const { conversionId } = req.body as StakeFinalizeRequest
 
         const result = await stakingService.finalizeStaking(conversionId)
+
+        logger.info('Staking finalized', {
+          conversionId,
+          outboxId: result.outboxId,
+          txId: result.txId,
+          status: result.status,
+          requestId: req.requestId,
+        })
 
         res.status(result.sent ? 200 : 202).json({
           success: true,

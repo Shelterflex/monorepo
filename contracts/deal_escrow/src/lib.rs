@@ -215,6 +215,10 @@ impl DealEscrow {
         env.events().publish((Symbol::new(&env, "deal_escrow"), Symbol::new(&env, "unpause")), ());
         Ok(())
     }
+
+    pub fn is_paused(env: Env) -> bool {
+        get_paused(&env)
+    }
 }
 
 #[cfg(test)]

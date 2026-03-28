@@ -33,6 +33,24 @@ export function createAdminRouter(adapter: SorobanAdapter, walletStore?: WalletS
     }
   }
 
+  /**
+   * GET /api/admin/flags
+   * Expose read-only feature flags for easier debugging.
+   */
+  router.get('/flags', requireAdminSecret, (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        custodialModeEnabled: env.CUSTODIAL_MODE_ENABLED,
+        custodialSigningPaused: env.CUSTODIAL_SIGNING_PAUSED,
+        webhookSignatureEnabled: env.WEBHOOK_SIGNATURE_ENABLED,
+        databaseEnabled: !!process.env.DATABASE_URL,
+        sorobanAdapterMode: env.SOROBAN_NETWORK,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
   router.post(
     '/wallets/rewrap',
     async (req: Request, res: Response, next: NextFunction) => {

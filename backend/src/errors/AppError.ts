@@ -1,4 +1,4 @@
-import { ErrorCode } from './errorCodes.js'
+import { ErrorCode, classifyError, type ErrorClassification } from './errorCodes.js'
 
 /**
  * Base class for all controlled domain errors.
@@ -6,6 +6,9 @@ import { ErrorCode } from './errorCodes.js'
  * The global `errorHandler` middleware will catch it and serialize it correctly.
  */
 export class AppError extends Error {
+  public readonly classification: ErrorClassification
+  public readonly retryable: boolean
+
   constructor(
     public readonly code: string,
     public readonly status: number,
@@ -14,6 +17,8 @@ export class AppError extends Error {
   ) {
     super(message)
     this.name = 'AppError'
+    this.classification = classifyError(code)
+    this.retryable = this.classification === 'transient'
     // Maintain proper V8 stack trace pointing to the call site, not this constructor
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, AppError)
@@ -41,3 +46,6 @@ export const sorobanError = (message: string, details?: Record<string, unknown>)
 
 export const internalError = (message = 'An unexpected error occurred') =>
   new AppError(ErrorCode.INTERNAL_ERROR, 500, message)
+
+export const serviceUnavailable = (message = 'Service temporarily unavailable') =>
+  new AppError(ErrorCode.SERVICE_UNAVAILABLE, 503, message)

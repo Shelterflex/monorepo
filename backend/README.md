@@ -235,6 +235,10 @@ RATE_LIMIT_MAX_REQUESTS=100
 # Soroban network (local|testnet|mainnet)
 SOROBAN_NETWORK=testnet
 
+# Soroban adapter mode (stub|real)
+# 'stub' (default) uses fake data, 'real' makes actual contract calls
+SOROBAN_ADAPTER_MODE=stub
+
 # USDC token contract address (required in non-development environments)
 # Testnet example: USDC_TOKEN_ADDRESS=0x8d3e2a4e2c3b4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9
 # Mainnet example: USDC_TOKEN_ADDRESS=0xa0b86a33e6c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c
@@ -244,8 +248,20 @@ USDC_TOKEN_ADDRESS=
 SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 SOROBAN_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 
-# Optional: contract id for the deployed Shelterflex contract
+# Soroban contract IDs (required for 'real' adapter mode)
 SOROBAN_CONTRACT_ID=
+SOROBAN_USDC_TOKEN_ID=
+SOROBAN_STAKING_POOL_ID=
+SOROBAN_STAKING_REWARDS_ID=
+```
+
+### Indexer Configuration
+```bash
+# How often the indexer polls for new ledgers (in milliseconds). Default is 5000.
+INDEXER_POLL_MS=5000
+
+# The ledger sequence number to start indexing from. If omitted, the indexer starts from the current network ledger.
+INDEXER_START_LEDGER=
 ```
 
 **Important Notes:**
@@ -254,25 +270,16 @@ SOROBAN_CONTRACT_ID=
 - The address must be a valid Ethereum address format: `0x` followed by 40 hex characters
 - Server will refuse to start if `USDC_TOKEN_ADDRESS` is missing in non-development environments
 
-## Soroban integration
-
-Soroban-related code should live in `src/soroban/`.
-
-Environment variables:
-
-- `RATE_LIMIT_WINDOW_MS` (optional, default `60000`)
-- `RATE_LIMIT_MAX_REQUESTS` (optional, default `100`)
-- `SOROBAN_RPC_URL`
-- `SOROBAN_NETWORK_PASSPHRASE`
-- `SOROBAN_CONTRACT_ID` (optional)
-- `SOROBAN_ADMIN_SECRET` (optional, required for admin operations)
-- `SOROBAN_ADMIN_SIGNING_ENABLED` (optional, default `false`)
+**Soroban Adapter Mode**: The backend uses an adapter pattern for Soroban interactions:
+- `SOROBAN_ADAPTER_MODE=stub` (Default): Uses in-memory state and fake data. No network calls are made. Suitable for local UI development and unit testing.
+- `SOROBAN_ADAPTER_MODE=real`: Performs actual calls to the Soroban RPC. Requires all contract IDs and network configuration to be set.
 
 **Admin Signing**: Admin operations (pause/unpause, set_operator, init) require:
 - `SOROBAN_ADMIN_SECRET` - Admin secret key for signing transactions
 - `SOROBAN_ADMIN_SIGNING_ENABLED=true` - Feature flag to enable admin signing
 
-**Important**: Admin secrets should NOT be used in general request handlers. See [docs/ADMIN_SIGNING.md](docs/ADMIN_SIGNING.md) for best practices.
+> [!CAUTION]
+> **Security**: `SOROBAN_ADMIN_SECRET` confers full control over the contracts. It should ONLY be used in restricted admin contexts and NEVER committed to version control. General request handlers do not have access to this secret.
 
 
 ## Request IDs

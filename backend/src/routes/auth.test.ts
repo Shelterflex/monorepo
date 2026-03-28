@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createTestAgent, expectErrorShape } from '../test-helpers.js'
 import { otpChallengeStore, sessionStore, userStore, walletChallengeStore } from '../models/authStore.js'
-import { _testOnly_clearAuthRateLimits } from '../middleware/authRateLimit.js'
+import { _testOnly_clearAuthRateLimits, _testOnly_prefillEmailOtpCounter } from '../middleware/authRateLimit.js'
 
 vi.mock('../utils/wallet.js', async (importOriginal) => {
   const mod = await importOriginal<typeof import('../utils/wallet.js')>()
@@ -86,12 +86,44 @@ describe('Auth Routes (OTP)', () => {
     expectErrorShape(res, 'UNAUTHORIZED', 401)
   })
 
-  it.skip('request-otp should rate limit by email', async () => {
-    // TODO: Re-enable when test agent supports custom middleware
+  it('request-otp should rate limit by email', async () => {
+    // Use a fresh agent so the global express-rate-limit counter is reset
+    const agent = createTestAgent()
+    const email = 'ratelimit@example.com'
+
+    // Pre-fill the per-email counter to the default limit (100)
+    _testOnly_prefillEmailOtpCounter(email, 100)
+
+    // The next request should be rejected with 429 by the per-email rate limiter
+    const res = await agent.post('/api/auth/request-otp').send({ email })
+    expect(res.status).toBe(429)
+    expect(res.body.error.code).toBe('TOO_MANY_REQUESTS')
   })
 
-  it.skip('GET /api/auth/me should require auth and return user when authenticated', async () => {
-    // TODO: Fix rate limiting test interference
+  it('GET /api/auth/me should require auth and return user when authenticated', async () => {
+    // Use a fresh agent so the global express-rate-limit counter is reset
+    const agent = createTestAgent()
+
+    // Unauthenticated request should fail
+    const unauthed = await agent.get('/api/auth/me')
+    expect(unauthed.status).toBe(401)
+
+    // Create a session via OTP flow
+    const email = 'me@example.com'
+    await agent.post('/api/auth/request-otp').send({ email }).expect(200)
+    const verifyRes = await agent
+      .post('/api/auth/verify-otp')
+      .send({ email, otp: '123456' })
+      .expect(200)
+
+    const token = verifyRes.body.token
+
+    // Authenticated request should return user
+    const authed = await agent
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`)
+    expect(authed.status).toBe(200)
+    expect(authed.body.user).toHaveProperty('email', email)
   })
 })
 
@@ -129,8 +161,37 @@ describe('Auth Routes (Wallet)', () => {
     expect(challenge!.attempts).toBe(0)
   })
 
-  it.skip('POST /api/auth/wallet/verify should return session token on success', async () => {
-    // TODO: Implement with proper mocking of Stellar SDK
+  it('POST /api/auth/wallet/verify should return session token on success', async () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+
+    const walletUtils = await getWalletUtils()
+    vi.mocked(walletUtils.verifySignedChallenge).mockReturnValue(true)
+
+    const challengeRes = await request.post('/api/auth/wallet/challenge').send({ address })
+    expect(challengeRes.status).toBe(200)
+
+    const challengeBefore = await walletChallengeStore.getByAddress(address.toLowerCase())
+    expect(challengeBefore).toBeDefined()
+
+    const verifyRes = await request.post('/api/auth/wallet/verify').send({
+      address,
+      signedChallengeXdr: 'valid-mock-xdr',
+    })
+
+    expect(verifyRes.status).toBe(200)
+
+    // Session token response presence/shape
+    expect(verifyRes.body).toHaveProperty('token')
+    expect(typeof verifyRes.body.token).toBe('string')
+    expect(verifyRes.body.token).toBe('session-token-abc')
+
+    expect(verifyRes.body).toHaveProperty('user')
+    expect(typeof verifyRes.body.user).toBe('object')
+    expect(verifyRes.body.user).not.toBeNull()
+
+    // Success should clear the one-time challenge
+    const challengeAfter = await walletChallengeStore.getByAddress(address.toLowerCase())
+    expect(challengeAfter).toBeUndefined()
   })
 
   it('POST /api/auth/wallet/verify should fail with expired challenge', async () => {
@@ -212,31 +273,69 @@ describe('Auth Routes (Wallet)', () => {
     const clearedChallenge = await walletChallengeStore.getByAddress(address.toLowerCase())
     expect(clearedChallenge).toBeUndefined()
   })
+})
 
-  it('POST /api/auth/wallet/verify should return session token and clear challenge on success', async () => {
-    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+/**
+ * Issue #279 – validate() middleware: invalid payloads must return the
+ * canonical VALIDATION_ERROR shape (HTTP 400 + structured field errors).
+ *
+ * Endpoint under test: POST /api/auth/request-otp
+ * Schema:  requestOtpSchema  →  z.object({ email: z.string().email() })
+ *
+ * Error shape (from errorCodes.ts / validate.ts + formatZodIssues):
+ * {
+ *   "error": {
+ *     "code": "VALIDATION_ERROR",
+ *     "message": "Invalid request data",
+ *     "details": {
+ *       "<field_path>": "<zod message>"   // flat Record<string, string>
+ *     }
+ *   }
+ * }
+ */
+describe('validate() middleware – request validation error shape', () => {
+  const request = createTestAgent()
 
-    const walletUtils = await getWalletUtils()
-    vi.mocked(walletUtils.verifySignedChallenge).mockReturnValue(true)
+  beforeEach(() => {
+    _testOnly_clearAuthRateLimits()
+    vi.stubEnv('STELLAR_SERVER_SECRET_KEY', 'SBQWY3DNPFWGSQZ7BHHCQLZNX35O6W23DMU4Y3FJ3A6BKGWXOQ5F3Z2O')
+  })
 
-    // Create a challenge
-    const res = await request.post('/api/auth/wallet/challenge').send({ address })
-    expect(res.status).toBe(200)
+  it('returns HTTP 400 with VALIDATION_ERROR code when email is missing', async () => {
+    const res = await request.post('/api/auth/request-otp').send({})
 
-    const challengeBefore = await walletChallengeStore.getByAddress(address.toLowerCase())
-    expect(challengeBefore).toBeDefined()
+    expect(res.status).toBe(400)
+    expect(res.body).toHaveProperty('error')
+    expect(res.body.error).toHaveProperty('code', 'VALIDATION_ERROR')
+    expect(res.body.error).toHaveProperty('message', 'Invalid request data')
+    expect(res.body.error).toHaveProperty('details')
+    // details is a flat Record<string, string> produced by formatZodIssues
+    expect(typeof res.body.error.details).toBe('object')
+    expect(res.body.error.details).not.toBeNull()
+  })
 
-    const verifyRes = await request.post('/api/auth/wallet/verify').send({
-      address,
-      signedChallengeXdr: 'valid-mock-xdr',
-    })
+  it('returns HTTP 400 with VALIDATION_ERROR code when email has wrong type', async () => {
+    const res = await request.post('/api/auth/request-otp').send({ email: 12345 })
 
-    expect(verifyRes.status).toBe(200)
-    expect(verifyRes.body).toHaveProperty('token', 'session-token-abc')
-    expect(verifyRes.body).toHaveProperty('user')
-    expect(verifyRes.body.user).toHaveProperty('email')
+    expect(res.status).toBe(400)
+    expect(res.body.error).toHaveProperty('code', 'VALIDATION_ERROR')
+    expect(res.body.error).toHaveProperty('details')
+    expect(typeof res.body.error.details).toBe('object')
+  })
 
-    const challengeAfter = await walletChallengeStore.getByAddress(address.toLowerCase())
-    expect(challengeAfter).toBeUndefined()
+  it('returns HTTP 400 with VALIDATION_ERROR code when email format is invalid', async () => {
+    const res = await request.post('/api/auth/request-otp').send({ email: 'not-an-email' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error).toHaveProperty('code', 'VALIDATION_ERROR')
+    expect(res.body.error).toHaveProperty('message', 'Invalid request data')
+
+    // formatZodIssues returns a flat Record<string, string>:
+    // { "email": "<zod validation message>" }
+    const details = res.body.error.details as Record<string, string>
+    expect(typeof details).toBe('object')
+    // The "email" key must be present with a non-empty string message
+    expect(typeof details['email']).toBe('string')
+    expect(details['email'].length).toBeGreaterThan(0)
   })
 })

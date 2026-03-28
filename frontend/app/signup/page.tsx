@@ -26,6 +26,12 @@ export default function SignupPage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleUserTypeKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+    e.preventDefault()
+    setUserType((prev) => (prev === "tenant" ? "landlord" : "tenant"))
+  }
+
   return (
     <main className="min-h-screen bg-muted flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-md">
@@ -42,14 +48,14 @@ export default function SignupPage() {
           <h1 className="mb-6 font-mono text-2xl font-black">Sign Up</h1>
 
           {/* User Type Selector */}
-          <div className="mb-6">
-            <p className="mb-2 block font-mono text-sm font-bold">
-              I am a
-            </p>
-            <div className="grid grid-cols-2 gap-3">
+          <fieldset className="mb-6">
+            <legend className="mb-2 block font-mono text-sm font-bold">I am a</legend>
+            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Account type" onKeyDown={handleUserTypeKeyDown}>
               <button
                 type="button"
                 onClick={() => setUserType("tenant")}
+                role="radio"
+                aria-checked={userType === "tenant"}
                 className={`border-3 border-foreground p-4 font-mono font-bold transition-all ${
                   userType === "tenant"
                     ? "bg-primary text-primary-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
@@ -61,6 +67,8 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={() => setUserType("landlord")}
+                role="radio"
+                aria-checked={userType === "landlord"}
                 className={`border-3 border-foreground p-4 font-mono font-bold transition-all ${
                   userType === "landlord"
                     ? "bg-primary text-primary-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
@@ -70,7 +78,7 @@ export default function SignupPage() {
                 Landlord
               </button>
             </div>
-          </div>
+          </fieldset>
 
           {/* Whistleblower Option */}
           <div className="mb-6">
@@ -148,6 +156,8 @@ export default function SignupPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />

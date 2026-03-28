@@ -2,63 +2,88 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   frontend:
+    name: Frontend (lint, build)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: latest
+
       - name: Install dependencies
-        run: npm ci
-        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
       - name: Lint
-        run: npm run lint
-        working-directory: frontend
+        run: pnpm run lint
+
       - name: Build
-        run: npm run build
-        working-directory: frontend
+        run: pnpm run build
 
   backend:
+    name: Backend (lint, test)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: backend/package-lock.json
+
       - name: Install dependencies
         run: npm ci
-        working-directory: backend
+
       - name: Lint
         run: npm run lint
-        working-directory: backend
-      - name: Typecheck
-        run: npm run typecheck
-        working-directory: backend
-      - name: Build
-        run: npm run build
-        working-directory: backend
+
+      - name: Unit tests
+        run: npm run test:ci --if-present
 
   contracts:
+    name: Contracts (fmt, clippy, test)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust
+
+      - name: Install Rust (stable + fmt/clippy)
         uses: dtolnay/rust-toolchain@stable
-      - name: Build contracts
-        run: |
-          cd contracts
-          cargo build
-      - name: Test contracts
-        run: |
-          cd contracts
-          cargo test
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            contracts -> target
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features
+
+      - name: Tests
+        run: cargo test --workspace

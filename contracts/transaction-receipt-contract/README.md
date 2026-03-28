@@ -21,6 +21,7 @@ Attempting to `init` a second time returns `AlreadyInitialized`.
 ## Public API
 
 - `init(env, admin, operator) -> Result<(), ContractError>`: initialize contract.
+- `version(env) -> u32`: canonical on-chain version getter.
 - `pause(env, admin) -> Result<(), ContractError>`: pause recording (admin only).
 - `unpause(env, admin) -> Result<(), ContractError>`: unpause (admin only).
 - `set_operator(env, admin, new_operator) -> Result<(), ContractError>`: update operator (admin only).
@@ -74,6 +75,11 @@ Rules:
 
 If `metadata_hash` is provided, the contract verifies it matches the canonical payload and rejects mismatches with `InvalidMetadataHash` (error code 10).
 
+Length behavior:
+- `metadata_hash` is typed as `Option<BytesN<32>>`, so only 32-byte hashes are accepted by the contract interface.
+- Non-32-byte values are rejected at Soroban value decoding/type-conversion boundaries before contract logic executes.
+- `metadata_hash` remains optional (`None` is valid and skips hash verification).
+
 ## Conversion receipts
 
 Conversion receipts (`tx_type: CONVERSION`) record NGN to USDC conversions for full auditability in staking flows. These receipts support:
@@ -113,7 +119,15 @@ The contract exposes the following `ContractError` variants (numeric values show
 
 ## Events
 
-On successful `record_receipt`, the contract emits an event with topic `(transaction_receipt, receipt_recorded, tx_id)` and the `Receipt` payload.
+The contract emits canonical events with deterministic shapes:
+
+- `init`: topic `(transaction_receipt, init)`, data `(admin, operator, version)`
+- `set_operator`: topic `(transaction_receipt, set_operator)`, data `(old_operator, new_operator)`
+- `pause`: topic `(transaction_receipt, pause)`, data `admin`
+- `unpause`: topic `(transaction_receipt, unpause)`, data `admin`
+- `receipt_recorded`: topic `(transaction_receipt, receipt_recorded, tx_id)`, data `Receipt`
+
+Deterministic event vectors are asserted in tests for at least two event types (`init`, `receipt_recorded`) and include explicit topic and payload decoding assertions.
 
 ## Usage examples (testing harness)
 

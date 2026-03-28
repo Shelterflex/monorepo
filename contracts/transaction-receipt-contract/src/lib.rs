@@ -321,6 +321,14 @@ impl TransactionReceiptContract {
         // Initialize paused state to false
         env.storage().instance().set(&StorageKey::Paused, &false);
 
+        env.events().publish(
+            (
+                Symbol::new(&env, "transaction_receipt"),
+                Symbol::new(&env, "init"),
+            ),
+            (admin, operator, 1u32),
+        );
+
         Ok(())
     }
 
@@ -329,6 +337,10 @@ impl TransactionReceiptContract {
             .instance()
             .get::<_, u32>(&StorageKey::ContractVersion)
             .unwrap_or(0u32)
+    }
+
+    pub fn version(env: soroban_sdk::Env) -> u32 {
+        Self::contract_version(env)
     }
 
     /// Pause the contract to prevent receipt recording
@@ -354,6 +366,14 @@ impl TransactionReceiptContract {
 
         // Set paused state to true (idempotent - no error if already paused)
         env.storage().instance().set(&StorageKey::Paused, &true);
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "transaction_receipt"),
+                Symbol::new(&env, "pause"),
+            ),
+            admin,
+        );
 
         Ok(())
     }
@@ -381,6 +401,14 @@ impl TransactionReceiptContract {
 
         // Set paused state to false (idempotent - no error if already unpaused)
         env.storage().instance().set(&StorageKey::Paused, &false);
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "transaction_receipt"),
+                Symbol::new(&env, "unpause"),
+            ),
+            admin,
+        );
 
         Ok(())
     }
@@ -412,9 +440,22 @@ impl TransactionReceiptContract {
         require_admin(&env, &admin)?;
 
         // Update operator address in storage
+        let old_operator: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Operator)
+            .unwrap_or_else(|| panic!("Operator not initialized"));
         env.storage()
             .instance()
             .set(&StorageKey::Operator, &new_operator);
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "transaction_receipt"),
+                Symbol::new(&env, "set_operator"),
+            ),
+            (old_operator, new_operator),
+        );
 
         Ok(())
     }

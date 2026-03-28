@@ -1,0 +1,135 @@
+rules:
+  # SQL Injection Detection
+  - id: sql-injection-string-concat
+    pattern-either:
+      - pattern: $DB.query($QUERY + $VAR)
+      - pattern: $DB.query(`...${$VAR}...`)
+      - pattern: $DB.execute($QUERY + $VAR)
+      - pattern: $DB.execute(`...${$VAR}...`)
+      - pattern: $DB.raw($QUERY + $VAR)
+      - pattern: $DB.raw(`...${$VAR}...`)
+    message: Potential SQL injection vulnerability - avoid string concatenation in queries
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021 - Injection"
+      category: security
+
+  # XSS Vulnerabilities
+  - id: react-dangerously-set-inner-html
+    pattern: dangerouslySetInnerHTML={{ __html: $VAR }}
+    message: Potential XSS vulnerability - dangerouslySetInnerHTML with user input
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021 - Injection"
+      category: security
+
+  # Insecure Cryptography
+  - id: weak-crypto-algorithm
+    pattern-either:
+      - pattern: crypto.createHash('md5')
+      - pattern: crypto.createHash('sha1')
+      - pattern: crypto.createCipher($ALG, ...)
+    message: Weak cryptographic algorithm detected - use SHA-256 or stronger
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-327"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+
+  # Path Traversal
+  - id: path-traversal
+    pattern-either:
+      - pattern: fs.readFile($PATH + $VAR, ...)
+      - pattern: fs.readFile(`...${$VAR}...`, ...)
+      - pattern: fs.writeFile($PATH + $VAR, ...)
+      - pattern: fs.writeFile(`...${$VAR}...`, ...)
+    message: Potential path traversal vulnerability - validate and sanitize file paths
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-22"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+
+  # Command Injection
+  - id: command-injection
+    pattern-either:
+      - pattern: exec($CMD + $VAR)
+      - pattern: exec(`...${$VAR}...`)
+      - pattern: execSync($CMD + $VAR)
+      - pattern: execSync(`...${$VAR}...`)
+      - pattern: spawn($CMD, [..., $VAR, ...])
+    message: Potential command injection vulnerability - validate and sanitize command arguments
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A03:2021 - Injection"
+      category: security
+
+  # Insecure Random
+  - id: insecure-random
+    pattern: Math.random()
+    message: Math.random() is not cryptographically secure - use crypto.randomBytes() for security-sensitive operations
+    severity: WARNING
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-338"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+
+  # Hardcoded Secrets (basic patterns)
+  - id: hardcoded-password
+    pattern-either:
+      - pattern: |
+          const $VAR = "...";
+          ...
+          password: $VAR
+      - pattern: |
+          password: "..."
+    message: Potential hardcoded password detected
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      category: security
+
+  # Insecure HTTP
+  - id: insecure-http-request
+    pattern-either:
+      - pattern: http.request('http://...', ...)
+      - pattern: axios.get('http://...', ...)
+      - pattern: fetch('http://...', ...)
+    message: Insecure HTTP request - use HTTPS for sensitive data
+    severity: WARNING
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-319"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+
+  # JWT Without Verification
+  - id: jwt-decode-without-verify
+    pattern: jwt.decode($TOKEN)
+    message: JWT decoded without verification - use jwt.verify() instead
+    severity: ERROR
+    languages: [typescript, javascript]
+    metadata:
+      cwe: "CWE-347"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+
+  # Disabled Security Features
+  - id: helmet-disabled
+    pattern: helmet({ $KEY: false })
+    message: Security feature disabled in Helmet - review if this is necessary
+    severity: WARNING
+    languages: [typescript, javascript]
+    metadata:
+      category: security

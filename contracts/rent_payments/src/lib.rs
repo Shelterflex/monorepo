@@ -1,6 +1,11 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, vec, Address, BytesN, Env, Symbol, Vec};
+#[cfg(test)]
+mod storage_tests;
+
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, vec, Address, BytesN, Env, Symbol, Vec,
+};
 
 /// Deal ID type - using u64 for simplicity
 pub type DealId = u64;
@@ -48,14 +53,37 @@ pub struct ReceiptPage {
 #[derive(Clone)]
 pub enum DataKey {
     ContractVersion,
+    Paused,
     Admin,
     Deals,
     Receipts(DealId),
     ReceiptCount(DealId),
 }
 
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum ContractError {
+    AlreadyInitialized = 1,
+    InvalidAmount = 2,
+    InvalidLimit = 3,
+}
+
 #[contract]
 pub struct RentPayments;
+
+fn is_paused(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get::<_, bool>(&DataKey::Paused)
+        .unwrap_or(false)
+}
+
+fn require_not_paused(env: &Env) {
+    if is_paused(env) {
+        panic!("contract is paused");
+    }
+}
 
 fn get_admin(env: &Env) -> Address {
     env.storage()
@@ -137,8 +165,8 @@ fn get_tx_id(env: &Env) -> TxId {
     }
 
     // Fill remaining bytes with a pattern for uniqueness
-    for i in 16..32 {
-        bytes[i] = (timestamp as u8).wrapping_add(i as u8);
+    for (i, byte) in bytes.iter_mut().enumerate().skip(16) {
+        *byte = (timestamp as u8).wrapping_add(i as u8);
     }
 
     BytesN::from_array(env, &bytes)
@@ -146,9 +174,9 @@ fn get_tx_id(env: &Env) -> TxId {
 
 #[contractimpl]
 impl RentPayments {
-    pub fn init(env: Env, admin: Address) {
+    pub fn init(env: Env, admin: Address) -> Result<(), ContractError> {
         if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+            return Err(ContractError::AlreadyInitialized);
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
@@ -156,6 +184,7 @@ impl RentPayments {
             .set(&DataKey::ContractVersion, &1u32);
         env.events()
             .publish((Symbol::new(&env, "init"),), (admin, 1u32));
+        Ok(())
     }
 
     pub fn contract_version(env: Env) -> u32 {
@@ -165,13 +194,52 @@ impl RentPayments {
             .unwrap_or(0u32)
     }
 
+    pub fn version(env: Env) -> u32 {
+        Self::contract_version(env)
+    }
+
+    pub fn pause(env: Env) {
+        require_admin(&env);
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (
+                Symbol::new(&env, "rent_payments"),
+                Symbol::new(&env, "paused"),
+            ),
+            (),
+        );
+    }
+
+    pub fn unpause(env: Env) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (
+                Symbol::new(&env, "rent_payments"),
+                Symbol::new(&env, "unpaused"),
+            ),
+            (),
+        );
+    }
+
+    pub fn is_paused(env: Env) -> bool {
+        is_paused(&env)
+    }
+
     /// Create a new receipt for a deal
     /// This function records a monthly payment receipt
-    pub fn create_receipt(env: Env, deal_id: DealId, amount: i128, payer: Address) -> Receipt {
+    pub fn create_receipt(
+        env: Env,
+        deal_id: DealId,
+        amount: i128,
+        payer: Address,
+    ) -> Result<Receipt, ContractError> {
         require_admin(&env);
+        require_not_paused(&env);
 
         if amount <= 0 {
-            panic!("amount must be positive");
+            return Err(ContractError::InvalidAmount);
         }
 
         let receipt_id = increment_receipt_count(&env, deal_id);
@@ -197,7 +265,7 @@ impl RentPayments {
             (receipt_id, amount, payer_clone),
         );
 
-        receipt
+        Ok(receipt)
     }
 
     /// List receipts for a deal with cursor-based pagination
@@ -224,9 +292,9 @@ impl RentPayments {
         deal_id: DealId,
         limit: u32,
         cursor: Option<Cursor>,
-    ) -> ReceiptPage {
+    ) -> Result<ReceiptPage, ContractError> {
         if limit == 0 || limit > 100 {
-            panic!("limit must be between 1 and 100");
+            return Err(ContractError::InvalidLimit);
         }
 
         let receipts = get_receipts(&env, deal_id);
@@ -289,7 +357,7 @@ impl RentPayments {
                 }
             }
             // If no receipt found that is > cursor, we're at the end
-            if start_index == 0 && sorted_receipts.len() > 0 {
+            if start_index == 0 && !sorted_receipts.is_empty() {
                 let first = sorted_receipts.get(0).unwrap();
                 let first_tx_id_array = first.tx_id.to_array();
                 if !(first.timestamp > cursor.timestamp
@@ -319,9 +387,9 @@ impl RentPayments {
 
         // Determine next cursor
         let empty_tx_id = BytesN::from_array(&env, &[0u8; 32]);
-        let (has_next, next_cursor) = if end_index < receipts_len_u32 && page_receipts.len() > 0 {
+        let (has_next, next_cursor) = if end_index < receipts_len_u32 && !page_receipts.is_empty() {
             // There are more receipts, create cursor from the last item in this page
-            let last_index = if page_receipts.len() > 0 {
+            let last_index = if !page_receipts.is_empty() {
                 page_receipts.len() - 1
             } else {
                 0
@@ -355,11 +423,11 @@ impl RentPayments {
             )
         };
 
-        ReceiptPage {
+        Ok(ReceiptPage {
             receipts: page_receipts,
             has_next,
             next_cursor,
-        }
+        })
     }
 
     /// Get the total number of receipts for a deal
@@ -379,7 +447,7 @@ mod test {
     };
 
     fn setup(env: &Env) -> (Address, RentPaymentsClient<'_>, soroban_sdk::Address) {
-        let contract_id = env.register_contract(None, RentPayments);
+        let contract_id = env.register(RentPayments, ());
         // Note: register_contract is deprecated but still works in SDK 22.0.7
         let client = RentPaymentsClient::new(env, &contract_id);
         let admin = Address::generate(env);
@@ -390,7 +458,7 @@ mod test {
     #[test]
     fn init_sets_version_to_one() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentPayments);
+        let contract_id = env.register(RentPayments, ());
         let client = RentPaymentsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         client.init(&admin);
@@ -398,14 +466,25 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "already initialized")]
-    fn init_cannot_be_called_twice() {
+    fn version_matches_contract_version() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentPayments);
+        let contract_id = env.register(RentPayments, ());
         let client = RentPaymentsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         client.init(&admin);
+        assert_eq!(client.version(), 1u32);
+        assert_eq!(client.version(), client.contract_version());
+    }
+
+    #[test]
+    fn init_cannot_be_called_twice() {
+        let env = Env::default();
+        let contract_id = env.register(RentPayments, ());
+        let client = RentPaymentsClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
         client.init(&admin);
+        let err = client.try_init(&admin).unwrap_err().unwrap();
+        assert_eq!(err, ContractError::AlreadyInitialized);
     }
 
     #[test]
@@ -433,7 +512,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (deal_id, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    args: (deal_id, (i * 1000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -459,7 +538,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (deal_id, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    args: (deal_id, (i * 1000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -500,7 +579,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (deal_id, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    args: (deal_id, (i * 1000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -548,7 +627,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (deal_id, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    args: (deal_id, (i * 1000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -634,7 +713,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (deal_id, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    args: (deal_id, (i * 1000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -693,7 +772,7 @@ mod test {
 
         // All tx_ids should be unique
         let mut sorted_tx_ids = all_tx_ids.clone();
-        sorted_tx_ids.sort_by(|a, b| a.to_array().cmp(&b.to_array()));
+        sorted_tx_ids.sort_by_key(|a| a.to_array());
         sorted_tx_ids.dedup();
         assert_eq!(
             sorted_tx_ids.len(),
@@ -703,23 +782,29 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "limit must be between 1 and 100")]
     fn test_list_receipts_by_deal_invalid_limit_zero() {
         let env = Env::default();
         let (_admin, client, _contract_id) = setup(&env);
         let deal_id = 1u64;
 
-        client.list_receipts_by_deal(&deal_id, &0u32, &None);
+        let err = client
+            .try_list_receipts_by_deal(&deal_id, &0u32, &None)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidLimit);
     }
 
     #[test]
-    #[should_panic(expected = "limit must be between 1 and 100")]
     fn test_list_receipts_by_deal_invalid_limit_too_large() {
         let env = Env::default();
         let (_admin, client, _contract_id) = setup(&env);
         let deal_id = 1u64;
 
-        client.list_receipts_by_deal(&deal_id, &101u32, &None);
+        let err = client
+            .try_list_receipts_by_deal(&deal_id, &101u32, &None)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidLimit);
     }
 
     // ============================================================================
@@ -727,7 +812,6 @@ mod test {
     // ============================================================================
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
     fn create_receipt_fails_with_zero_amount() {
         let env = Env::default();
         let (admin, client, contract_id) = setup(&env);
@@ -744,11 +828,14 @@ mod test {
             },
         }]);
 
-        client.create_receipt(&deal_id, &0i128, &payer);
+        let err = client
+            .try_create_receipt(&deal_id, &0i128, &payer)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidAmount);
     }
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
     fn create_receipt_fails_with_negative_amount() {
         let env = Env::default();
         let (admin, client, contract_id) = setup(&env);
@@ -765,7 +852,11 @@ mod test {
             },
         }]);
 
-        client.create_receipt(&deal_id, &-100i128, &payer);
+        let err = client
+            .try_create_receipt(&deal_id, &-100i128, &payer)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidAmount);
     }
 
     #[test]
@@ -873,7 +964,7 @@ mod test {
                 },
             }]);
 
-            let receipt = client.create_receipt(&deal_id, &amount, &payer);
+            let receipt = client.create_receipt(&deal_id, amount, &payer);
             receipt_ids.push(receipt.id);
 
             // Verify state after each creation
@@ -965,7 +1056,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (1u64, (i * 1000) as i128, payer.clone()).into_val(&env),
+                    args: (1u64, (i * 1000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -979,7 +1070,7 @@ mod test {
                 invoke: &MockAuthInvoke {
                     contract: &contract_id,
                     fn_name: "create_receipt",
-                    args: (2u64, (i * 2000) as i128, payer.clone()).into_val(&env),
+                    args: (2u64, (i * 2000), payer.clone()).into_val(&env),
                     sub_invokes: &[],
                 },
             }]);
@@ -993,5 +1084,39 @@ mod test {
         // Verify deal 2 has 3 receipts
         let page2 = client.list_receipts_by_deal(&2u64, &10u32, &None);
         assert_eq!(page2.receipts.len(), 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "contract is paused")]
+    fn test_pause() {
+        let env = Env::default();
+        let (admin, client, contract_id) = setup(&env);
+        let payer = Address::generate(&env);
+
+        // Pause the contract
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "pause",
+                args: ().into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.pause();
+
+        assert!(client.is_paused());
+
+        // Try to create a receipt while paused (should panic)
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "create_receipt",
+                args: (1u64, 1000i128, payer.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.create_receipt(&1u64, &1000, &payer);
     }
 }

@@ -277,6 +277,8 @@ export default function LandlordSettingsPage() {
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
                           className="absolute right-4 top-1/2 -translate-y-1/2"
+                          aria-label={showPassword ? "Hide current password" : "Show current password"}
+                          aria-pressed={showPassword}
                         >
                           {showPassword ? (
                             <EyeOff className="h-5 w-5" />

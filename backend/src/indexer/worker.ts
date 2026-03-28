@@ -61,6 +61,9 @@ export class ReceiptIndexer {
     this.currentBackoffMs = this.config.pollIntervalMs
   }
 
+  private stopPromise: Promise<void> | null = null
+  private resolveStop: (() => void) | null = null
+
   async start(): Promise<void> {
     if (this.running) {
       logger.warn('[Indexer] Already running, ignoring start() call')
@@ -69,6 +72,9 @@ export class ReceiptIndexer {
 
     this.running = true
     this.paused = false
+    this.stopPromise = new Promise(resolve => {
+      this.resolveStop = resolve
+    })
 
     // Load checkpoint from database or use config startLedger
     const checkpoint = await this.repo.getCheckpoint()
@@ -82,77 +88,88 @@ export class ReceiptIndexer {
       failureBehavior: this.failureBehavior,
     })
 
-    while (this.running) {
-      // If paused, wait and check again
-      if (this.paused) {
-        await this.sleep(5000)
-        continue
-      }
-
-      const pollStart = Date.now()
-      this.lastPollTimestamp = new Date().toISOString()
-
-      try {
-        const indexed = await this.poll()
-
-        // Reset backoff on success
-        this.consecutiveFailures = 0
-        this.currentBackoffMs = this.config.pollIntervalMs
-
-        // Log successful poll with metrics
-        logger.info('[Indexer] Poll completed', {
-          receiptsIndexedThisPoll: indexed,
-          totalReceiptsIndexed: this.receiptsIndexed,
-          checkpointLedger: this.lastLedger,
-          latestSeenLedger: this.latestSeenLedger,
-          pollDurationMs: this.lastPollDurationMs,
-        })
-      } catch (err) {
-        this.consecutiveFailures++
-        this.totalFailures++
-
-        const errorMessage = err instanceof Error ? err.message : String(err)
-        logger.error('[Indexer] Poll failed', {
-          consecutiveFailures: this.consecutiveFailures,
-          totalFailures: this.totalFailures,
-          maxConsecutiveFailures: this.maxConsecutiveFailures,
-          error: errorMessage,
-          checkpointLedger: this.lastLedger,
-        }, err)
-
-        // Check if we've exceeded max consecutive failures
-        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-          await this.handleMaxFailures(err)
+    try {
+      while (this.running) {
+        // If paused, wait and check again
+        if (this.paused) {
+          await this.sleep(5000)
+          continue
         }
-      } finally {
-        this.lastPollDurationMs = Date.now() - pollStart
-      }
 
-      // Apply backoff before next poll
-      await this.sleep(this.currentBackoffMs)
+        const pollStart = Date.now()
+        this.lastPollTimestamp = new Date().toISOString()
 
-      // Exponential backoff for next failure (capped at max)
-      if (this.consecutiveFailures > 0) {
-        const jitter = Math.floor(Math.random() * 250)
-        this.currentBackoffMs = Math.min(
-          this.backoffMaxMs,
-          this.backoffBaseMs * Math.pow(2, this.consecutiveFailures - 1) + jitter
-        )
-        logger.warn('[Indexer] Increasing backoff', {
-          nextBackoffMs: this.currentBackoffMs,
-          consecutiveFailures: this.consecutiveFailures,
-        })
+        try {
+          const indexed = await this.poll()
+
+          // Reset backoff on success
+          this.consecutiveFailures = 0
+          this.currentBackoffMs = this.config.pollIntervalMs
+
+          // Log successful poll with metrics
+          logger.info('[Indexer] Poll completed', {
+            receiptsIndexedThisPoll: indexed,
+            totalReceiptsIndexed: this.receiptsIndexed,
+            checkpointLedger: this.lastLedger,
+            latestSeenLedger: this.latestSeenLedger,
+            pollDurationMs: this.lastPollDurationMs,
+          })
+        } catch (err) {
+          this.consecutiveFailures++
+          this.totalFailures++
+
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          logger.error('[Indexer] Poll failed', {
+            consecutiveFailures: this.consecutiveFailures,
+            totalFailures: this.totalFailures,
+            maxConsecutiveFailures: this.maxConsecutiveFailures,
+            error: errorMessage,
+            checkpointLedger: this.lastLedger,
+          }, err)
+
+          // Check if we've exceeded max consecutive failures
+          if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+            await this.handleMaxFailures(err)
+          }
+        } finally {
+          this.lastPollDurationMs = Date.now() - pollStart
+        }
+
+        // Apply backoff before next poll
+        if (this.running) {
+          await this.sleep(this.currentBackoffMs)
+        }
+
+        // Exponential backoff for next failure (capped at max)
+        if (this.consecutiveFailures > 0) {
+          const jitter = Math.floor(Math.random() * 250)
+          this.currentBackoffMs = Math.min(
+            this.backoffMaxMs,
+            this.backoffBaseMs * Math.pow(2, this.consecutiveFailures - 1) + jitter
+          )
+          logger.warn('[Indexer] Increasing backoff', {
+            nextBackoffMs: this.currentBackoffMs,
+            consecutiveFailures: this.consecutiveFailures,
+          })
+        }
       }
+    } finally {
+      this.running = false
+      if (this.resolveStop) {
+        this.resolveStop()
+      }
+      logger.info('[Indexer] Stopped')
     }
-
-    logger.info('[Indexer] Stopped')
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.running) return
     logger.info('[Indexer] Stopping...')
     this.running = false
     this.paused = false
+    if (this.stopPromise) {
+      await this.stopPromise
+    }
   }
 
   pause(): void {

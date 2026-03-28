@@ -1,4 +1,4 @@
-import { apiFetch, apiPost } from './api'
+import { apiGet, apiPost, withQuery } from './apiClient'
 
 export interface OutboxItem {
   id: string
@@ -45,16 +45,12 @@ export async function getOutboxItems(params?: {
   status?: 'pending' | 'sent' | 'failed'
   limit?: number
 }): Promise<OutboxResponse> {
-  const queryParams = new URLSearchParams()
-  if (params?.status) {
-    queryParams.append('status', params.status)
-  }
-  if (params?.limit) {
-    queryParams.append('limit', String(params.limit))
-  }
-
-  const query = queryParams.toString()
-  return apiFetch<OutboxResponse>(`/api/admin/outbox${query ? `?${query}` : ''}`)
+  return apiGet<OutboxResponse>(
+    withQuery('/api/admin/outbox', {
+      status: params?.status,
+      limit: params?.limit,
+    }),
+  )
 }
 
 /**

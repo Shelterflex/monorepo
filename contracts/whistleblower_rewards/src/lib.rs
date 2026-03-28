@@ -308,7 +308,7 @@ mod test {
         Address,
     ) {
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, WhistleblowerRewards);
+        let contract_id = env.register(WhistleblowerRewards, ());
         let client = WhistleblowerRewardsClient::new(env, &contract_id);
 
         let admin = Address::generate(env);
@@ -328,7 +328,7 @@ mod test {
     #[test]
     fn init_sets_fields() {
         let env = Env::default();
-        let (contract_id, client, admin, operator, token_id, _token_admin) = setup(&env);
+        let (contract_id, client, admin, _operator, _token_id, _token_admin) = setup(&env);
 
         assert_eq!(client.contract_version(), 1u32);
 
@@ -630,7 +630,7 @@ mod test {
         assert_eq!(action, Symbol::new(&env, "allocate"));
 
         let sac = token::StellarAssetClient::new(&env, &token_id);
-        let token_client = token::Client::new(&env, &token_id);
+        let _token_client = token::Client::new(&env, &token_id);
         env.mock_auths(&[MockAuth {
             address: &token_admin,
             invoke: &MockAuthInvoke {
