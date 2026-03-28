@@ -89,8 +89,42 @@ describe('OutboxWorker retry/backoff', () => {
     expect(callsBeforeStop).toBeGreaterThan(0)
 
     worker.stop()
-
     await vi.advanceTimersByTimeAsync(400)
     expect(processSpy.mock.calls.length).toBe(callsBeforeStop)
+  })
+
+  it('waits for in-progress operations before resolving stop()', async () => {
+    // This test needs real timers due to Promise/setTimeout interaction
+    vi.useRealTimers()
+    
+    let resolveProcessing: (value: void | PromiseLike<void>) => void = () => {}
+    const processingPromise = new Promise<void>(resolve => {
+      resolveProcessing = resolve
+    })
+
+    const sender = { send: vi.fn().mockResolvedValue(true) } as any
+    const worker = new OutboxWorker(sender)
+    const processSpy = vi.spyOn(worker, 'process').mockReturnValue(processingPromise)
+
+    worker.start(10) // Short interval
+    await new Promise(r => setTimeout(r, 50))
+    expect(processSpy.mock.calls.length).toBeGreaterThanOrEqual(1)
+
+    let stopResolved = false
+    const stopPromise = worker.stop().then(() => {
+      stopResolved = true
+    })
+
+    // Should not be resolved yet because processing is still "running"
+    await new Promise(r => setTimeout(r, 50))
+    expect(stopResolved).toBe(false)
+
+    // Resolve the processing
+    resolveProcessing()
+    await stopPromise
+    expect(stopResolved).toBe(true)
+    
+    // Restore fake timers for other tests
+    vi.useFakeTimers()
   })
 })

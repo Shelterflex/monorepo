@@ -1,4 +1,4 @@
-export { ErrorCode, type ErrorResponse } from './errorCodes.js'
+export { ErrorCode, type ErrorResponse, type ErrorClassification, classifyError, ERROR_CLASSIFICATION } from './errorCodes.js'
 export { AppError } from './AppError.js'
 export {
   notFound,
@@ -7,5 +7,6 @@ export {
   conflict,
   sorobanError,
   internalError,
+  serviceUnavailable,
 } from './factories.js'
 export { formatZodIssues } from './utils.js'

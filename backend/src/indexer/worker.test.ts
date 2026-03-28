@@ -528,5 +528,36 @@ describe('ReceiptIndexer', () => {
       const metrics = indexer.getMetrics()
       expect(metrics.totalFailures).toBeGreaterThanOrEqual(1)
     })
+
+    it('waits for in-progress poll to finish before resolving stop()', async () => {
+      let resolvePoll: (value: number | PromiseLike<number>) => void = () => {}
+      const pollPromise = new Promise<number>(resolve => {
+        resolvePoll = resolve
+      })
+
+      mockAdapter.getReceiptEvents = vi.fn().mockReturnValue(new Promise(r => setTimeout(() => r([]), 10))) // Default
+      const pollSpy = vi.spyOn(indexer as any, 'poll').mockReturnValue(pollPromise)
+
+      const startPromise = indexer.start()
+      
+      // Wait for poll to be called
+      await new Promise(r => setTimeout(r, 50))
+      expect(pollSpy).toHaveBeenCalledTimes(1)
+
+      let stopResolved = false
+      const stopPromise = indexer.stop().then(() => {
+        stopResolved = true
+      })
+
+      // Should not be resolved yet because poll is still "running"
+      await new Promise(r => setTimeout(r, 50))
+      expect(stopResolved).toBe(false)
+
+      // Resolve the poll
+      resolvePoll(0)
+      await stopPromise
+      expect(stopResolved).toBe(true)
+      await startPromise
+    })
   })
 })

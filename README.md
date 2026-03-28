@@ -4,6 +4,8 @@ Shelterflex is an open-source project exploring **rent now, pay later** workflow
 
 **🔥 New Feature: Wallet Authentication** - Users can now connect their Ethereum wallet for secure, self-custody authentication alongside traditional email/OTP login.
 
+**🔒 Security Scanning** - Automated security scanning runs on all pull requests to detect vulnerabilities in dependencies, code, and commits. See [Security Scanning](#security-scanning) for details.
+
 This repository is organized as **three independent projects**:
 
 - `frontend/` - Next.js (React) web app
@@ -128,3 +130,31 @@ Contributions are made via **Fork -> Branch -> Pull Request**.
 If you want a curated list of issues (including good first issues), see [`docs/ISSUES_CATALOG.md`](docs/ISSUES_CATALOG.md).
 
 For monorepo navigation and where to put new code, see [`docs/REPO_STRUCTURE.md`](docs/REPO_STRUCTURE.md).
+
+## Security Scanning
+
+All pull requests are automatically scanned for security vulnerabilities:
+
+- **Dependency Scanning**: Checks npm and cargo dependencies for known CVEs
+- **Static Code Analysis**: Detects security issues like SQL injection, XSS, insecure crypto
+- **Secret Detection**: Scans commits for exposed API keys, passwords, and credentials
+
+### How It Works
+
+1. When you open a PR, the security scanner runs automatically
+2. Results appear as a PR check and comment
+3. Critical or high severity vulnerabilities block the merge
+4. Medium and low severity issues are warnings only
+
+### Local Testing
+
+You can run the security scanner locally before pushing:
+
+```bash
+cd security-scan
+npm install
+npm run build
+npm run scan
+```
+
+See [`security-scan/README.md`](security-scan/README.md) for detailed documentation.

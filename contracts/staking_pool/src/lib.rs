@@ -810,7 +810,7 @@ mod test {
     #[test]
     fn stake_fails_when_paused() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
 
         // Pause the contract
         env.mock_auths(&[MockAuth {
@@ -834,7 +834,7 @@ mod test {
     #[test]
     fn operator_stake_fails_when_paused() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
         let operator = Address::generate(&env);
 
         // Set operator
@@ -893,7 +893,7 @@ mod test {
     #[test]
     fn unstake_fails_when_paused() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
 
         // Pause the contract
         env.mock_auths(&[MockAuth {
@@ -1391,7 +1391,7 @@ mod test {
     #[test]
     fn test_stake_authorization() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
         let operator = Address::generate(&env);
 
         // Set operator - now only operator can authorize stake/unstake
@@ -1429,7 +1429,7 @@ mod test {
     #[test]
     fn test_unstake_authorization() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
         let operator = Address::generate(&env);
 
         // Set operator - now only operator can authorize stake/unstake
@@ -1467,7 +1467,7 @@ mod test {
     #[test]
     fn test_pause_authorization() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, _user, _token_id) = setup_contract(&env);
 
         // Test that pause requires admin authorization
         let non_admin = Address::generate(&env);
@@ -1499,7 +1499,7 @@ mod test {
     #[test]
     fn test_pause_blocks_staking() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
 
         // Pause the contract
         env.mock_auths(&[MockAuth {
@@ -1598,7 +1598,7 @@ mod test {
     #[test]
     fn test_balance_isolation() {
         let env = Env::default();
-        let (contract_id, client, admin, user, token_id) = setup_contract(&env);
+        let (_contract_id, client, _admin, user, _token_id) = setup_contract(&env);
         let user2 = Address::generate(&env);
 
         // Verify initial balances are isolated

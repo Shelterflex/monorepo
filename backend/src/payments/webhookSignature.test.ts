@@ -104,19 +104,19 @@ describe('webhookSignature', () => {
         .update(payload, 'utf8')
         .digest('hex')
 
-      const result = verifyPaystackSignature(payload, validSignature, secret)
+      const result = verifyPaystackSignature(payload, validSignature, [secret])
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
     })
 
     it('returns invalid for wrong signature', () => {
-      const result = verifyPaystackSignature(payload, 'invalid_signature', secret)
+      const result = verifyPaystackSignature(payload, 'invalid_signature', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Invalid Paystack signature')
     })
 
     it('returns invalid for missing signature', () => {
-      const result = verifyPaystackSignature(payload, '', secret)
+      const result = verifyPaystackSignature(payload, '', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Missing x-paystack-signature header')
     })
@@ -128,7 +128,7 @@ describe('webhookSignature', () => {
         .update(payload, 'utf8')
         .digest('hex')
 
-      const result = verifyPaystackSignature(payload, validSignature, '')
+      const result = verifyPaystackSignature(payload, validSignature, [])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Paystack secret not configured')
     })
@@ -144,7 +144,7 @@ describe('webhookSignature', () => {
       // Modify one character - should fail with timing-safe comparison
       const modifiedSignature = validSignature.slice(0, -1) + (validSignature.slice(-1) === 'a' ? 'b' : 'a')
 
-      const result = verifyPaystackSignature(payload, modifiedSignature, secret)
+      const result = verifyPaystackSignature(payload, modifiedSignature, [secret])
       expect(result.valid).toBe(false)
     })
   })
@@ -160,19 +160,19 @@ describe('webhookSignature', () => {
         .update(payload, 'utf8')
         .digest('hex')
 
-      const result = verifyFlutterwaveSignature(payload, validSignature, secret)
+      const result = verifyFlutterwaveSignature(payload, validSignature, [secret])
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
     })
 
     it('returns invalid for wrong signature', () => {
-      const result = verifyFlutterwaveSignature(payload, 'wrong_signature', secret)
+      const result = verifyFlutterwaveSignature(payload, 'wrong_signature', [secret])
       expect(result.valid).toBe(false)
-      expect(result.error).toBe('Invalid Flutterwave signature format')
+      expect(result.error).toBe('Invalid Flutterwave signature')
     })
 
     it('returns invalid for missing signature', () => {
-      const result = verifyFlutterwaveSignature(payload, '', secret)
+      const result = verifyFlutterwaveSignature(payload, '', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Missing verif-hash header')
     })
@@ -184,16 +184,16 @@ describe('webhookSignature', () => {
         .update(payload, 'utf8')
         .digest('hex')
 
-      const result = verifyFlutterwaveSignature(payload, validSignature, '')
+      const result = verifyFlutterwaveSignature(payload, validSignature, [])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Flutterwave secret not configured')
     })
 
     it('returns invalid for signature format errors', () => {
       // Odd-length hex string will cause Buffer error
-      const result = verifyFlutterwaveSignature(payload, 'abc', secret)
+      const result = verifyFlutterwaveSignature(payload, 'abc', [secret])
       expect(result.valid).toBe(false)
-      expect(result.error).toBe('Invalid Flutterwave signature format')
+      expect(result.error).toBe('Invalid Flutterwave signature')
     })
   })
 
@@ -201,25 +201,25 @@ describe('webhookSignature', () => {
     const secret = 'admin_secret_key_12345'
 
     it('returns valid for matching signature', () => {
-      const result = verifyManualAdminSignature(secret, secret)
+      const result = verifyManualAdminSignature(secret, [secret])
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
     })
 
     it('returns invalid for non-matching signature', () => {
-      const result = verifyManualAdminSignature('wrong_secret', secret)
+      const result = verifyManualAdminSignature('wrong_secret', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Invalid admin signature')
     })
 
     it('returns invalid for missing signature', () => {
-      const result = verifyManualAdminSignature('', secret)
+      const result = verifyManualAdminSignature('', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Missing x-admin-signature header')
     })
 
     it('returns invalid for missing secret', () => {
-      const result = verifyManualAdminSignature(secret, '')
+      const result = verifyManualAdminSignature(secret, [])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Manual admin secret not configured')
     })
@@ -237,25 +237,25 @@ describe('webhookSignature', () => {
     const secret = 'webhook_secret_legacy'
 
     it('returns valid for matching signature', () => {
-      const result = verifyLegacySignature(secret, secret)
+      const result = verifyLegacySignature(secret, [secret])
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
     })
 
     it('returns invalid for non-matching signature', () => {
-      const result = verifyLegacySignature('wrong_secret', secret)
+      const result = verifyLegacySignature('wrong_secret', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Invalid webhook signature')
     })
 
     it('returns invalid for missing signature', () => {
-      const result = verifyLegacySignature('', secret)
+      const result = verifyLegacySignature('', [secret])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Missing x-webhook-signature header')
     })
 
     it('returns invalid for missing secret', () => {
-      const result = verifyLegacySignature(secret, '')
+      const result = verifyLegacySignature(secret, [])
       expect(result.valid).toBe(false)
       expect(result.error).toBe('Webhook secret not configured')
     })

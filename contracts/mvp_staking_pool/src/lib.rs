@@ -352,8 +352,8 @@ mod test {
     extern crate std;
 
     use super::{StakingPool, StakingPoolClient};
-    use soroban_sdk::testutils::{Address as _, Events, MockAuth, MockAuthInvoke};
-    use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal, Symbol, TryIntoVal};
+    use soroban_sdk::testutils::{Address as _, MockAuth, MockAuthInvoke};
+    use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal};
 
     fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Address, Address) {
         let contract_id = env.register(StakingPool, ());
@@ -749,7 +749,7 @@ mod test {
     #[test]
     fn multiple_users_can_stake_independently() {
         let env = Env::default();
-        let (contract_id, client, _admin, user1, _token_id) = setup_contract(&env);
+        let (_contract_id, client, _admin, user1, _token_id) = setup_contract(&env);
         let user2 = Address::generate(&env);
 
         // Initial balances should be zero

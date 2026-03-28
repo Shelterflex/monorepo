@@ -20,6 +20,7 @@ describe('POST /api/staking/stake_from_deposit', () => {
   it('stakes using canonical amountUsdc from conversion (idempotent by deposit)', async () => {
     const confirmRes = await request(app)
       .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'test-from-dep-003')
       .send({
         depositId: 'onramp:dep_003',
         userId: 'user_1',

@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js'
 
 export class StakingFinalizer {
   private interval: NodeJS.Timeout | null = null
+  private processingPromise: Promise<void> | null = null
 
   constructor(
     private stakingService: StakingService,
@@ -13,15 +14,23 @@ export class StakingFinalizer {
   start() {
     if (this.interval) return
     logger.info('Starting StakingFinalizer job', { pollIntervalMs: this.pollIntervalMs })
-    this.interval = setInterval(() => this.poll(), this.pollIntervalMs)
+    this.interval = setInterval(() => {
+      this.processingPromise = this.poll().finally(() => {
+        this.processingPromise = null
+      })
+    }, this.pollIntervalMs)
   }
 
-  stop() {
+  async stop() {
     if (this.interval) {
       clearInterval(this.interval)
       this.interval = null
-      logger.info('Stopped StakingFinalizer job')
     }
+    if (this.processingPromise) {
+      logger.info('StakingFinalizer waiting for in-progress task to complete...')
+      await this.processingPromise
+    }
+    logger.info('Stopped StakingFinalizer job')
   }
 
   async poll() {

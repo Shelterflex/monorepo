@@ -36,6 +36,7 @@ describe('POST /api/staking/finalize', () => {
   it('finalizes staking from a completed conversion (idempotent by conversionId)', async () => {
     const confirmRes = await request(app)
       .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'test-finalize-010')
       .send({
         depositId: 'onramp:dep_010',
         userId: 'user_1',

@@ -21,3 +21,6 @@ export const sorobanError = (message: string, details?: Record<string, unknown>)
 
 export const internalError = (message = 'An unexpected error occurred') =>
   new AppError(ErrorCode.INTERNAL_ERROR, 500, message)
+
+export const serviceUnavailable = (message = 'Service temporarily unavailable') =>
+  new AppError(ErrorCode.SERVICE_UNAVAILABLE, 503, message)

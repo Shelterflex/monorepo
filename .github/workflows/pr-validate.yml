@@ -33,7 +33,8 @@ jobs:
           # Ensure required sections are present (basic check)
           required_sections=("## Summary" "## Changes" "## Checklist")
           for section in "${required_sections[@]}"; do
-            if [[ ! "$PR_BODY" =~ "$section" ]]; then
+            # Use unquoted section for regex match
+            if [[ ! "$PR_BODY" =~ $section ]]; then
               echo "::error::Missing required section: $section. Please use the PR template."
               exit 1
             fi

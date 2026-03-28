@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { getRiskState } from "@/lib/risk";
+import { useEffect } from "react";
+import useRiskStore from "@/store/useRiskStore";
 
 interface UseRiskStateResult {
   isFrozen: boolean;
@@ -13,47 +13,26 @@ interface UseRiskStateResult {
 }
 
 export function useRiskState(): UseRiskStateResult {
-  const [isFrozen, setIsFrozen] = useState(false);
-  const [freezeReason, setFreezeReason] = useState<string | null>(null);
-  const [deficitNgn, setDeficitNgn] = useState(0);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    const risk = await getRiskState();
-    setIsFrozen(risk.isFrozen);
-    setFreezeReason(risk.freezeReason ?? null);
-    setDeficitNgn(risk.deficitNgn);
-    setUpdatedAt(risk.updatedAt);
-  }, []);
+  const { 
+    isFrozen, 
+    freezeReason, 
+    deficitNgn, 
+    updatedAt, 
+    isLoading, 
+    fetchRiskState 
+  } = useRiskStore();
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function fetchRiskState() {
-      try {
-        const risk = await getRiskState();
-        if (!cancelled) {
-          setIsFrozen(risk.isFrozen);
-          setFreezeReason(risk.freezeReason ?? null);
-          setDeficitNgn(risk.deficitNgn);
-          setUpdatedAt(risk.updatedAt);
-        }
-      } catch (error) {
-        console.error("Failed to fetch risk state", error);
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
+    // Only fetch if we don't have data yet or if we want to refresh on mount
     fetchRiskState();
+  }, [fetchRiskState]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return { isFrozen, freezeReason, deficitNgn, updatedAt, isLoading, refresh };
+  return { 
+    isFrozen, 
+    freezeReason, 
+    deficitNgn, 
+    updatedAt, 
+    isLoading, 
+    refresh: fetchRiskState 
+  };
 }
