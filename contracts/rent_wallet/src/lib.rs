@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod validation;
+pub mod upgrade_safety;
 
 #[cfg(test)]
 mod formal_properties;
@@ -246,6 +247,120 @@ impl RentWallet {
 
     pub fn is_paused(env: Env) -> bool {
         get_paused_state(&env)
+    }
+
+    /// Prepares contract for upgrade by validating state and creating backups
+    ///
+    /// This function MUST be called before upgrading the contract code.
+    /// It validates that:
+    /// - Admin authorization is correct
+    /// - Current state is consistent
+    /// - Target version is reachable (sequential upgrade)
+    ///
+    /// Upon success, it backs up critical state for potential rollback.
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `admin` - The admin address authorizing the upgrade
+    /// * `target_version` - The version to upgrade to
+    ///
+    /// # Returns
+    /// Result indicating success or error
+    pub fn prepare_upgrade(
+        env: Env,
+        admin: Address,
+        target_version: u32,
+    ) -> Result<(), ContractError> {
+        // Validate admin authorization
+        require_admin(&env, &admin)?;
+
+        // Validate version compatibility
+        upgrade_safety::validate_version_compatibility(&env, target_version)?;
+
+        // Validate current state is safe to upgrade
+        upgrade_safety::validate_state_pre_upgrade(&env, &admin)?;
+
+        // Emit upgrade started event
+        let current_version = Self::contract_version(env.clone());
+        upgrade_safety::emit_upgrade_event(&env, current_version, target_version, "started");
+
+        // Backup state for potential rollback
+        upgrade_safety::backup_state_for_upgrade(&env)?;
+
+        Ok(())
+    }
+
+    /// Verifies that upgrade completed successfully
+    ///
+    /// This function MUST be called after upgrading the contract code.
+    /// It validates that the new state is consistent and hasn't been corrupted.
+    /// Should be called in a fresh invocation to the upgraded contract.
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `admin` - The admin address authorizing the upgrade verification
+    ///
+    /// # Returns
+    /// Result with upgrade validation details on success
+    pub fn verify_upgrade(env: Env, admin: Address) -> Result<i32, ContractError> {
+        // Validate admin authorization
+        require_admin(&env, &admin)?;
+
+        // Validate post-upgrade state
+        let validation = upgrade_safety::validate_state_post_upgrade(&env)?;
+
+        if !validation.is_valid {
+            return Err(ContractError::NotAuthorized);
+        }
+
+        // Emit upgrade completed event
+        upgrade_safety::emit_upgrade_event(
+            &env,
+            validation.previous_version,
+            validation.current_version,
+            "completed",
+        );
+
+        // Clean up upgrade state
+        upgrade_safety::cleanup_upgrade_state(&env)?;
+
+        Ok(validation.current_version as i32)
+    }
+
+    /// Rolls back contract to previous version state
+    ///
+    /// This function can be called if the upgrade fails or verification shows issues.
+    /// It restores the contract to the exact state before the upgrade began.
+    ///
+    /// IMPORTANT: This should only be called immediately after detecting an upgrade failure,
+    /// before any new state changes. After rollback, the contract code must also be
+    /// reverted to the previous version.
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `admin` - The admin address authorizing the rollback
+    ///
+    /// # Returns
+    /// Result indicating success or error
+    pub fn rollback_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        // Validate admin authorization
+        require_admin(&env, &admin)?;
+
+        let current_version = Self::contract_version(env.clone());
+
+        // Perform rollback
+        upgrade_safety::rollback_upgrade(&env)?;
+
+        // Emit rollback event
+        let previous_version = env
+            .storage()
+            .persistent()
+            .get::<_, u32>(&upgrade_safety::upgrade_prev_version_key(&env))
+            .unwrap_or(0);
+
+        upgrade_safety::emit_upgrade_event(&env, current_version, previous_version, "rolled_back");
+
+        Ok(())
     }
 }
 
@@ -1376,5 +1491,234 @@ mod test {
         }]);
         client.try_pause(&admin).unwrap().unwrap();
         assert!(client.is_paused());
+    }
+
+    // ============================================================================
+    // Upgrade Safety Tests
+    // ============================================================================
+
+    #[test]
+    fn prepare_upgrade_with_valid_admin_succeeds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (admin.clone(), 2u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let result = client.try_prepare_upgrade(&admin, &2u32);
+        assert!(result.is_ok(), "prepare_upgrade should succeed with valid admin");
+    }
+
+    #[test]
+    fn prepare_upgrade_with_invalid_admin_fails() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (non_admin.clone(), 2u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let result = client.try_prepare_upgrade(&non_admin, &2u32);
+        assert!(result.is_err(), "prepare_upgrade should fail with invalid admin");
+    }
+
+    #[test]
+    fn prepare_upgrade_to_non_sequential_version_fails() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (admin.clone(), 3u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let result = client.try_prepare_upgrade(&admin, &3u32);
+        assert!(
+            result.is_err(),
+            "prepare_upgrade should fail for non-sequential versions"
+        );
+    }
+
+    #[test]
+    fn verify_upgrade_with_same_version_fails() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "verify_upgrade",
+                args: (admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let result = client.try_verify_upgrade(&admin);
+        assert!(
+            result.is_err(),
+            "verify_upgrade should fail if version wasn't incremented"
+        );
+    }
+
+    #[test]
+    fn rollback_upgrade_with_valid_admin_succeeds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+
+        // First prepare upgrade
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (admin.clone(), 2u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.try_prepare_upgrade(&admin, &2u32).unwrap().unwrap();
+
+        // Now rollback
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "rollback_upgrade",
+                args: (admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let result = client.try_rollback_upgrade(&admin);
+        assert!(result.is_ok(), "rollback_upgrade should succeed with valid admin");
+    }
+
+    #[test]
+    fn rollback_upgrade_with_invalid_admin_fails() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, non_admin) = setup(&env);
+
+        // First prepare upgrade
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (admin.clone(), 2u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.try_prepare_upgrade(&admin, &2u32).unwrap().unwrap();
+
+        // Try rollback with non-admin
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "rollback_upgrade",
+                args: (non_admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let result = client.try_rollback_upgrade(&non_admin);
+        assert!(result.is_err(), "rollback_upgrade should fail with invalid admin");
+    }
+
+    #[test]
+    fn prepare_upgrade_emits_event() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (admin.clone(), 2u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.try_prepare_upgrade(&admin, &2u32).unwrap().unwrap();
+
+        let events = env.events().all();
+        let upgrade_events: std::vec::Vec<_> = events
+            .iter()
+            .filter(|(topics, _)| {
+                topics.len() >= 2
+                    && topics
+                        .get(1)
+                        .map(|t| {
+                            if let soroban_sdk::Val::Symbol(s) = t {
+                                s.to_string() == "upgrade"
+                            } else {
+                                false
+                            }
+                        })
+                        .unwrap_or(false)
+            })
+            .collect();
+
+        assert!(
+            !upgrade_events.is_empty(),
+            "prepare_upgrade should emit an upgrade event"
+        );
+    }
+
+    #[test]
+    fn prepare_upgrade_backs_up_paused_state() {
+        let env = Env::default();
+        let (contract_id, client, admin, _, _) = setup(&env);
+
+        // Pause the contract
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "pause",
+                args: (admin.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.try_pause(&admin).unwrap().unwrap();
+        assert!(client.is_paused());
+
+        // Prepare upgrade
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "prepare_upgrade",
+                args: (admin.clone(), 2u32).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.try_prepare_upgrade(&admin, &2u32).unwrap().unwrap();
+
+        // Verify backup was created (this is internal, but we verify the operation succeeds)
+        assert_eq!(client.contract_version(), 1u32, "Version should still be 1 after backup");
     }
 }
