@@ -50,6 +50,7 @@ import { OutboxSender } from "./outbox/sender.js"
 import { OutboxWorker } from "./outbox/worker.js"
 import { initializeAppSecretRotation, secretRotationMiddleware, createSecretRotationRouter } from "./middleware/secretRotation.js"
 import { getSecretRotationService } from "./services/secretRotationService.js"
+import migrationGuideRouter from "./routes/migrationGuide.js"
 
 
 export function createApp() {
@@ -268,6 +269,7 @@ export function createApp() {
   app.use('/api/staking', createStakingRouter(sorobanAdapter, walletService, linkedAddressStore, ngnWalletService, conversionService, stakingService))
   app.use('/api/webhooks', createWebhooksRouter(ngnWalletService))
   app.use('/api/deposits', createDepositsRouter(conversionService))
+  app.use('/api', migrationGuideRouter)
 
 
 

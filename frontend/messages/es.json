@@ -1,0 +1,101 @@
+{
+  "common": {
+    "welcome": "Bienvenido",
+    "login": "Iniciar sesión",
+    "signup": "Registrarse",
+    "logout": "Cerrar sesión",
+    "submit": "Enviar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "search": "Buscar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "close": "Cerrar",
+    "confirm": "Confirmar"
+  },
+  "navigation": {
+    "home": "Inicio",
+    "properties": "Propiedades",
+    "dashboard": "Panel",
+    "wallet": "Cartera",
+    "staking": "Staking",
+    "messages": "Mensajes",
+    "about": "Acerca de",
+    "contact": "Contacto",
+    "landlords": "Propietarios",
+    "calculator": "Calculadora"
+  },
+  "auth": {
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "noAccount": "¿No tienes una cuenta?",
+    "hasAccount": "¿Ya tienes una cuenta?",
+    "signInButton": "Iniciar sesión",
+    "signUpButton": "Registrarse",
+    "verifyOtp": "Verificar OTP",
+    "otpSent": "OTP enviado a tu correo",
+    "enterOtp": "Ingresa el código OTP"
+  },
+  "wallet": {
+    "balance": "Saldo",
+    "deposit": "Depositar",
+    "withdraw": "Retirar",
+    "transaction": "Transacción",
+    "transactionHistory": "Historial de transacciones",
+    "amount": "Cantidad",
+    "address": "Dirección",
+    "confirmTransaction": "Confirmar transacción"
+  },
+  "staking": {
+    "stake": "Apostar",
+    "unstake": "Desapostar",
+    "claim": "Reclamar recompensas",
+    "stakedAmount": "Cantidad apostada",
+    "rewards": "Recompensas",
+    "apy": "APY",
+    "totalStaked": "Total apostado"
+  },
+  "properties": {
+    "title": "Propiedades",
+    "search": "Buscar propiedades",
+    "location": "Ubicación",
+    "price": "Precio",
+    "bedrooms": "Habitaciones",
+    "bathrooms": "Baños",
+    "viewDetails": "Ver detalles"
+  },
+  "dashboard": {
+    "overview": "Resumen",
+    "recentActivity": "Actividad reciente",
+    "statistics": "Estadísticas",
+    "tenant": "Panel de inquilino",
+    "landlord": "Panel de propietario",
+    "agent": "Panel de agente"
+  },
+  "currency": {
+    "ngn": "NGN",
+    "usd": "USD",
+    "xlm": "XLM"
+  },
+  "date": {
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "tomorrow": "Mañana",
+    "thisWeek": "Esta semana",
+    "thisMonth": "Este mes"
+  },
+  "errors": {
+    "generic": "Algo salió mal",
+    "networkError": "Error de red. Por favor verifica tu conexión.",
+    "unauthorized": "Acceso no autorizado",
+    "notFound": "No encontrado",
+    "validationError": "Error de validación"
+  }
+}

@@ -6,12 +6,11 @@
  */
 
 import { Request, Response, NextFunction, Router } from 'express';
+import { logger } from '../utils/logger.js';
 import { getSecretRotationService, SecretConfig } from '../services/secretRotationService.js';
-import { createLogger } from './logger.js';
 import { AppError } from '../errors/AppError.js';
 import { ErrorCode } from '../errors/errorCodes.js';
 
-const logger = createLogger();
 
 /**
  * Middleware to attach secret rotation service to request

@@ -1,20 +1,24 @@
+node_modules/
 .DS_Store
 
 # Frontend
-frontend/node_modules
 frontend/.next
 frontend/out
 frontend/.env
 frontend/.env.*
 
 # Backend
-backend/node_modules
 backend/dist
 backend/.env
 
 # Contracts
 contracts/target
 contracts/.soroban
+
+# Build & Cache
+dist/
+.npm
+.eslintcache
 
 .kiro/
 issue.md

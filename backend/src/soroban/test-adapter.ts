@@ -91,6 +91,7 @@ export class TestSorobanAdapter extends StubSorobanAdapter {
    * Resets all test state for cleanup between test cases.
    */
   reset(): void {
+    super._testOnlyReset()
     this.recordedReceipts = []
     this.shouldFailCount = 0
     this.shouldSimulateDuplicate = false

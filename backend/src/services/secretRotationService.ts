@@ -9,11 +9,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { createLogger } from '../middleware/logger.js';
+import { logger } from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
-
-const logger = createLogger();
 
 export interface SecretVersion {
   value: string;
@@ -61,7 +59,7 @@ export class SecretRotationService extends EventEmitter {
    */
   registerSecret(config: SecretConfig): void {
     this.secretConfigs.set(config.name, config);
-    
+
     // Initialize with current environment value
     const currentValue = process.env[config.envVar];
     if (currentValue) {
@@ -133,7 +131,7 @@ export class SecretRotationService extends EventEmitter {
     try {
       // Get existing versions
       const versions = this.secrets.get(name) || [];
-      
+
       // Mark old versions for expiration
       const now = new Date();
       const expiresAt = new Date(now.getTime() + gracePeriodMs);
@@ -171,7 +169,7 @@ export class SecretRotationService extends EventEmitter {
       return true;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to rotate secret ${name}:`, errorMsg);
+      logger.error(`Failed to rotate secret ${name}:`, {}, error);
       this.logRotationEvent(name, oldVersion, newVersion, false, errorMsg);
       return false;
     }
@@ -185,7 +183,7 @@ export class SecretRotationService extends EventEmitter {
     operation: (secret: string) => Promise<T>
   ): Promise<T> {
     const validVersions = this.getValidSecretVersions(name);
-    
+
     if (validVersions.length === 0) {
       throw new Error(`No valid versions available for secret: ${name}`);
     }
@@ -227,7 +225,7 @@ export class SecretRotationService extends EventEmitter {
     }
 
     logger.info(`Starting secret watcher (interval: ${this.watchIntervalMs}ms)`);
-    
+
     this.watchInterval = setInterval(() => {
       this.checkForSecretChanges();
     }, this.watchIntervalMs);
@@ -324,7 +322,7 @@ export class SecretRotationService extends EventEmitter {
       const logEntry = JSON.stringify(event) + '\n';
       fs.appendFileSync(logFile, logEntry);
     } catch (error) {
-      logger.error('Failed to persist audit log:', error);
+      logger.error('Failed to persist audit log:', {}, error);
     }
   }
 
@@ -349,8 +347,8 @@ export class SecretRotationService extends EventEmitter {
       const activeVersion = this.activeVersions.get(name) || 'none';
       const validVersions = this.getValidSecretVersions(name);
       const versions = this.secrets.get(name) || [];
-      const lastRotation = versions.length > 0 
-        ? versions[versions.length - 1].activatedAt 
+      const lastRotation = versions.length > 0
+        ? versions[versions.length - 1].activatedAt
         : undefined;
 
       status[name] = {
@@ -384,7 +382,7 @@ export function getSecretRotationService(): SecretRotationService {
 
 export function initializeSecretRotation(configs: SecretConfig[]): SecretRotationService {
   const service = getSecretRotationService();
-  
+
   configs.forEach(config => service.registerSecret(config));
   service.startWatching();
 

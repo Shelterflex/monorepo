@@ -2,6 +2,9 @@
 
 extern crate alloc;
 
+#[cfg(test)]
+mod stress_tests;
+
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec as StdVec;

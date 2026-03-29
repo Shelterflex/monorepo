@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { 
-  PostgresUserRepository, 
-  PostgresSessionRepository, 
-  PostgresOtpChallengeRepository, 
+import {
+  PostgresUserRepository,
+  PostgresSessionRepository,
+  PostgresOtpChallengeRepository,
   PostgresWalletChallengeRepository,
   type User,
   type OtpChallenge,
@@ -37,7 +37,7 @@ class UserStore {
       return user
     } catch (error) {
       console.warn('Postgres user creation failed, using fallback cache:', error)
-      
+
       const existing = this.fallbackCache.get(email)
       if (existing) return existing
 
@@ -48,6 +48,8 @@ class UserStore {
         createdAt: now,
         name: email.split('@')[0] ?? email,
         role: 'tenant',
+        tier: 'free',
+        planQuota: 100
       }
 
       this.fallbackCache.set(email, user)

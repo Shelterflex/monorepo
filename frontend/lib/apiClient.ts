@@ -3,41 +3,98 @@
  *
  * All fetch logic flows through this module so that auth headers, error
  * handling, and base URL resolution happen in exactly one place.
+ *
+ * Features:
+ * - Automatic retry with exponential backoff for transient failures
+ * - User-friendly error messages
+ * - Request correlation IDs
  */
 
 import { ApiError, apiFetch } from "./api";
+import { retryWithBackoff, type RetryOptions } from "./retryLogic";
 
 export { ApiError, isAccountFrozenError, ACCOUNT_FROZEN_MESSAGE } from "./api";
 
-// ── HTTP helpers ─────────────────────────────────────────────────────────────
+// Default retry options for API calls
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+  retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+  onRetry: (attempt, error) => {
+    console.warn(
+      `API call failed, retrying (attempt ${attempt}):`,
+      error.message,
+    );
+  },
+};
 
-export async function apiGet<T>(path: string): Promise<T> {
-  return apiFetch<T>(path, { method: "GET" });
-}
+// ── HTTP helpers with retry logic ────────────────────────────────────────────
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  return apiFetch<T>(path, {
-    method: "POST",
-    body: JSON.stringify(body),
+export async function apiGet<T>(
+  path: string,
+  retryOptions?: RetryOptions,
+): Promise<T> {
+  return retryWithBackoff(() => apiFetch<T>(path, { method: "GET" }), {
+    ...DEFAULT_RETRY_OPTIONS,
+    ...retryOptions,
   });
 }
 
-export async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  return apiFetch<T>(path, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
+export async function apiPost<T>(
+  path: string,
+  body: unknown,
+  retryOptions?: RetryOptions,
+): Promise<T> {
+  return retryWithBackoff(
+    () =>
+      apiFetch<T>(path, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    { ...DEFAULT_RETRY_OPTIONS, ...retryOptions },
+  );
 }
 
-export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  return apiFetch<T>(path, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+export async function apiPut<T>(
+  path: string,
+  body: unknown,
+  retryOptions?: RetryOptions,
+): Promise<T> {
+  return retryWithBackoff(
+    () =>
+      apiFetch<T>(path, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    { ...DEFAULT_RETRY_OPTIONS, ...retryOptions },
+  );
 }
 
-export async function apiDelete<T>(path: string): Promise<T> {
-  return apiFetch<T>(path, { method: "DELETE" });
+export async function apiPatch<T>(
+  path: string,
+  body: unknown,
+  retryOptions?: RetryOptions,
+): Promise<T> {
+  return retryWithBackoff(
+    () =>
+      apiFetch<T>(path, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    { ...DEFAULT_RETRY_OPTIONS, ...retryOptions },
+  );
+}
+
+export async function apiDelete<T>(
+  path: string,
+  retryOptions?: RetryOptions,
+): Promise<T> {
+  return retryWithBackoff(() => apiFetch<T>(path, { method: "DELETE" }), {
+    ...DEFAULT_RETRY_OPTIONS,
+    ...retryOptions,
+  });
 }
 
 // ── Query string helper ──────────────────────────────────────────────────────

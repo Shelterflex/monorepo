@@ -7,9 +7,13 @@ export const logger = <T>(
 ): StateCreator<T> => (set, get, api) =>
   config(
     (args) => {
-      console.log(`  [Zustand Store: ${name}] applying:`, args);
+      if (process.env.NODE_ENV === "development") {
+        console.log(`  [Zustand Store: ${name}] applying:`, args);
+      }
       set(args);
-      console.log(`  [Zustand Store: ${name}] new state:`, get());
+      if (process.env.NODE_ENV === "development") {
+        console.log(`  [Zustand Store: ${name}] new state:`, get());
+      }
     },
     get,
     api
@@ -21,6 +25,13 @@ export const isBrowser = typeof window !== "undefined";
 // Common persistence configuration
 export const defaultPersistConfig = (name: string) => ({
   name: `sheltaflex-${name}-storage`,
-  getStorage: () => localStorage, // Can be swapped for sessionStorage or indexedDB
-  version: 1, // Current version for migrations
+  getStorage: () => localStorage,
+  version: 1,
 });
+
+// Re-export all stores for convenient single-import access
+export { default as useAuthStore } from "./useAuthStore";
+export { default as useRiskStore } from "./useRiskStore";
+export { default as usePreferencesStore } from "./usePreferencesStore";
+export { default as useCartStore } from "./useCartStore";
+export { default as useSessionStore } from "./useSessionStore";

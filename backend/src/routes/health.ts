@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express"
 import { env } from "../schemas/env.js"
 import { getPoolMetrics } from "../db.js"
+import { getMetricsSnapshot } from "../utils/appMetrics.js"
 
 const router = Router()
 
@@ -27,6 +28,24 @@ router.get("/details", (req: Request, res: Response) => {
     ...(poolMetrics ? { databasePool: poolMetrics } : {}),
     requestId: req.requestId,
   })
+})
+
+/**
+ * @openapi
+ * /health/metrics:
+ *   get:
+ *     summary: Application metrics snapshot
+ *     tags: [Health]
+ *     description: >
+ *       Returns per-route request counts, error rates, latency histograms
+ *       (p50/p95/p99), business KPIs, and alert levels. Suitable for
+ *       scraping by Prometheus or forwarding to a Grafana data source.
+ *     responses:
+ *       200:
+ *         description: Metrics snapshot
+ */
+router.get("/metrics", (_req: Request, res: Response) => {
+  res.json(getMetricsSnapshot())
 })
 
 export default router

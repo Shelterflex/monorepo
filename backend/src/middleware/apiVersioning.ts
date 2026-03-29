@@ -3,21 +3,22 @@ import type { Request, Response, NextFunction } from 'express'
 /**
  * Supported API versions.
  * Add new versions to this array as the API evolves.
+ * Versions are resolved in order: URL path > Accept-Version header > default.
  */
-export const SUPPORTED_VERSIONS = ['v1'] as const
+export const SUPPORTED_VERSIONS = ['v1', 'v2'] as const
 export type ApiVersion = typeof SUPPORTED_VERSIONS[number]
 
 /**
  * The current (latest) API version.
  */
-export const CURRENT_VERSION: ApiVersion = 'v1'
+export const CURRENT_VERSION: ApiVersion = 'v2'
 
 /**
  * Deprecated versions that still work but emit warnings.
  * Move versions here before full removal to give clients a migration window.
  */
 export const DEPRECATED_VERSIONS: ReadonlySet<string> = new Set([
-  // Example: 'v0' — add versions here when they enter deprecation
+  'v1', // v1 deprecated — migrate to v2 before 2027-01-01
 ])
 
 /**
@@ -25,7 +26,18 @@ export const DEPRECATED_VERSIONS: ReadonlySet<string> = new Set([
  * After this date the version may be removed entirely.
  */
 export const SUNSET_DATES: Record<string, string> = {
-  // Example: v0: '2026-09-01'
+  v1: '2027-01-01',
+}
+
+/**
+ * Breaking changes per version — used to generate migration guides.
+ */
+export const VERSION_CHANGELOG: Record<string, string[]> = {
+  v2: [
+    'Pagination shape changed: { data, meta } instead of flat array',
+    'Error responses now include a `classification` field',
+    'Timestamps are ISO 8601 strings (previously Unix ms integers)',
+  ],
 }
 
 declare global {
@@ -34,6 +46,22 @@ declare global {
       apiVersion: ApiVersion
     }
   }
+}
+
+/**
+ * Returns the migration guide for a deprecated version as plain text.
+ */
+export function getMigrationGuide(fromVersion: string): string {
+  const changes = VERSION_CHANGELOG[CURRENT_VERSION] ?? []
+  return [
+    `Migration guide: ${fromVersion} → ${CURRENT_VERSION}`,
+    '',
+    'Breaking changes:',
+    ...changes.map((c) => `  - ${c}`),
+    '',
+    `Sunset date for ${fromVersion}: ${SUNSET_DATES[fromVersion] ?? 'TBD'}`,
+    `Docs: /api/${CURRENT_VERSION}/docs`,
+  ].join('\n')
 }
 
 /**

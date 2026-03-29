@@ -66,10 +66,11 @@ export function WithdrawalHistory({ className }: WithdrawalHistoryProps) {
     }
   }, []);
 
-  // Initial fetch
-  useState(() => {
+  // Initial fetch using useEffect (not useState initializer)
+  useEffect(() => {
     fetchWithdrawalHistory();
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className={className}>
