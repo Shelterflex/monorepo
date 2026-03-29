@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { type ConversionRecord } from './conversion.js'
 import { getPool } from '../db.js'
+import { conversionCache } from '../utils/cache.js'
 
 function mapRow(row: any): ConversionRecord {
   return {
@@ -76,6 +77,9 @@ class ConversionStore {
   }
 
   async getByConversionId(conversionId: string): Promise<ConversionRecord | null> {
+    const cached = await conversionCache.get(`id:${conversionId}`)
+    if (cached) return cached
+
     const pool = await this.pool()
     if (!pool) {
       return this.byId.get(conversionId) ?? null
@@ -83,10 +87,18 @@ class ConversionStore {
 
     const { rows } = await pool.query(`SELECT * FROM conversions WHERE conversion_id=$1`, [conversionId])
     const row = rows[0]
-    return row ? mapRow(row) : null
+    if (!row) return null
+
+    const record = mapRow(row)
+    await conversionCache.set(`id:${conversionId}`, record)
+    await conversionCache.set(`deposit:${record.depositId}`, record)
+    return record
   }
 
   async getByDepositId(depositId: string): Promise<ConversionRecord | null> {
+    const cached = await conversionCache.get(`deposit:${depositId}`)
+    if (cached) return cached
+
     const pool = await this.pool()
     if (!pool) {
       const id = this.byDepositId.get(depositId)
@@ -99,7 +111,12 @@ class ConversionStore {
       [depositId],
     )
     const row = rows[0]
-    return row ? mapRow(row) : null
+    if (!row) return null
+
+    const record = mapRow(row)
+    await conversionCache.set(`id:${record.conversionId}`, record)
+    await conversionCache.set(`deposit:${depositId}`, record)
+    return record
   }
 
   async createPending(input: {

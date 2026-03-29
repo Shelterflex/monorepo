@@ -1,0 +1,101 @@
+{
+  "common": {
+    "welcome": "مرحبا",
+    "login": "تسجيل الدخول",
+    "signup": "التسجيل",
+    "logout": "تسجيل الخروج",
+    "submit": "إرسال",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "search": "بحث",
+    "loading": "جاري التحميل...",
+    "error": "خطأ",
+    "success": "نجح",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق",
+    "close": "إغلاق",
+    "confirm": "تأكيد"
+  },
+  "navigation": {
+    "home": "الرئيسية",
+    "properties": "العقارات",
+    "dashboard": "لوحة التحكم",
+    "wallet": "المحفظة",
+    "staking": "التخزين",
+    "messages": "الرسائل",
+    "about": "حول",
+    "contact": "اتصل بنا",
+    "landlords": "الملاك",
+    "calculator": "الحاسبة"
+  },
+  "auth": {
+    "emailLabel": "البريد الإلكتروني",
+    "passwordLabel": "كلمة المرور",
+    "forgotPassword": "نسيت كلمة المرور؟",
+    "noAccount": "ليس لديك حساب؟",
+    "hasAccount": "هل لديك حساب بالفعل؟",
+    "signInButton": "تسجيل الدخول",
+    "signUpButton": "التسجيل",
+    "verifyOtp": "التحقق من OTP",
+    "otpSent": "تم إرسال OTP إلى بريدك الإلكتروني",
+    "enterOtp": "أدخل رمز OTP"
+  },
+  "wallet": {
+    "balance": "الرصيد",
+    "deposit": "إيداع",
+    "withdraw": "سحب",
+    "transaction": "معاملة",
+    "transactionHistory": "سجل المعاملات",
+    "amount": "المبلغ",
+    "address": "العنوان",
+    "confirmTransaction": "تأكيد المعاملة"
+  },
+  "staking": {
+    "stake": "تخزين",
+    "unstake": "إلغاء التخزين",
+    "claim": "المطالبة بالمكافآت",
+    "stakedAmount": "المبلغ المخزن",
+    "rewards": "المكافآت",
+    "apy": "العائد السنوي",
+    "totalStaked": "إجمالي المخزن"
+  },
+  "properties": {
+    "title": "العقارات",
+    "search": "البحث عن عقارات",
+    "location": "الموقع",
+    "price": "السعر",
+    "bedrooms": "غرف النوم",
+    "bathrooms": "الحمامات",
+    "viewDetails": "عرض التفاصيل"
+  },
+  "dashboard": {
+    "overview": "نظرة عامة",
+    "recentActivity": "النشاط الأخير",
+    "statistics": "الإحصائيات",
+    "tenant": "لوحة المستأجر",
+    "landlord": "لوحة المالك",
+    "agent": "لوحة الوكيل"
+  },
+  "currency": {
+    "ngn": "نيرة نيجيرية",
+    "usd": "دولار أمريكي",
+    "xlm": "XLM"
+  },
+  "date": {
+    "today": "اليوم",
+    "yesterday": "أمس",
+    "tomorrow": "غدا",
+    "thisWeek": "هذا الأسبوع",
+    "thisMonth": "هذا الشهر"
+  },
+  "errors": {
+    "generic": "حدث خطأ ما",
+    "networkError": "خطأ في الشبكة. يرجى التحقق من اتصالك.",
+    "unauthorized": "وصول غير مصرح به",
+    "notFound": "غير موجود",
+    "validationError": "خطأ في التحقق"
+  }
+}

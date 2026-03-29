@@ -1,5 +1,10 @@
 #![no_std]
 
+pub mod validation;
+
+#[cfg(test)]
+mod formal_properties;
+
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol};
 
 #[contracttype]
@@ -24,6 +29,18 @@ pub enum ContractError {
     Paused = 3,
     InvalidAmount = 4,
     InsufficientBalance = 5,
+    /// Amount exceeds the allowed maximum (prevents overflow cascades)
+    AmountTooLarge = 6,
+    /// Time/lock value exceeds the safe upper bound
+    InvalidTimeValue = 7,
+    /// String field was empty
+    EmptyString = 8,
+    /// String field exceeds maximum allowed length
+    StringTooLong = 9,
+    /// String contains non-printable or disallowed characters
+    InvalidStringChar = 10,
+    /// Two addresses that must differ were identical
+    SameAddress = 11,
 }
 
 #[contract]
@@ -104,6 +121,10 @@ impl RentWallet {
             .instance()
             .get::<_, u32>(&DataKey::ContractVersion)
             .unwrap_or(0u32)
+    }
+
+    pub fn version(env: Env) -> u32 {
+        Self::contract_version(env)
     }
 
     pub fn credit(
@@ -229,7 +250,6 @@ impl RentWallet {
 }
 
 #[cfg(test)]
-
 mod test {
 
     extern crate std;
@@ -247,7 +267,7 @@ mod test {
         Address,
         Address,
     ) {
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
 
         let client = RentWalletClient::new(env, &contract_id);
 
@@ -269,7 +289,7 @@ mod test {
     #[test]
     fn init_sets_admin() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
 
@@ -293,9 +313,22 @@ mod test {
     }
 
     #[test]
+    fn version_matches_contract_version() {
+        let env = Env::default();
+        let contract_id = env.register(RentWallet, ());
+        let client = RentWalletClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.try_init(&admin).unwrap().unwrap();
+
+        assert_eq!(client.version(), 1u32);
+        assert_eq!(client.version(), client.contract_version());
+    }
+
+    #[test]
     fn init_initializes_empty_balances() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         let user = Address::generate(&env);
@@ -309,7 +342,7 @@ mod test {
     #[test]
     fn init_cannot_be_called_twice() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, RentWallet);
+        let contract_id = env.register(RentWallet, ());
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
 
@@ -651,6 +684,124 @@ mod test {
         }]);
         client.try_debit(&admin, &user, &80i128).unwrap().unwrap();
         assert_eq!(client.balance(&user), 120i128);
+    }
+
+    // ============================================================================
+    // Balance Invariant Tests
+    // ============================================================================
+
+    #[test]
+    fn invariant_balance_never_negative_after_failed_debit() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "debit",
+                args: (admin.clone(), user.clone(), 1i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let err = client
+            .try_debit(&admin, &user, &1i128)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InsufficientBalance);
+        assert!(client.balance(&user) >= 0i128);
+    }
+
+    #[test]
+    fn invariant_credit_strictly_increases_balance() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        let before = client.balance(&user);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 25i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &25i128).unwrap().unwrap();
+
+        let after = client.balance(&user);
+        assert_eq!(after, before + 25i128);
+        assert!(after > before);
+    }
+
+    #[test]
+    fn invariant_debit_strictly_decreases_balance() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 100i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &100i128).unwrap().unwrap();
+
+        let before = client.balance(&user);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "debit",
+                args: (admin.clone(), user.clone(), 40i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_debit(&admin, &user, &40i128).unwrap().unwrap();
+
+        let after = client.balance(&user);
+        assert_eq!(after, before - 40i128);
+        assert!(after < before);
+    }
+
+    #[test]
+    fn invariant_debit_insufficient_fails_and_preserves_balance() {
+        let env = Env::default();
+        let (contract_id, client, admin, user, _non_admin) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "credit",
+                args: (admin.clone(), user.clone(), 30i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.try_credit(&admin, &user, &30i128).unwrap().unwrap();
+        let before = client.balance(&user);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "debit",
+                args: (admin.clone(), user.clone(), 31i128).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let err = client
+            .try_debit(&admin, &user, &31i128)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InsufficientBalance);
+        assert_eq!(client.balance(&user), before);
     }
 
     // ============================================================================

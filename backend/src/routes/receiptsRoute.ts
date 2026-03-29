@@ -15,12 +15,17 @@ const VALID_TX_TYPES = new Set(Object.values(TxType))
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: dealId,   schema: { type: string } }
- *       - { in: query, name: txType,   schema: { type: string } }
- *       - { in: query, name: page,     schema: { type: integer, default: 1 } }
- *       - { in: query, name: pageSize, schema: { type: integer, default: 20, maximum: 100 } }
+ *       - { in: query, name: dealId,      schema: { type: string } }
+ *       - { in: query, name: txType,      schema: { type: string } }
+ *       - { in: query, name: fromAddress, schema: { type: string } }
+ *       - { in: query, name: toAddress,   schema: { type: string } }
+ *       - { in: query, name: fromDate,    schema: { type: string, format: date-time } }
+ *       - { in: query, name: toDate,      schema: { type: string, format: date-time } }
+ *       - { in: query, name: page,        schema: { type: integer, default: 1 } }
+ *       - { in: query, name: pageSize,    schema: { type: integer, default: 20, maximum: 100 } }
  *     responses:
  *       200: { description: Paged receipts }
+ *       400: { description: Invalid query parameter }
  *       401: { description: Unauthorized }
  * /api/deals/{dealId}/receipts:
  *   get:
@@ -43,6 +48,10 @@ export function createReceiptsRouter(repo: ReceiptRepository): Router {
         const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? '20'), 10) || 20))
         const dealId = req.query.dealId as string | undefined
         const rawTxType = req.query.txType as string | undefined
+        const fromAddress = req.query.fromAddress as string | undefined
+        const toAddress = req.query.toAddress as string | undefined
+        const rawFromDate = req.query.fromDate as string | undefined
+        const rawToDate = req.query.toDate as string | undefined
 
         if (rawTxType !== undefined && !VALID_TX_TYPES.has(rawTxType as TxType)) {
           return next(
@@ -54,8 +63,28 @@ export function createReceiptsRouter(repo: ReceiptRepository): Router {
           )
         }
 
+        let fromDate: Date | undefined
+        if (rawFromDate !== undefined) {
+          fromDate = new Date(rawFromDate)
+          if (isNaN(fromDate.getTime())) {
+            return next(new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Invalid fromDate — must be ISO 8601'))
+          }
+        }
+
+        let toDate: Date | undefined
+        if (rawToDate !== undefined) {
+          toDate = new Date(rawToDate)
+          if (isNaN(toDate.getTime())) {
+            return next(new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Invalid toDate — must be ISO 8601'))
+          }
+        }
+
+        if (fromDate && toDate && fromDate > toDate) {
+          return next(new AppError(ErrorCode.VALIDATION_ERROR, 400, 'fromDate must not be after toDate'))
+        }
+
         const txType = rawTxType as TxType | undefined
-        res.json(await repo.query({ dealId, txType, page, pageSize }))
+        res.json(await repo.query({ dealId, txType, fromAddress, toAddress, fromDate, toDate, page, pageSize }))
       } catch (err) {
         next(err)
       }

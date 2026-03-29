@@ -14,7 +14,7 @@ import { TxType } from '../outbox/types.js'
 // Mock @stellar/stellar-sdk
 vi.mock('@stellar/stellar-sdk', async () => {
   const actual = await vi.importActual('@stellar/stellar-sdk')
-  
+
   // Create a mock class for rpc.Server
   class MockServer {
     constructor(url: string) {
@@ -28,7 +28,7 @@ vi.mock('@stellar/stellar-sdk', async () => {
     sendTransaction = vi.fn()
     getTransaction = vi.fn()
   }
-  
+
   return {
     ...actual,
     rpc: {
@@ -39,10 +39,12 @@ vi.mock('@stellar/stellar-sdk', async () => {
       },
     },
     Address: {
-      fromString: vi.fn().mockReturnValue({
+      fromString: vi.fn().mockImplementation((val) => ({
         toScAddress: vi.fn().mockReturnValue({}),
-      }),
+        toString: () => val || 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      })),
     },
+    nativeToScVal: vi.fn().mockImplementation((val) => val),
     scValToNative: vi.fn().mockImplementation((val) => {
       // Return the value if it has a value() method, otherwise return the val itself
       if (val && typeof val.value === 'function') {
@@ -50,6 +52,28 @@ vi.mock('@stellar/stellar-sdk', async () => {
       }
       return 1000000n
     }), // Mock default return value
+    Account: vi.fn().mockImplementation(function (address, sequence) {
+      return {
+        accountId: () => address,
+        sequenceNumber: () => sequence,
+      }
+    }),
+    TransactionBuilder: vi.fn().mockImplementation(function () {
+      return {
+        addOperation: vi.fn().mockReturnThis(),
+        setTimeout: vi.fn().mockReturnThis(),
+        build: vi.fn().mockReturnValue({}),
+        sign: vi.fn().mockReturnThis(),
+      }
+    }),
+    Operation: {
+      invokeHostFunction: vi.fn().mockReturnValue({}),
+    },
+    Keypair: {
+      fromSecret: vi.fn().mockReturnValue({
+        publicKey: () => 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      }),
+    },
   }
 })
 
@@ -111,7 +135,7 @@ describe('RealSorobanAdapter', () => {
       // Mock successful simulation
       vi.mocked(rpc.Api.isSimulationSuccess).mockReturnValue(true)
       mockServer.simulateTransaction.mockResolvedValue({
-        result: { 
+        result: {
           retval: { // Mock ScVal object
             value: () => 1000000n,
             switch: () => ({ value: () => 'i128' })
@@ -120,7 +144,7 @@ describe('RealSorobanAdapter', () => {
       })
 
       const balance = await adapter.getBalance('GABC123')
-      
+
       expect(mockServer.simulateTransaction).toHaveBeenCalled()
       expect(balance).toBe(1000000n)
     })
@@ -153,7 +177,7 @@ describe('RealSorobanAdapter', () => {
 
       vi.mocked(rpc.Api.isSimulationSuccess).mockReturnValue(true)
       mockServer.simulateTransaction.mockResolvedValue({
-        result: { 
+        result: {
           retval: { // Mock ScVal object
             value: () => 5000000000n,
             switch: () => ({ value: () => 'i128' })
@@ -162,7 +186,7 @@ describe('RealSorobanAdapter', () => {
       })
 
       const balance = await adapter.getStakedBalance('GABC123')
-      
+
       expect(mockServer.simulateTransaction).toHaveBeenCalled()
       expect(balance).toBe(5000000000n)
     })
@@ -183,7 +207,7 @@ describe('RealSorobanAdapter', () => {
 
       vi.mocked(rpc.Api.isSimulationSuccess).mockReturnValue(true)
       mockServer.simulateTransaction.mockResolvedValue({
-        result: { 
+        result: {
           retval: { // Mock ScVal object
             value: () => 250000000n,
             switch: () => ({ value: () => 'i128' })
@@ -192,7 +216,7 @@ describe('RealSorobanAdapter', () => {
       })
 
       const rewards = await adapter.getClaimableRewards('GABC123')
-      
+
       expect(mockServer.simulateTransaction).toHaveBeenCalled()
       expect(rewards).toBe(250000000n)
     })

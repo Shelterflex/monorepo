@@ -109,6 +109,83 @@ describe('GET /api/admin/receipts', () => {
     expect(res.body.error.message).toContain('Invalid txType')
   })
 
+  it('filters by fromAddress', async () => {
+    await repo.upsertMany([
+      makeReceipt({ from: 'ADDR_A' }),
+      makeReceipt({ from: 'ADDR_B' }),
+      makeReceipt({ from: 'ADDR_A' }),
+    ])
+    const app = buildApp(repo)
+
+    const res = await supertest(app)
+      .get('/api/admin/receipts?fromAddress=ADDR_A')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+
+    expect(res.body.total).toBe(2)
+    expect(res.body.data.every((r: IndexedReceipt) => r.from === 'ADDR_A')).toBe(true)
+  })
+
+  it('filters by toAddress', async () => {
+    await repo.upsertMany([
+      makeReceipt({ to: 'RCVR_X' }),
+      makeReceipt({ to: 'RCVR_Y' }),
+    ])
+    const app = buildApp(repo)
+
+    const res = await supertest(app)
+      .get('/api/admin/receipts?toAddress=RCVR_X')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+
+    expect(res.body.total).toBe(1)
+    expect(res.body.data[0].to).toBe('RCVR_X')
+  })
+
+  it('filters by fromDate and toDate', async () => {
+    await repo.upsertMany([
+      makeReceipt({ txId: 'tx-old', indexedAt: new Date('2024-01-01T00:00:00Z') }),
+      makeReceipt({ txId: 'tx-mid', indexedAt: new Date('2024-06-15T00:00:00Z') }),
+      makeReceipt({ txId: 'tx-new', indexedAt: new Date('2024-12-31T00:00:00Z') }),
+    ])
+    const app = buildApp(repo)
+
+    const res = await supertest(app)
+      .get('/api/admin/receipts?fromDate=2024-03-01T00:00:00Z&toDate=2024-09-01T00:00:00Z')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+
+    expect(res.body.total).toBe(1)
+    expect(res.body.data[0].txId).toBe('tx-mid')
+  })
+
+  it('rejects invalid fromDate with 400', async () => {
+    const app = buildApp(repo)
+    const res = await supertest(app)
+      .get('/api/admin/receipts?fromDate=not-a-date')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(400)
+    expect(res.body.error.message).toContain('Invalid fromDate')
+  })
+
+  it('rejects invalid toDate with 400', async () => {
+    const app = buildApp(repo)
+    const res = await supertest(app)
+      .get('/api/admin/receipts?toDate=not-a-date')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(400)
+    expect(res.body.error.message).toContain('Invalid toDate')
+  })
+
+  it('rejects fromDate after toDate with 400', async () => {
+    const app = buildApp(repo)
+    const res = await supertest(app)
+      .get('/api/admin/receipts?fromDate=2024-12-01T00:00:00Z&toDate=2024-01-01T00:00:00Z')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(400)
+    expect(res.body.error.message).toContain('fromDate must not be after toDate')
+  })
+
   it('clamps pageSize to max 100', async () => {
     const receipts = Array.from({ length: 5 }, () => makeReceipt())
     await repo.upsertMany(receipts)

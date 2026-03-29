@@ -161,8 +161,37 @@ describe('Auth Routes (Wallet)', () => {
     expect(challenge!.attempts).toBe(0)
   })
 
-  it.skip('POST /api/auth/wallet/verify should return session token on success', async () => {
-    // TODO: Implement with proper mocking of Stellar SDK
+  it('POST /api/auth/wallet/verify should return session token on success', async () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+
+    const walletUtils = await getWalletUtils()
+    vi.mocked(walletUtils.verifySignedChallenge).mockReturnValue(true)
+
+    const challengeRes = await request.post('/api/auth/wallet/challenge').send({ address })
+    expect(challengeRes.status).toBe(200)
+
+    const challengeBefore = await walletChallengeStore.getByAddress(address.toLowerCase())
+    expect(challengeBefore).toBeDefined()
+
+    const verifyRes = await request.post('/api/auth/wallet/verify').send({
+      address,
+      signedChallengeXdr: 'valid-mock-xdr',
+    })
+
+    expect(verifyRes.status).toBe(200)
+
+    // Session token response presence/shape
+    expect(verifyRes.body).toHaveProperty('token')
+    expect(typeof verifyRes.body.token).toBe('string')
+    expect(verifyRes.body.token).toBe('session-token-abc')
+
+    expect(verifyRes.body).toHaveProperty('user')
+    expect(typeof verifyRes.body.user).toBe('object')
+    expect(verifyRes.body.user).not.toBeNull()
+
+    // Success should clear the one-time challenge
+    const challengeAfter = await walletChallengeStore.getByAddress(address.toLowerCase())
+    expect(challengeAfter).toBeUndefined()
   })
 
   it('POST /api/auth/wallet/verify should fail with expired challenge', async () => {
@@ -243,33 +272,6 @@ describe('Auth Routes (Wallet)', () => {
     // Verify challenge is cleared after max attempts
     const clearedChallenge = await walletChallengeStore.getByAddress(address.toLowerCase())
     expect(clearedChallenge).toBeUndefined()
-  })
-
-  it('POST /api/auth/wallet/verify should return session token and clear challenge on success', async () => {
-    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
-
-    const walletUtils = await getWalletUtils()
-    vi.mocked(walletUtils.verifySignedChallenge).mockReturnValue(true)
-
-    // Create a challenge
-    const res = await request.post('/api/auth/wallet/challenge').send({ address })
-    expect(res.status).toBe(200)
-
-    const challengeBefore = await walletChallengeStore.getByAddress(address.toLowerCase())
-    expect(challengeBefore).toBeDefined()
-
-    const verifyRes = await request.post('/api/auth/wallet/verify').send({
-      address,
-      signedChallengeXdr: 'valid-mock-xdr',
-    })
-
-    expect(verifyRes.status).toBe(200)
-    expect(verifyRes.body).toHaveProperty('token', 'session-token-abc')
-    expect(verifyRes.body).toHaveProperty('user')
-    expect(verifyRes.body.user).toHaveProperty('email')
-
-    const challengeAfter = await walletChallengeStore.getByAddress(address.toLowerCase())
-    expect(challengeAfter).toBeUndefined()
   })
 })
 

@@ -40,6 +40,12 @@ export const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
   SOROBAN_ADAPTER_MODE: z.enum(['stub', 'real']).default('stub'),
+  // Distributed Tracing (OpenTelemetry)
+  OTEL_SERVICE_NAME: z.string().default('shelterflex-backend'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().default('http://localhost:4318/v1/traces'),
+  OTEL_SAMPLING_RATIO: z.coerce.number().min(0).max(1).default(1.0),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  REDIS_URL: z.string().url().default('redis://localhost:6379'),
 }).refine((data) => {
   // Accept either field name; prefer SOROBAN_USDC_TOKEN_ID if provided
   const tokenId = data.SOROBAN_USDC_TOKEN_ID || data.USDC_TOKEN_ADDRESS

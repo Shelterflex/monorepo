@@ -59,4 +59,32 @@ describe('StakingFinalizer', () => {
     const outboxItems = await outboxStore.listAll()
     expect(outboxItems).toHaveLength(2)
   })
+
+  it('waits for in-progress operations before resolving stop()', async () => {
+    let resolvePoll: (value: void | PromiseLike<void>) => void = () => {}
+    const pollPromise = new Promise<void>(resolve => {
+      resolvePoll = resolve
+    })
+
+    const pollSpy = vi.spyOn(finalizer, 'poll').mockReturnValue(pollPromise)
+
+    finalizer.start()
+    // Poll is called via setInterval, so we need to wait for it
+    await new Promise(r => setTimeout(r, 110)) // Interval is 100ms
+    expect(pollSpy).toHaveBeenCalledTimes(1)
+
+    let stopResolved = false
+    const stopPromise = finalizer.stop().then(() => {
+      stopResolved = true
+    })
+
+    // Should not be resolved yet because poll is still "running"
+    await new Promise(r => setTimeout(r, 50))
+    expect(stopResolved).toBe(false)
+
+    // Resolve the poll
+    resolvePoll()
+    await stopPromise
+    expect(stopResolved).toBe(true)
+  })
 })

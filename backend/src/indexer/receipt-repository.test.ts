@@ -104,4 +104,33 @@ describe('PostgresReceiptRepository', () => {
       ['deal1', 10, 10], // offset = (2-1)*10 = 10
     )
   })
+
+  it('builds SQL conditions for fromAddress, toAddress, fromDate, and toDate', async () => {
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [{ count: '5' }] })
+      .mockResolvedValueOnce({ rows: [] })
+
+    const fromDate = new Date('2024-01-01T00:00:00Z')
+    const toDate = new Date('2024-12-31T00:00:00Z')
+
+    await repo.query({ fromAddress: 'SENDER_A', toAddress: 'RCVR_B', fromDate, toDate })
+
+    const [countSql, countParams] = mockPool.query.mock.calls[0] as [string, unknown[]]
+    expect(countSql).toContain('sender = $1')
+    expect(countSql).toContain('receiver = $2')
+    expect(countSql).toContain('indexed_at >= $3')
+    expect(countSql).toContain('indexed_at <= $4')
+    expect(countParams).toEqual(['SENDER_A', 'RCVR_B', fromDate, toDate])
+  })
+
+  it('omits WHERE clause when no filters are given', async () => {
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [{ count: '0' }] })
+      .mockResolvedValueOnce({ rows: [] })
+
+    await repo.query({})
+
+    const [countSql] = mockPool.query.mock.calls[0] as [string, unknown[]]
+    expect(countSql).not.toContain('WHERE')
+  })
 })

@@ -1,8 +1,12 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, token::Client as TokenClient, Address, Env, Map, Symbol,
+    contract, contractimpl, contracttype, token::Client as TokenClient, Address, Bytes, BytesN,
+    Env, Map, Symbol,
 };
+
+mod migration;
+use migration::{Migratable, Versionable};
 
 const REWARD_INDEX_SCALE: i128 = 1_000_000_000_000;
 
@@ -151,6 +155,42 @@ fn accrue_user_rewards(env: &Env, user: &Address) {
 
     user_idxs.set(user.clone(), global_idx);
     put_user_reward_index(env, user_idxs);
+}
+
+impl Versionable for StakingPool {
+    fn get_version(env: &Env) -> u32 {
+        env.storage()
+            .instance()
+            .get::<_, u32>(&DataKey::ContractVersion)
+            .unwrap_or(0u32)
+    }
+
+    fn set_version(env: &Env, version: u32) {
+        env.storage()
+            .instance()
+            .set(&DataKey::ContractVersion, &version);
+    }
+}
+
+impl Migratable for StakingPool {
+    type Error = &'static str;
+
+    fn migrate(env: &Env, to_version: u32, _data: Bytes) -> Result<(), Self::Error> {
+        let current_version = Self::get_version(env);
+        if to_version != current_version + 1 {
+            return Err("invalid migration version");
+        }
+
+        match to_version {
+            2 => {
+                // Example migration v1 -> v2: just update version for now
+                Self::set_version(env, 2);
+            }
+            _ => return Err("unsupported version"),
+        }
+
+        Ok(())
+    }
 }
 
 #[contractimpl]
@@ -345,6 +385,20 @@ impl StakingPool {
     pub fn is_paused(env: Env) -> bool {
         is_paused(&env)
     }
+
+    pub fn upgrade_contract(env: Env, new_wasm_hash: BytesN<32>) {
+        require_admin(&env);
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+    }
+
+    pub fn migrate(env: Env, to_version: u32, data: Bytes) {
+        require_admin(&env);
+        if let Err(e) = <Self as Migratable>::migrate(&env, to_version, data) {
+            panic!("{}", e);
+        }
+        env.events()
+            .publish((Symbol::new(&env, "migrate"),), (to_version,));
+    }
 }
 
 #[cfg(test)]
@@ -352,8 +406,8 @@ mod test {
     extern crate std;
 
     use super::{StakingPool, StakingPoolClient};
-    use soroban_sdk::testutils::{Address as _, Events, MockAuth, MockAuthInvoke};
-    use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal, Symbol, TryIntoVal};
+    use soroban_sdk::testutils::{Address as _, MockAuth, MockAuthInvoke};
+    use soroban_sdk::{token::StellarAssetClient, Address, Bytes, Env, IntoVal};
 
     fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Address, Address) {
         let contract_id = env.register(StakingPool, ());
@@ -749,7 +803,7 @@ mod test {
     #[test]
     fn multiple_users_can_stake_independently() {
         let env = Env::default();
-        let (contract_id, client, _admin, user1, _token_id) = setup_contract(&env);
+        let (_contract_id, client, _admin, user1, _token_id) = setup_contract(&env);
         let user2 = Address::generate(&env);
 
         // Initial balances should be zero
@@ -761,6 +815,29 @@ mod test {
         assert_ne!(user1, user2);
         assert_eq!(client.staked_balance(&user1), 0i128);
         assert_eq!(client.staked_balance(&user2), 0i128);
+    }
+
+    #[test]
+    fn migration_v1_to_v2_works() {
+        let env = Env::default();
+        let (_contract_id, client, _admin, _user, _token_id) = setup_contract(&env);
+
+        assert_eq!(client.contract_version(), 1);
+
+        env.mock_all_auths();
+        client.migrate(&2, &Bytes::new(&env));
+
+        assert_eq!(client.contract_version(), 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid migration version")]
+    fn migration_invalid_version_fails() {
+        let env = Env::default();
+        let (_contract_id, client, _admin, _user, _token_id) = setup_contract(&env);
+
+        env.mock_all_auths();
+        client.migrate(&3, &Bytes::new(&env));
     }
 
     // ============================================================================

@@ -3,10 +3,9 @@ import { SorobanConfig } from './client.js'
 import { RawReceiptEvent } from '../indexer/event-parser.js'
 import { logger } from '../utils/logger.js'
 
-// In-memory store for stub balances
-const stubBalances = new Map<string, bigint>()
 
 export class StubSorobanAdapter implements SorobanAdapter {
+     private static stubBalances = new Map<string, bigint>()
      private config: SorobanConfig
 
      constructor(config: SorobanConfig) {
@@ -18,13 +17,30 @@ export class StubSorobanAdapter implements SorobanAdapter {
           }
      }
 
+     /**
+      * Resets all stub state including balances for all instances.
+      */
+     public static _testOnlyReset(): void {
+          this.stubBalances.clear()
+          logger.debug('Soroban stub: static reset complete (balances cleared)')
+     }
+
+     /**
+      * Resets instance-specific state and global stub balances.
+      */
+     public _testOnlyReset(): void {
+          this._ledger = 1000
+          StubSorobanAdapter._testOnlyReset()
+          logger.debug('Soroban stub: instance reset complete')
+     }
+
      async getBalance(account: string): Promise<bigint> {
-          if (!stubBalances.has(account)) {
+          if (!StubSorobanAdapter.stubBalances.has(account)) {
                const hash = this.simpleHash(account)
                const balance = BigInt(1000 + (hash % 9000))
-               stubBalances.set(account, balance)
+               StubSorobanAdapter.stubBalances.set(account, balance)
           }
-          const balance = stubBalances.get(account)!
+          const balance = StubSorobanAdapter.stubBalances.get(account)!
           logger.debug('Soroban stub: getBalance', { account, balance: balance.toString() })
           return balance
      }
@@ -32,7 +48,7 @@ export class StubSorobanAdapter implements SorobanAdapter {
      async credit(account: string, amount: bigint): Promise<void> {
           const currentBalance = await this.getBalance(account)
           const newBalance = currentBalance + amount
-          stubBalances.set(account, newBalance)
+          StubSorobanAdapter.stubBalances.set(account, newBalance)
           logger.debug('Soroban stub: credit', {
                account,
                amount: amount.toString(),
@@ -46,7 +62,7 @@ export class StubSorobanAdapter implements SorobanAdapter {
                throw new Error(`Insufficient balance: ${currentBalance.toString()} < ${amount.toString()}`)
           }
           const newBalance = currentBalance - amount
-          stubBalances.set(account, newBalance)
+          StubSorobanAdapter.stubBalances.set(account, newBalance)
           logger.debug('Soroban stub: debit', {
                account,
                amount: amount.toString(),
@@ -85,6 +101,14 @@ export class StubSorobanAdapter implements SorobanAdapter {
 
      private simpleHash(str: string): number {
           let hash = 0
+          if (this.config.seed !== undefined) {
+               const seedStr = typeof this.config.seed === 'number' ? this.config.seed.toString() : this.config.seed
+               for (let i = 0; i < seedStr.length; i++) {
+                    const char = seedStr.charCodeAt(i)
+                    hash = ((hash << 5) - hash) + char
+                    hash = hash & hash
+               }
+          }
           for (let i = 0; i < str.length; i++) {
                const char = str.charCodeAt(i)
                hash = ((hash << 5) - hash) + char

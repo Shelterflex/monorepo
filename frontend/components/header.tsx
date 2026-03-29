@@ -2,10 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Menu, X, Home } from "lucide-react"
+import { Home } from "lucide-react"
 import BackendHealthCompact from "@/components/BackendHealthCompact"
+import { MobileMenu } from "@/components/ui/mobile-menu"
 
 const navLinks = [
   { href: "/properties", label: "Find a Home" },
@@ -15,7 +15,6 @@ const navLinks = [
 ]
 
 export function Header() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const pathname = usePathname()
 
   const isAuthPage = pathname === "/login" || pathname === "/signup"
@@ -25,24 +24,24 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 bg-background border-b-4 border-foreground">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 sm:px-6">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center border-3 border-foreground bg-primary shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-              <Home className="h-5 w-5 text-foreground" />
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center border-3 border-foreground bg-primary shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+              <Home className="h-5 w-5 sm:h-6 sm:w-6 text-foreground" />
             </div>
-            <span className="font-mono text-xl font-black tracking-tight">
+            <span className="font-mono text-lg sm:text-xl font-black tracking-tight">
               SHELTA<span className="text-primary">FLEX</span>
             </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden lg:flex items-center gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`font-medium transition-colors hover:text-primary ${
+                className={`font-medium transition-colors hover:text-primary text-sm sm:text-base ${
                   pathname === link.href ? "text-primary" : ""
                 }`}
               >
@@ -51,72 +50,29 @@ export function Header() {
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-3">
-            <div className="hidden lg:block">
+          {/* Desktop Actions */}
+          <div className="hidden lg:flex items-center gap-3">
+            <div className="hidden xl:block">
               <BackendHealthCompact />
             </div>
             <Link href="/login">
               <Button
                 variant="outline"
-                className="border-3 border-foreground font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all bg-background text-foreground"
+                className="border-3 border-foreground font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all bg-background text-foreground min-h-[44px] px-4 sm:px-6"
               >
                 Log In
               </Button>
             </Link>
             <Link href="/signup">
-              <Button className="border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all text-foreground">
+              <Button className="border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all text-foreground min-h-[44px] px-4 sm:px-6">
                 Get Started
               </Button>
             </Link>
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            type="button"
-            className="md:hidden p-2 border-3 border-foreground shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] bg-background"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-expanded={isMenuOpen}
-            aria-controls="mobile-site-nav"
-            aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
-          >
-            {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          {/* Mobile Menu */}
+          <MobileMenu navLinks={navLinks} pathname={pathname} />
         </div>
-
-        {/* Mobile Navigation */}
-        {isMenuOpen && (
-          <div id="mobile-site-nav" className="md:hidden py-4 border-t-3 border-foreground">
-            <nav className="flex flex-col gap-3">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`font-medium py-2 hover:text-primary ${
-                    pathname === link.href ? "text-primary" : ""
-                  }`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              ))}
-              <div className="flex flex-col gap-2 pt-4">
-                <Link href="/login" onClick={() => setIsMenuOpen(false)}>
-                  <Button
-                    variant="outline"
-                    className="border-3 border-foreground font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] w-full bg-background text-foreground"
-                  >
-                    Log In
-                  </Button>
-                </Link>
-                <Link href="/signup" onClick={() => setIsMenuOpen(false)}>
-                  <Button className="border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] w-full text-foreground">
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-            </nav>
-          </div>
-        )}
       </div>
     </header>
   )

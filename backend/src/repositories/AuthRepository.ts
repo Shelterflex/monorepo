@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { getPool } from '../db.js'
+import { userCache } from '../utils/cache.js'
 
 export type UserRole = 'tenant' | 'landlord' | 'agent'
 
@@ -10,6 +11,8 @@ export interface User {
   name: string
   role: UserRole
   walletAddress?: string
+  tier: 'free' | 'pro' | 'enterprise'
+  planQuota: number
 }
 
 export interface OtpChallenge {
@@ -44,24 +47,65 @@ export class PostgresUserRepository {
   }
 
   async getByEmail(email: string): Promise<User | null> {
+    const cacheKey = `email:${email.toLowerCase()}`
+    const cached = await userCache.get(cacheKey)
+    if (cached) return cached
+
     const pool = await this.pool()
     const { rows } = await pool.query(
-      `SELECT id, email, name, role, wallet_address, created_at 
+      `SELECT id, email, name, role, wallet_address, created_at, tier, plan_quota 
        FROM users WHERE email = $1`,
       [email.toLowerCase()]
     )
-    
+
     if (rows.length === 0) return null
-    
+
     const row = rows[0]
-    return {
+    const user: User = {
       id: row.id,
       email: row.email,
       name: row.name,
       role: row.role,
       walletAddress: row.wallet_address,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      tier: row.tier,
+      planQuota: row.plan_quota
     }
+
+    await userCache.set(cacheKey, user)
+    await userCache.set(`id:${user.id}`, user)
+    return user
+  }
+
+  async getById(id: string): Promise<User | null> {
+    const cacheKey = `id:${id}`
+    const cached = await userCache.get(cacheKey)
+    if (cached) return cached
+
+    const pool = await this.pool()
+    const { rows } = await pool.query(
+      `SELECT id, email, name, role, wallet_address, created_at, tier, plan_quota 
+       FROM users WHERE id = $1`,
+      [id]
+    )
+
+    if (rows.length === 0) return null
+
+    const row = rows[0]
+    const user: User = {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      walletAddress: row.wallet_address,
+      createdAt: row.created_at,
+      tier: row.tier,
+      planQuota: row.plan_quota
+    }
+
+    await userCache.set(cacheKey, user)
+    await userCache.set(`email:${user.email.toLowerCase()}`, user)
+    return user
   }
 
   async getOrCreateByEmail(email: string): Promise<User> {
@@ -72,14 +116,14 @@ export class PostgresUserRepository {
     const { rows } = await pool.query(
       `INSERT INTO users (email, name, role) 
        VALUES ($1, $2, $3) 
-       RETURNING id, email, name, role, wallet_address, created_at`,
+       RETURNING id, email, name, role, wallet_address, created_at, tier, plan_quota`,
       [
         email.toLowerCase(),
         email.split('@')[0] ?? email,
         'tenant'
       ]
     )
-    
+
     const row = rows[0]
     return {
       id: row.id,
@@ -87,20 +131,22 @@ export class PostgresUserRepository {
       name: row.name,
       role: row.role,
       walletAddress: row.wallet_address,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      tier: row.tier,
+      planQuota: row.plan_quota
     }
   }
 
   async getByWalletAddress(address: string): Promise<User | null> {
     const pool = await this.pool()
     const { rows } = await pool.query(
-      `SELECT id, email, name, role, wallet_address, created_at 
+      `SELECT id, email, name, role, wallet_address, created_at, tier, plan_quota 
        FROM users WHERE wallet_address = $1`,
       [address.toLowerCase()]
     )
-    
+
     if (rows.length === 0) return null
-    
+
     const row = rows[0]
     return {
       id: row.id,
@@ -108,7 +154,9 @@ export class PostgresUserRepository {
       name: row.name,
       role: row.role,
       walletAddress: row.wallet_address,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      tier: row.tier,
+      planQuota: row.plan_quota
     }
   }
 
@@ -118,19 +166,25 @@ export class PostgresUserRepository {
       `UPDATE users 
        SET wallet_address = $1, updated_at = NOW() 
        WHERE email = $2 
-       RETURNING id, email, name, role, wallet_address, created_at`,
+       RETURNING id, email, name, role, wallet_address, created_at, tier, plan_quota`,
       [walletAddress.toLowerCase(), email.toLowerCase()]
     )
-    
+
     const row = rows[0]
-    return {
+    const user: User = {
       id: row.id,
       email: row.email,
       name: row.name,
       role: row.role,
       walletAddress: row.wallet_address,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      tier: row.tier,
+      planQuota: row.plan_quota
     }
+    // Invalidate/Update
+    await userCache.set(`id:${user.id}`, user)
+    await userCache.set(`email:${user.email.toLowerCase()}`, user)
+    return user
   }
 
   async updateName(userId: string, name: string): Promise<void> {
@@ -139,6 +193,12 @@ export class PostgresUserRepository {
       `UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2`,
       [name, userId]
     )
+    // Invalidate
+    const user = await this.getById(userId)
+    if (user) {
+      await userCache.invalidate(`id:${userId}`)
+      await userCache.invalidate(`email:${user.email.toLowerCase()}`)
+    }
   }
 }
 
@@ -158,7 +218,7 @@ export class PostgresSessionRepository {
   async create(email: string, token: string, expiresAt?: Date, auditInfo?: { ip?: string; userAgent?: string }): Promise<void> {
     const pool = await this.pool()
     const tokenHash = this.hashToken(token)
-    
+
     // Get user ID
     const userRepo = new PostgresUserRepository()
     const user = await userRepo.getByEmail(email)
@@ -177,7 +237,7 @@ export class PostgresSessionRepository {
   async getByToken(token: string): Promise<(Session & { userId: string }) | null> {
     const pool = await this.pool()
     const tokenHash = this.hashToken(token)
-    
+
     const { rows } = await pool.query(
       `SELECT s.token_hash, s.created_at, s.user_id, u.email
        FROM sessions s
@@ -187,9 +247,9 @@ export class PostgresSessionRepository {
          AND s.revoked_at IS NULL`,
       [tokenHash]
     )
-    
+
     if (rows.length === 0) return null
-    
+
     const row = rows[0]
     return {
       token, // Return original token for compatibility
@@ -202,7 +262,7 @@ export class PostgresSessionRepository {
   async revokeByToken(token: string): Promise<void> {
     const pool = await this.pool()
     const tokenHash = this.hashToken(token)
-    
+
     await pool.query(
       `UPDATE sessions SET revoked_at = NOW() WHERE token_hash = $1`,
       [tokenHash]
@@ -211,7 +271,7 @@ export class PostgresSessionRepository {
 
   async revokeByUserId(userId: string): Promise<void> {
     const pool = await this.pool()
-    
+
     await pool.query(
       `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
       [userId]
@@ -236,10 +296,10 @@ export class PostgresOtpChallengeRepository {
 
   async set(challenge: OtpChallenge, auditInfo?: { ip?: string; userAgent?: string }): Promise<void> {
     const pool = await this.pool()
-    
+
     // Delete any existing challenge for this email
     await this.deleteByEmail(challenge.email)
-    
+
     await pool.query(
       `INSERT INTO otp_challenges (email, otp_hash, salt, expires_at, attempts, created_ip, user_agent)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -263,9 +323,9 @@ export class PostgresOtpChallengeRepository {
        WHERE email = $1 AND expires_at > NOW()`,
       [email.toLowerCase()]
     )
-    
+
     if (rows.length === 0) return null
-    
+
     const row = rows[0]
     return {
       email: row.email,
@@ -278,7 +338,7 @@ export class PostgresOtpChallengeRepository {
 
   async updateAttempts(email: string, attempts: number): Promise<void> {
     const pool = await this.pool()
-    
+
     await pool.query(
       `UPDATE otp_challenges SET attempts = $1 WHERE email = $2`,
       [attempts, email.toLowerCase()]
@@ -287,7 +347,7 @@ export class PostgresOtpChallengeRepository {
 
   async deleteByEmail(email: string): Promise<void> {
     const pool = await this.pool()
-    
+
     await pool.query(
       `DELETE FROM otp_challenges WHERE email = $1`,
       [email.toLowerCase()]
@@ -312,10 +372,10 @@ export class PostgresWalletChallengeRepository {
 
   async set(challenge: WalletChallenge, auditInfo?: { ip?: string; userAgent?: string }): Promise<void> {
     const pool = await this.pool()
-    
+
     // Delete any existing challenge for this address
     await this.deleteByAddress(challenge.address)
-    
+
     await pool.query(
       `INSERT INTO wallet_challenges (address, nonce, challenge_xdr, expires_at, attempts, created_ip, user_agent)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -339,9 +399,9 @@ export class PostgresWalletChallengeRepository {
        WHERE address = $1 AND expires_at > NOW() AND used_at IS NULL`,
       [address.toLowerCase()]
     )
-    
+
     if (rows.length === 0) return null
-    
+
     const row = rows[0]
     return {
       address: row.address,
@@ -354,7 +414,7 @@ export class PostgresWalletChallengeRepository {
 
   async updateAttempts(address: string, attempts: number): Promise<void> {
     const pool = await this.pool()
-    
+
     await pool.query(
       `UPDATE wallet_challenges SET attempts = $1 WHERE address = $2`,
       [attempts, address.toLowerCase()]
@@ -363,7 +423,7 @@ export class PostgresWalletChallengeRepository {
 
   async markAsUsed(address: string): Promise<void> {
     const pool = await this.pool()
-    
+
     await pool.query(
       `UPDATE wallet_challenges SET used_at = NOW() WHERE address = $1`,
       [address.toLowerCase()]
@@ -372,7 +432,7 @@ export class PostgresWalletChallengeRepository {
 
   async deleteByAddress(address: string): Promise<void> {
     const pool = await this.pool()
-    
+
     await pool.query(
       `DELETE FROM wallet_challenges WHERE address = $1`,
       [address.toLowerCase()]

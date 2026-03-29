@@ -24,55 +24,55 @@ export default function HomePage() {
   return (
     <main>
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-background py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <div className="grid gap-12 lg:grid-cols-2 lg:gap-8 items-center">
-            <div className="space-y-8">
-              <div className="inline-flex items-center gap-2 border-3 border-foreground bg-accent px-4 py-2 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-                <span className="font-mono text-sm font-bold">NEW</span>
-                <span className="text-sm">
+      <section className="relative overflow-hidden bg-background py-12 sm:py-16 md:py-20 lg:py-24">
+        <div className="container mx-auto px-4 sm:px-6">
+          <div className="grid gap-8 lg:grid-cols-2 lg:gap-12 items-center">
+            <div className="space-y-6 sm:space-y-8">
+              <div className="inline-flex items-center gap-2 border-3 border-foreground bg-accent px-3 py-1.5 sm:px-4 sm:py-2 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+                <span className="font-mono text-xs sm:text-sm font-bold">NEW</span>
+                <span className="text-xs sm:text-sm">
                   Now available in Lagos, Abuja & Port Harcourt
                 </span>
               </div>
 
-              <h1 className="font-mono text-4xl font-black leading-tight md:text-6xl lg:text-7xl text-balance">
+              <h1 className="font-mono text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black leading-tight text-balance">
                 Rent Now,
                 <br />
                 <span className="text-primary">Pay Later.</span>
               </h1>
 
-              <p className="text-lg text-muted-foreground md:text-xl max-w-lg leading-relaxed">
+              <p className="text-base sm:text-lg md:text-xl max-w-lg leading-relaxed text-muted-foreground">
                 Stop stressing about annual rent payments. Sheltaflex helps you
                 split your rent into affordable monthly installments.
               </p>
 
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                 <Link href="/properties">
-                  <Button className="border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+                  <Button className="border-3 border-foreground bg-primary px-6 py-4 sm:px-8 sm:py-6 text-base sm:text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] min-h-[48px] w-full sm:w-auto">
                     Find a Home
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </Link>
                 <Link href="/calculator">
                   <Button
                     variant="outline"
-                    className="border-3 border-foreground bg-background px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                    className="border-3 border-foreground bg-background px-6 py-4 sm:px-8 sm:py-6 text-base sm:text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] min-h-[48px] w-full sm:w-auto"
                   >
                     Calculate Payments
                   </Button>
                 </Link>
               </div>
 
-              <div className="flex items-center gap-4 pt-4">
-                <div className="flex -space-x-3">
+              <div className="flex items-center gap-3 pt-4 sm:pt-6">
+                <div className="flex -space-x-2 sm:-space-x-3">
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="h-10 w-10 rounded-full border-3 border-foreground bg-secondary"
+                      className="h-8 w-8 sm:h-10 sm:w-10 rounded-full border-3 border-foreground bg-secondary"
                     />
                   ))}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   <span className="font-bold text-foreground">2,400+</span>{" "}
                   tenants joined this month
                 </p>

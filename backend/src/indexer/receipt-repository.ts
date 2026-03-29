@@ -7,7 +7,16 @@ export interface IndexedReceipt {
   from?: string; to?: string; externalRefHash: string; metadataHash?: string
   ledger: number; indexedAt: Date
 }
-export interface ReceiptQuery { dealId?: string; txType?: TxType; page?: number; pageSize?: number }
+export interface ReceiptQuery {
+  dealId?: string
+  txType?: TxType
+  fromAddress?: string
+  toAddress?: string
+  fromDate?: Date
+  toDate?: Date
+  page?: number
+  pageSize?: number
+}
 export interface PagedReceipts { data: IndexedReceipt[]; total: number; page: number; pageSize: number }
 
 export interface ReceiptRepository {
@@ -26,10 +35,14 @@ export class StubReceiptRepository implements ReceiptRepository {
   async upsertMany(receipts: IndexedReceipt[]) { for (const r of receipts) this.store.set(r.txId, r) }
   async findByDealId(dealId: string) { return [...this.store.values()].filter(r => r.dealId === dealId) }
   async findByTxId(txId: string) { return this.store.get(txId) || null }
-  async query({ dealId, txType, page = 1, pageSize = 20 }: ReceiptQuery): Promise<PagedReceipts> {
+  async query({ dealId, txType, fromAddress, toAddress, fromDate, toDate, page = 1, pageSize = 20 }: ReceiptQuery): Promise<PagedReceipts> {
     let r = [...this.store.values()]
     if (dealId) r = r.filter(x => x.dealId === dealId)
     if (txType) r = r.filter(x => x.txType === txType)
+    if (fromAddress) r = r.filter(x => x.from === fromAddress)
+    if (toAddress) r = r.filter(x => x.to === toAddress)
+    if (fromDate) r = r.filter(x => x.indexedAt >= fromDate)
+    if (toDate) r = r.filter(x => x.indexedAt <= toDate)
     return { data: r.slice((page - 1) * pageSize, page * pageSize), total: r.length, page, pageSize }
   }
   async getCheckpoint() { return this.checkpoint }
@@ -112,15 +125,19 @@ export class PostgresReceiptRepository implements ReceiptRepository {
     return rows.length ? this.mapRow(rows[0]) : null
   }
 
-  async query({ dealId, txType, page = 1, pageSize = 20 }: ReceiptQuery): Promise<PagedReceipts> {
+  async query({ dealId, txType, fromAddress, toAddress, fromDate, toDate, page = 1, pageSize = 20 }: ReceiptQuery): Promise<PagedReceipts> {
     const pool = await this.pool()
     const offset = (page - 1) * pageSize
 
     const conditions: string[] = []
     const params: unknown[] = []
 
-    if (dealId) { params.push(dealId); conditions.push(`deal_id = $${params.length}`) }
-    if (txType) { params.push(txType); conditions.push(`tx_type = $${params.length}`) }
+    if (dealId)      { params.push(dealId);      conditions.push(`deal_id = $${params.length}`) }
+    if (txType)      { params.push(txType);      conditions.push(`tx_type = $${params.length}`) }
+    if (fromAddress) { params.push(fromAddress); conditions.push(`sender = $${params.length}`) }
+    if (toAddress)   { params.push(toAddress);   conditions.push(`receiver = $${params.length}`) }
+    if (fromDate)    { params.push(fromDate);    conditions.push(`indexed_at >= $${params.length}`) }
+    if (toDate)      { params.push(toDate);      conditions.push(`indexed_at <= $${params.length}`) }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 

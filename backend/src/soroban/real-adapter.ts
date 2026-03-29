@@ -28,6 +28,9 @@ import {
 } from './errors.js'
 import { AdminSigningService } from '../services/adminSigningService.js'
 import { env } from '../schemas/env.js'
+import { trace, SpanStatusCode, Span } from '@opentelemetry/api'
+
+const tracer = trace.getTracer('soroban-adapter')
 
 export class RealSorobanAdapter implements SorobanAdapter {
   private server: rpc.Server
@@ -52,7 +55,7 @@ export class RealSorobanAdapter implements SorobanAdapter {
       const result = await this.invokeReadOnly(
         this.config.usdcTokenId,
         'balance',
-        [nativeToScVal(new Address(account))]
+        [nativeToScVal(Address.fromString(account))]
       )
       return BigInt(scValToNative(result))
     } catch (err) {
@@ -83,7 +86,7 @@ export class RealSorobanAdapter implements SorobanAdapter {
       const result = await this.invokeReadOnly(
         this.config.stakingPoolId,
         'staked_balance',
-        [nativeToScVal(new Address(account))]
+        [nativeToScVal(Address.fromString(account))]
       )
       return BigInt(scValToNative(result))
     } catch (err) {
@@ -106,7 +109,7 @@ export class RealSorobanAdapter implements SorobanAdapter {
       const result = await this.invokeReadOnly(
         this.config.stakingRewardsId,
         'get_claimable',
-        [nativeToScVal(new Address(account))]
+        [nativeToScVal(Address.fromString(account))]
       )
       return BigInt(scValToNative(result))
     } catch (err) {
@@ -134,58 +137,80 @@ export class RealSorobanAdapter implements SorobanAdapter {
    * This ensures duplicate calls don't break confirm/finalize flows.
    */
   async recordReceipt(params: RecordReceiptParams): Promise<void> {
-    if (!this.config.contractId) {
-      throw new ConfigurationError('SOROBAN_CONTRACT_ID not configured for recordReceipt')
-    }
+    return tracer.startActiveSpan('RealSorobanAdapter.recordReceipt', async (span) => {
+      span.setAttribute('soroban.tx_id', params.txId)
+      span.setAttribute('soroban.deal_id', params.dealId)
+      span.setAttribute('soroban.tx_type', params.txType)
 
-    if (!this.config.adminSecret) {
-      throw new ConfigurationError('SOROBAN_ADMIN_SECRET not configured for recordReceipt')
-    }
+      if (!this.config.contractId) {
+        throw new ConfigurationError('SOROBAN_CONTRACT_ID not configured for recordReceipt')
+      }
 
-    try {
-      // Convert txId hex string to bytes
-      const txIdBytes = Buffer.from(params.txId, 'hex')
+      if (!this.config.adminSecret) {
+        throw new ConfigurationError('SOROBAN_ADMIN_SECRET not configured for recordReceipt')
+      }
 
-      // Build the receipt parameters for the contract call
-      const receiptArgs = this.buildReceiptArgs(params, txIdBytes)
+      try {
+        // Convert txId hex string to bytes
+        const txIdBytes = Buffer.from(params.txId, 'hex')
 
-      // Submit the transaction
-      await this.invokeTransaction(
-        this.config.contractId,
-        'record_receipt',
-        receiptArgs
-      )
+        // Build the receipt parameters for the contract call
+        const receiptArgs = this.buildReceiptArgs(params, txIdBytes)
 
-      logger.info('Receipt recorded on-chain', {
-        txId: params.txId,
-        txType: params.txType,
-        dealId: params.dealId,
-        amountUsdc: params.amountUsdc,
-      })
-    } catch (err) {
-      // Check if this is a duplicate receipt error (idempotent success)
-      if (isDuplicateReceiptError(err, params.txId)) {
-        logger.info('Receipt already recorded (idempotent success)', {
+        // Submit the transaction
+        await this.invokeTransaction(
+          this.config.contractId,
+          'record_receipt',
+          receiptArgs
+        )
+
+        logger.info('Receipt recorded on-chain', {
           txId: params.txId,
           txType: params.txType,
           dealId: params.dealId,
+          amountUsdc: params.amountUsdc,
         })
-        return
-      }
+        span.setStatus({ code: SpanStatusCode.OK })
+      } catch (err) {
+        // Check if this is a duplicate receipt error (idempotent success)
+        if (isDuplicateReceiptError(err, params.txId)) {
+          logger.info('Receipt already recorded (idempotent success)', {
+            txId: params.txId,
+            txType: params.txType,
+            dealId: params.dealId,
+          })
+          span.setStatus({ code: SpanStatusCode.OK, message: 'Duplicate receipt (idempotent success)' })
+          return
+        }
 
-      // Re-throw SorobanError types
-      if (err instanceof SorobanError) {
-        throw err
-      }
+        // Re-throw SorobanError types
+        if (err instanceof SorobanError) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: err.message,
+          })
+          if (err instanceof Error) span.recordException(err)
+          throw err
+        }
 
-      // Wrap other errors
-      throw new TransactionError(
-        `Failed to record receipt for tx ${params.txId}`,
-        undefined,
-        'record_receipt',
-        err
-      )
-    }
+        // Wrap other errors
+        const wrappedError = new TransactionError(
+          `Failed to record receipt for tx ${params.txId}`,
+          undefined,
+          'record_receipt',
+          err
+        )
+
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: wrappedError.message,
+        })
+        if (err instanceof Error) span.recordException(err)
+        throw wrappedError
+      } finally {
+        span.end()
+      }
+    })
   }
 
   /**
@@ -277,30 +302,30 @@ export class RealSorobanAdapter implements SorobanAdapter {
       let cursor: string | undefined
       const out: RawReceiptEvent[] = []
 
-      for (;;) {
+      for (; ;) {
         const params: any = cursor
           ? {
-              cursor,
-              limit,
-              filters: [
-                {
-                  type: 'contract',
-                  contractIds: [this.config.contractId],
-                  topics: [[topic0, topic1, '*']],
-                },
-              ],
-            }
+            cursor,
+            limit,
+            filters: [
+              {
+                type: 'contract',
+                contractIds: [this.config.contractId],
+                topics: [[topic0, topic1, '*']],
+              },
+            ],
+          }
           : {
-              startLedger,
-              limit,
-              filters: [
-                {
-                  type: 'contract',
-                  contractIds: [this.config.contractId],
-                  topics: [[topic0, topic1, '*']],
-                },
-              ],
-            }
+            startLedger,
+            limit,
+            filters: [
+              {
+                type: 'contract',
+                contractIds: [this.config.contractId],
+                topics: [[topic0, topic1, '*']],
+              },
+            ],
+          }
 
         const res = await this.withBackoff(
           () => this.server.getEvents(params),
@@ -458,7 +483,7 @@ export class RealSorobanAdapter implements SorobanAdapter {
   ): Promise<T> {
     const maxAttempts = 5
     let attempt = 0
-    for (;;) {
+    for (; ;) {
       attempt += 1
       try {
         return await fn()
@@ -486,59 +511,77 @@ export class RealSorobanAdapter implements SorobanAdapter {
   private async invokeReadOnly(
     contractId: string,
     method: string,
-    args: xdr.ScVal[]
+    args: xdr.ScVal[],
   ): Promise<xdr.ScVal> {
-    const sourceAccount = new Address(this.config.rpcUrl.includes('testnet')
-      ? 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
-      : 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF')
+    return tracer.startActiveSpan(`Soroban.invokeReadOnly:${method}`, async (span: Span) => {
+      span.setAttribute('soroban.contract_id', contractId)
+      span.setAttribute('soroban.method', method)
+      span.setAttribute('soroban.rpc_url', this.config.rpcUrl)
 
-    // Build a dummy transaction for simulation
-    const tx = new TransactionBuilder(
-      new Account(sourceAccount.toString(), '-1'),
-      {
-        fee: '100',
-        networkPassphrase: this.config.networkPassphrase,
-      }
-    )
-    .addOperation(
-      Operation.invokeHostFunction({
-        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
-          new xdr.InvokeContractArgs({
-            contractAddress: Address.fromString(contractId).toScAddress(),
-            functionName: method,
-            args: args,
-          })
-        ),
-        auth: [],
-      })
-    )
-    .setTimeout(30)
-    .build()
+      try {
+        const sourceAccount = Address.fromString(this.config.rpcUrl.includes('testnet')
+          ? 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+          : 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF')
 
-    const simulation = await this.server.simulateTransaction(tx)
-
-    if (rpc.Api.isSimulationSuccess(simulation)) {
-      if (!simulation.result?.retval) {
-        throw new ContractError(
-          `No return value from ${method}`,
-          contractId,
-          method
+        // Build a dummy transaction for simulation
+        const tx = new TransactionBuilder(
+          new Account(sourceAccount.toString(), '-1'),
+          {
+            fee: '100',
+            networkPassphrase: this.config.networkPassphrase,
+          }
         )
+          .addOperation(
+            Operation.invokeHostFunction({
+              func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+                new xdr.InvokeContractArgs({
+                  contractAddress: Address.fromString(contractId).toScAddress(),
+                  functionName: method,
+                  args: args,
+                })
+              ),
+              auth: [],
+            })
+          )
+          .setTimeout(30)
+          .build()
+
+        const simulation = await this.server.simulateTransaction(tx)
+
+        if (rpc.Api.isSimulationSuccess(simulation)) {
+          if (!simulation.result?.retval) {
+            throw new ContractError(
+              `No return value from ${method}`,
+              contractId,
+              method
+            )
+          }
+          span.setStatus({ code: SpanStatusCode.OK })
+          return simulation.result.retval
+        } else if (rpc.Api.isSimulationRestore(simulation)) {
+          throw new ContractError(
+            `Contract ${contractId} is archived. Needs restoration.`,
+            contractId,
+            method
+          )
+        } else {
+          throw new ContractError(
+            `Simulation failed: ${simulation.error}`,
+            contractId,
+            method
+          )
+        }
+      } catch (err) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: err instanceof Error ? err.message : String(err),
+        })
+        if (err instanceof Error) span.recordException(err)
+        throw err
+      } finally {
+        span.end()
       }
-      return simulation.result.retval
-    } else if (rpc.Api.isSimulationRestore(simulation)) {
-      throw new ContractError(
-        `Contract ${contractId} is archived. Needs restoration.`,
-        contractId,
-        method
-      )
-    } else {
-      throw new ContractError(
-        `Simulation failed: ${simulation.error}`,
-        contractId,
-        method
-      )
-    }
+    })
   }
 
   /**
@@ -548,116 +591,136 @@ export class RealSorobanAdapter implements SorobanAdapter {
   private async invokeTransaction(
     contractId: string,
     method: string,
-    args: xdr.ScVal[]
+    args: xdr.ScVal[],
   ): Promise<xdr.ScVal> {
-    if (!this.config.adminSecret) {
-      throw new ConfigurationError('Admin secret key not configured for transaction submission')
-    }
+    return tracer.startActiveSpan(`Soroban.invokeTransaction:${method}`, async (span: Span) => {
+      span.setAttribute('soroban.contract_id', contractId)
+      span.setAttribute('soroban.method', method)
+      span.setAttribute('soroban.rpc_url', this.config.rpcUrl)
 
-    // Load admin keypair
-    let adminKeypair: Keypair
-    try {
-      adminKeypair = Keypair.fromSecret(this.config.adminSecret)
-    } catch (err) {
-      throw new ConfigurationError('Invalid admin secret key configured')
-    }
+      try {
+        if (!this.config.adminSecret) {
+          throw new ConfigurationError('Admin secret key not configured for transaction submission')
+        }
 
-    const adminPublicKey = adminKeypair.publicKey()
-
-    // Get the admin's account info from the network
-    const accountResponse = await this.withBackoff(
-      () => this.server.getAccount(adminPublicKey),
-      { op: 'getAccount' }
-    )
-
-    // Build the transaction using account from RPC
-    const tx = new TransactionBuilder(
-      accountResponse,
-      {
-        fee: BASE_FEE,
-        networkPassphrase: this.config.networkPassphrase,
-      }
-    )
-    .addOperation(
-      Operation.invokeHostFunction({
-        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
-          new xdr.InvokeContractArgs({
-            contractAddress: Address.fromString(contractId).toScAddress(),
-            functionName: method,
-            args: args,
-          })
-        ),
-        auth: [], // Auth handled by the transaction signature
-      })
-    )
-    .setTimeout(30)
-    .build()
-
-    // Sign the transaction
-    tx.sign(adminKeypair)
-
-    // Submit the transaction
-    const response = await this.withBackoff(
-      () => this.server.sendTransaction(tx),
-      { op: 'sendTransaction' }
-    )
-
-    if (response.status !== 'PENDING') {
-      // Transaction failed immediately - check for duplicate or other errors
-      const errorResult = response as any
-      const resultXdr = errorResult.errorResultXdr
-
-      if (resultXdr) {
+        // Load admin keypair
+        let adminKeypair: Keypair
         try {
-          const result = xdr.TransactionResult.fromXDR(resultXdr, 'base64')
-          // Check if contract trapped (often indicates duplicate or contract error)
-          const errorStr = result.toXDR('base64')
-          if (errorStr.includes('trapped') || errorStr.includes('duplicate') || errorStr.includes('already')) {
-            throw new ContractError(
-              `Contract error during ${method}. May indicate duplicate receipt.`,
-              contractId,
+          adminKeypair = Keypair.fromSecret(this.config.adminSecret)
+        } catch (err) {
+          throw new ConfigurationError('Invalid admin secret key configured')
+        }
+
+        const adminPublicKey = adminKeypair.publicKey()
+
+        // Get the admin's account info from the network
+        const accountResponse = await this.withBackoff(
+          () => this.server.getAccount(adminPublicKey),
+          { op: 'getAccount' }
+        )
+
+        // Build the transaction using account from RPC
+        const tx = new TransactionBuilder(
+          accountResponse,
+          {
+            fee: BASE_FEE,
+            networkPassphrase: this.config.networkPassphrase,
+          }
+        )
+          .addOperation(
+            Operation.invokeHostFunction({
+              func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+                new xdr.InvokeContractArgs({
+                  contractAddress: Address.fromString(contractId).toScAddress(),
+                  functionName: method,
+                  args: args,
+                })
+              ),
+              auth: [], // Auth handled by the transaction signature
+            })
+          )
+          .setTimeout(30)
+          .build()
+
+        // Sign the transaction
+        tx.sign(adminKeypair)
+
+        // Submit the transaction
+        const response = await this.withBackoff(
+          () => this.server.sendTransaction(tx),
+          { op: 'sendTransaction' }
+        )
+
+        span.setAttribute('soroban.tx_hash', response.hash)
+
+        if (response.status !== 'PENDING') {
+          // Transaction failed immediately - check for duplicate or other errors
+          const errorResult = response as any
+          const resultXdr = errorResult.errorResultXdr
+
+          if (resultXdr) {
+            try {
+              const result = xdr.TransactionResult.fromXDR(resultXdr, 'base64')
+              // Check if contract trapped (often indicates duplicate or contract error)
+              const errorStr = result.toXDR('base64')
+              if (errorStr.includes('trapped') || errorStr.includes('duplicate') || errorStr.includes('already')) {
+                throw new ContractError(
+                  `Contract error during ${method}. May indicate duplicate receipt.`,
+                  contractId,
+                  method
+                )
+              }
+            } catch (decodeErr) {
+              // If we can't decode, fall through to generic error
+            }
+          }
+
+          throw new TransactionError(
+            `Transaction failed with status: ${response.status}`,
+            response.hash,
+            method
+          )
+        }
+
+        // Wait for transaction confirmation if pending
+        if (response.status === 'PENDING') {
+          const confirmedTx = await this.waitForTransaction(response.hash)
+          if (!confirmedTx) {
+            throw new TransactionError(
+              'Transaction not confirmed within timeout',
+              response.hash,
               method
             )
           }
-        } catch (decodeErr) {
-          // If we can't decode, fall through to generic error
+
+          // Check if transaction was successful
+          if (confirmedTx.status === 'SUCCESS') {
+            span.setStatus({ code: SpanStatusCode.OK })
+            // Return success - no specific return value for write operations
+            return xdr.ScVal.scvVoid()
+          } else {
+            throw new TransactionError(
+              `Transaction failed: ${confirmedTx.status}`,
+              response.hash,
+              method
+            )
+          }
         }
-      }
 
-      throw new TransactionError(
-        `Transaction failed with status: ${response.status}`,
-        response.hash,
-        method
-      )
-    }
-
-    // Wait for transaction confirmation if pending
-    if (response.status === 'PENDING') {
-      const confirmedTx = await this.waitForTransaction(response.hash)
-      if (!confirmedTx) {
-        throw new TransactionError(
-          'Transaction not confirmed within timeout',
-          response.hash,
-          method
-        )
-      }
-
-      // Check if transaction was successful
-      if (confirmedTx.status === 'SUCCESS') {
-        // Return success - no specific return value for write operations
+        span.setStatus({ code: SpanStatusCode.OK })
         return xdr.ScVal.scvVoid()
-      } else {
-        throw new TransactionError(
-          `Transaction failed: ${confirmedTx.status}`,
-          response.hash,
-          method
-        )
+      } catch (err) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: err instanceof Error ? err.message : String(err),
+        })
+        if (err instanceof Error) span.recordException(err)
+        throw err
+      } finally {
+        span.end()
       }
-    }
-
-    return xdr.ScVal.scvVoid()
+    })
   }
-
   /**
    * Wait for a transaction to be confirmed by polling getTransaction
    */

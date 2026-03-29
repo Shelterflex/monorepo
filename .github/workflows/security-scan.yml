@@ -1,0 +1,258 @@
+name: Security Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  security-events: write
+
+jobs:
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for secret scanning
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install security scanning tools
+        run: |
+          # Install Gitleaks
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+          tar -xzf gitleaks_8.18.0_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+          chmod +x /usr/local/bin/gitleaks
+
+          # Install Semgrep
+          pip install semgrep
+
+          # Install cargo-audit
+          cargo install cargo-audit --locked
+
+          # Install ESLint security plugin (will be installed via npm ci)
+          echo "Security tools installed"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+          cd ../backend && npm ci
+
+      - name: Install security-scan dependencies
+        run: |
+          cd security-scan
+          npm install typescript @types/node uuid @types/uuid eslint-plugin-security
+
+      - name: Build security scanner
+        run: |
+          cd security-scan
+          npx tsc --outDir dist --module commonjs --target es2022 --esModuleInterop --resolveJsonModule --skipLibCheck --moduleResolution node *.ts scanners/*.ts
+
+      - name: Run Security Scan
+        id: scan
+        continue-on-error: true
+        env:
+          MODIFIED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          node security-scan/dist/orchestrator.js || true
+          if [ -f security-scan-results.json ]; then
+            echo "scan_completed=true" >> $GITHUB_OUTPUT
+            echo "status=$(cat security-scan-results.json | jq -r '.status')" >> $GITHUB_OUTPUT
+          else
+            echo "scan_completed=false" >> $GITHUB_OUTPUT
+            echo "status=error" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Scan Results (JSON)
+        if: always() && steps.scan.outputs.scan_completed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results-json
+          path: security-scan-results.json
+          retention-days: 90
+
+      - name: Generate Markdown Report
+        if: always() && steps.scan.outputs.scan_completed == 'true'
+        run: |
+          node -e "
+          const fs = require('fs');
+          const { generateMarkdownReport } = require('./security-scan/dist/report-generator');
+          const scanResult = JSON.parse(fs.readFileSync('security-scan-results.json', 'utf-8'));
+          const markdown = generateMarkdownReport(scanResult);
+          fs.writeFileSync('security-scan-report.md', markdown);
+          "
+
+      - name: Upload Scan Results (Markdown)
+        if: always() && steps.scan.outputs.scan_completed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report-markdown
+          path: security-scan-report.md
+          retention-days: 90
+
+      - name: Update PR Check
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Check if scan completed
+            const scanCompleted = '${{ steps.scan.outputs.scan_completed }}' === 'true';
+
+            if (!scanCompleted) {
+              // Scanner failed to run
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'Security Scan',
+                head_sha: context.payload.pull_request.head.sha,
+                status: 'completed',
+                conclusion: 'neutral',
+                output: {
+                  title: '⚠️ Security Scan: Scanner failed to execute',
+                  summary: 'The security scanner encountered an error during execution. Check the workflow logs for details.'
+                }
+              });
+              return;
+            }
+
+            const scanResult = JSON.parse(fs.readFileSync('security-scan-results.json', 'utf-8'));
+
+            const statusEmoji = scanResult.status === 'pass' ? '✅' : scanResult.status === 'fail' ? '❌' : '⚠️';
+            const title = `${statusEmoji} Security Scan: ${scanResult.summary.total} vulnerabilities found`;
+
+            let summary = `**Total:** ${scanResult.summary.total}\n\n`;
+            summary += `- 🔴 Critical: ${scanResult.summary.critical}\n`;
+            summary += `- 🟠 High: ${scanResult.summary.high}\n`;
+            summary += `- 🟡 Medium: ${scanResult.summary.medium}\n`;
+            summary += `- 🟢 Low: ${scanResult.summary.low}\n`;
+            summary += `- ℹ️ Info: ${scanResult.summary.info}\n\n`;
+
+            if (scanResult.failureReason) {
+              summary += `\n⚠️ **Errors:** ${scanResult.failureReason}\n`;
+            }
+
+            summary += `\n📄 View detailed reports in workflow artifacts`;
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Security Scan',
+              head_sha: context.payload.pull_request.head.sha,
+              status: 'completed',
+              conclusion: scanResult.status === 'fail' ? 'failure' : scanResult.status === 'error' ? 'neutral' : 'success',
+              output: {
+                title: title,
+                summary: summary
+              }
+            });
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Check if scan completed
+            const scanCompleted = '${{ steps.scan.outputs.scan_completed }}' === 'true';
+            
+            if (!scanCompleted) {
+              // Post error comment
+              const errorComment = `<!-- security-scan-comment -->
+## ⚠️ Security Scan Results
+
+**Status:** Scanner failed to execute
+
+The security scanner encountered an error during execution. This may be due to:
+- Missing dependencies or tools
+- Build failures
+- Configuration issues
+
+Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
+
+*This does not block the PR merge.*`;
+
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+              });
+
+              const existingComment = comments.find(c => c.body?.includes('<!-- security-scan-comment -->'));
+
+              if (existingComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existingComment.id,
+                  body: errorComment
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: errorComment
+                });
+              }
+              return;
+            }
+            
+            const scanResult = JSON.parse(fs.readFileSync('security-scan-results.json', 'utf-8'));
+            const { generatePRComment } = require('./security-scan/dist/report-generator');
+
+            const comment = generatePRComment(scanResult);
+
+            // Find existing security scan comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existingComment = comments.find(c => c.body?.includes('<!-- security-scan-comment -->'));
+
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: comment
+              });
+            }
+
+      - name: Fail on Critical/High Vulnerabilities
+        if: steps.scan.outputs.status == 'fail'
+        run: |
+          echo "❌ Security scan failed - critical or high vulnerabilities detected"
+          echo "Review the security scan report and fix the vulnerabilities before merging"
+          exit 1

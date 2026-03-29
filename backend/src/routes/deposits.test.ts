@@ -15,6 +15,7 @@ describe('POST /api/deposits/confirm', () => {
   it('confirms a deposit and returns a completed conversion', async () => {
     const res = await request(app)
       .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'test-dep-001')
       .send({
         depositId: 'onramp:dep_001',
         userId: 'user_1',
@@ -42,8 +43,8 @@ describe('POST /api/deposits/confirm', () => {
       providerRef: 'provider-ref-002',
     }
 
-    const res1 = await request(app).post('/api/deposits/confirm').send(payload).expect(200)
-    const res2 = await request(app).post('/api/deposits/confirm').send(payload).expect(200)
+    const res1 = await request(app).post('/api/deposits/confirm').set('x-idempotency-key', 'test-dep-002-a').send(payload).expect(200)
+    const res2 = await request(app).post('/api/deposits/confirm').set('x-idempotency-key', 'test-dep-002-b').send(payload).expect(200)
 
     expect(res1.body.conversion.conversionId).toBe(res2.body.conversion.conversionId)
     expect(res1.body.conversion.amountUsdc).toBe(res2.body.conversion.amountUsdc)

@@ -84,6 +84,15 @@ export async function apiFetch<T>(
     ...(options?.headers ?? {}),
   };
 
+  // Attach CSRF token for state-mutating requests (browser only)
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (typeof window !== "undefined" && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    // Lazy-import to avoid SSR module initialization issues
+    const { csrfProtection } = await import('./csrf-protection');
+    const csrfToken = csrfProtection.getCurrentToken() ?? csrfProtection.initialize();
+    (headers as Record<string, string>)["X-CSRF-Token"] = csrfToken;
+  }
+
   try {
     const res = await fetch(`${baseUrl}${path}`, {
       cache: "no-store",
@@ -104,7 +113,12 @@ export async function apiFetch<T>(
       }
 
       const message = errorResponse?.error?.message || `API error: ${res.status}`
-      throw new ApiError(res.status, errorResponse, message)
+      throw new ApiError({
+        message,
+        status: res.status,
+        code: errorResponse?.error?.code,
+        details: errorResponse?.error?.details as Record<string, unknown> | undefined,
+      })
     }
 
     return res.json();

@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import type { Request } from 'express'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { getValidSecretVersions } from '../services/rotatingSecretProvider.js'
 
 // Extend Express Request to support rawBody middleware
 declare global {
@@ -32,8 +33,27 @@ export function shouldValidateWebhookSignature(): boolean {
 /**
  * Get the webhook secret for a specific provider
  * Returns undefined if not configured
+ * Supports secret rotation - returns all valid versions
  */
 export function getProviderSecret(rail: PaymentRail): string | undefined {
+  // Try to get from rotation service first
+  const secretNameMap: Record<PaymentRail, string | undefined> = {
+    paystack: 'paystack_secret',
+    flutterwave: 'flutterwave_secret',
+    manual_admin: 'manual_admin_secret',
+    psp: 'webhook_secret',
+    bank_transfer: undefined,
+  };
+
+  const secretName = secretNameMap[rail];
+  if (secretName) {
+    const validVersions = getValidSecretVersions(secretName);
+    if (validVersions.length > 0) {
+      return validVersions[0]; // Return active version
+    }
+  }
+
+  // Fallback to environment variables
   switch (rail) {
     case 'paystack':
       return process.env.PAYSTACK_SECRET
@@ -52,45 +72,76 @@ export function getProviderSecret(rail: PaymentRail): string | undefined {
 }
 
 /**
+ * Get all valid secret versions for a provider (for rotation support)
+ */
+export function getProviderSecretVersions(rail: PaymentRail): string[] {
+  const secretNameMap: Record<PaymentRail, string | undefined> = {
+    paystack: 'paystack_secret',
+    flutterwave: 'flutterwave_secret',
+    manual_admin: 'manual_admin_secret',
+    psp: 'webhook_secret',
+    bank_transfer: undefined,
+  };
+
+  const secretName = secretNameMap[rail];
+  if (secretName) {
+    const validVersions = getValidSecretVersions(secretName);
+    if (validVersions.length > 0) {
+      return validVersions;
+    }
+  }
+
+  // Fallback to single environment variable
+  const envSecret = getProviderSecret(rail);
+  return envSecret ? [envSecret] : [];
+}
+
+/**
  * Paystack webhook signature verification
  * Uses HMAC-SHA512 with the secret key
  * Signature is sent in x-paystack-signature header
  * Payload is the raw request body as a string
+ * Supports secret rotation - tries all valid secret versions
  */
 export function verifyPaystackSignature(
   payload: string,
   signature: string,
-  secret: string
+  secrets: string[]
 ): WebhookValidationResult {
   if (!signature) {
     return { valid: false, error: 'Missing x-paystack-signature header' }
   }
 
-  if (!secret) {
+  if (secrets.length === 0) {
     return { valid: false, error: 'Paystack secret not configured' }
   }
 
-  const expectedSignature = crypto
-    .createHmac('sha512', secret)
-    .update(payload, 'utf8')
-    .digest('hex')
+  // Try each valid secret version
+  for (const secret of secrets) {
+    const expectedSignature = crypto
+      .createHmac('sha512', secret)
+      .update(payload, 'utf8')
+      .digest('hex')
 
-  // Use timing-safe comparison to prevent timing attacks
-  // Handle length mismatch gracefully
-  if (signature.length !== expectedSignature.length) {
-    return { valid: false, error: 'Invalid Paystack signature' }
+    // Use timing-safe comparison to prevent timing attacks
+    // Handle length mismatch gracefully
+    if (signature.length === expectedSignature.length) {
+      try {
+        const isValid = crypto.timingSafeEqual(
+          Buffer.from(signature, 'hex'),
+          Buffer.from(expectedSignature, 'hex')
+        )
+
+        if (isValid) {
+          return { valid: true }
+        }
+      } catch {
+        // Continue to next secret version
+      }
+    }
   }
 
-  const isValid = crypto.timingSafeEqual(
-    Buffer.from(signature, 'hex'),
-    Buffer.from(expectedSignature, 'hex')
-  )
-
-  if (!isValid) {
-    return { valid: false, error: 'Invalid Paystack signature' }
-  }
-
-  return { valid: true }
+  return { valid: false, error: 'Invalid Paystack signature' }
 }
 
 /**
@@ -100,76 +151,81 @@ export function verifyPaystackSignature(
  * This implementation follows the standard webhook verification pattern:
  * - Signature in the 'verif-hash' header
  * - HMAC-SHA256 with the secret key
+ * Supports secret rotation - tries all valid secret versions
  */
 export function verifyFlutterwaveSignature(
   payload: string,
   signature: string,
-  secret: string
+  secrets: string[]
 ): WebhookValidationResult {
   if (!signature) {
     return { valid: false, error: 'Missing verif-hash header' }
   }
 
-  if (!secret) {
+  if (secrets.length === 0) {
     return { valid: false, error: 'Flutterwave secret not configured' }
   }
 
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(payload, 'utf8')
-    .digest('hex')
+  // Try each valid secret version
+  for (const secret of secrets) {
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(payload, 'utf8')
+      .digest('hex')
 
-  // Use timing-safe comparison
-  try {
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signature, 'hex'),
-      Buffer.from(expectedSignature, 'hex')
-    )
+    // Use timing-safe comparison
+    try {
+      const isValid = crypto.timingSafeEqual(
+        Buffer.from(signature, 'hex'),
+        Buffer.from(expectedSignature, 'hex')
+      )
 
-    if (!isValid) {
-      return { valid: false, error: 'Invalid Flutterwave signature' }
+      if (isValid) {
+        return { valid: true }
+      }
+    } catch {
+      // Continue to next secret version
     }
-
-    return { valid: true }
-  } catch {
-    // Buffer length mismatch or other error
-    return { valid: false, error: 'Invalid Flutterwave signature format' }
   }
+
+  return { valid: false, error: 'Invalid Flutterwave signature' }
 }
 
 /**
  * Manual admin webhook signature verification
  * Uses simple shared secret comparison for admin-initiated operations
  * Signature is sent in x-admin-signature header
+ * Supports secret rotation - tries all valid secret versions
  */
 export function verifyManualAdminSignature(
   signature: string,
-  secret: string
+  secrets: string[]
 ): WebhookValidationResult {
   if (!signature) {
     return { valid: false, error: 'Missing x-admin-signature header' }
   }
 
-  if (!secret) {
+  if (secrets.length === 0) {
     return { valid: false, error: 'Manual admin secret not configured' }
   }
 
-  // For manual admin, we use a simple constant-time comparison
-  try {
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signature, 'utf8'),
-      Buffer.from(secret, 'utf8')
-    )
+  // Try each valid secret version
+  for (const secret of secrets) {
+    try {
+      const isValid = crypto.timingSafeEqual(
+        Buffer.from(signature, 'utf8'),
+        Buffer.from(secret, 'utf8')
+      )
 
-    if (!isValid) {
-      return { valid: false, error: 'Invalid admin signature' }
+      if (isValid) {
+        return { valid: true }
+      }
+    } catch {
+      // Continue to next secret version
     }
-
-    return { valid: true }
-  } catch {
-    // Length mismatch
-    return { valid: false, error: 'Invalid admin signature' }
   }
+
+  return { valid: false, error: 'Invalid admin signature' }
 }
 
 /**
@@ -188,25 +244,28 @@ export function verifyBankTransferSignature(): WebhookValidationResult {
 /**
  * Legacy fallback signature verification (for backward compatibility)
  * Uses simple string comparison with WEBHOOK_SECRET
+ * Supports secret rotation - tries all valid secret versions
  */
 export function verifyLegacySignature(
   signature: string,
-  secret: string
+  secrets: string[]
 ): WebhookValidationResult {
   if (!signature) {
     return { valid: false, error: 'Missing x-webhook-signature header' }
   }
 
-  if (!secret) {
+  if (secrets.length === 0) {
     return { valid: false, error: 'Webhook secret not configured' }
   }
 
-  // Simple comparison for legacy support
-  if (signature !== secret) {
-    return { valid: false, error: 'Invalid webhook signature' }
+  // Try each valid secret version
+  for (const secret of secrets) {
+    if (signature === secret) {
+      return { valid: true }
+    }
   }
 
-  return { valid: true }
+  return { valid: false, error: 'Invalid webhook signature' }
 }
 
 /**
@@ -233,6 +292,7 @@ export function getRawBody(req: Request): string {
  * - Production ALWAYS validates signatures
  * - Invalid signature => 401 UNAUTHORIZED
  * - Missing secret in prod => 500 INTERNAL_ERROR (misconfiguration)
+ * Supports secret rotation - tries all valid secret versions
  */
 export function requireValidWebhookSignature(req: Request, rail: PaymentRail): void {
   // Skip validation if not required
@@ -240,10 +300,10 @@ export function requireValidWebhookSignature(req: Request, rail: PaymentRail): v
     return
   }
 
-  const secret = getProviderSecret(rail)
+  const secrets = getProviderSecretVersions(rail);
 
   // In production, missing secret is a 500 error (misconfiguration)
-  if (!secret && process.env.NODE_ENV === 'production') {
+  if (secrets.length === 0 && process.env.NODE_ENV === 'production') {
     throw new AppError(
       ErrorCode.INTERNAL_ERROR,
       500,
@@ -262,20 +322,20 @@ export function requireValidWebhookSignature(req: Request, rail: PaymentRail): v
     case 'paystack': {
       const signature = req.headers['x-paystack-signature'] as string
       const rawBody = getRawBody(req)
-      result = verifyPaystackSignature(rawBody, signature, secret || '')
+      result = verifyPaystackSignature(rawBody, signature, secrets)
       break
     }
 
     case 'flutterwave': {
       const signature = req.headers['verif-hash'] as string
       const rawBody = getRawBody(req)
-      result = verifyFlutterwaveSignature(rawBody, signature, secret || '')
+      result = verifyFlutterwaveSignature(rawBody, signature, secrets)
       break
     }
 
     case 'manual_admin': {
       const signature = req.headers['x-admin-signature'] as string
-      result = verifyManualAdminSignature(signature, secret || '')
+      result = verifyManualAdminSignature(signature, secrets)
       break
     }
 
@@ -283,7 +343,7 @@ export function requireValidWebhookSignature(req: Request, rail: PaymentRail): v
     default: {
       // Legacy fallback
       const signature = req.headers['x-webhook-signature'] as string
-      result = verifyLegacySignature(signature, secret || '')
+      result = verifyLegacySignature(signature, secrets)
       break
     }
   }

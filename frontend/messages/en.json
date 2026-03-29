@@ -1,0 +1,101 @@
+{
+  "common": {
+    "welcome": "Welcome",
+    "login": "Login",
+    "signup": "Sign Up",
+    "logout": "Logout",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "confirm": "Confirm"
+  },
+  "navigation": {
+    "home": "Home",
+    "properties": "Properties",
+    "dashboard": "Dashboard",
+    "wallet": "Wallet",
+    "staking": "Staking",
+    "messages": "Messages",
+    "about": "About",
+    "contact": "Contact",
+    "landlords": "Landlords",
+    "calculator": "Calculator"
+  },
+  "auth": {
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "forgotPassword": "Forgot Password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signInButton": "Sign In",
+    "signUpButton": "Sign Up",
+    "verifyOtp": "Verify OTP",
+    "otpSent": "OTP sent to your email",
+    "enterOtp": "Enter the OTP code"
+  },
+  "wallet": {
+    "balance": "Balance",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "transaction": "Transaction",
+    "transactionHistory": "Transaction History",
+    "amount": "Amount",
+    "address": "Address",
+    "confirmTransaction": "Confirm Transaction"
+  },
+  "staking": {
+    "stake": "Stake",
+    "unstake": "Unstake",
+    "claim": "Claim Rewards",
+    "stakedAmount": "Staked Amount",
+    "rewards": "Rewards",
+    "apy": "APY",
+    "totalStaked": "Total Staked"
+  },
+  "properties": {
+    "title": "Properties",
+    "search": "Search properties",
+    "location": "Location",
+    "price": "Price",
+    "bedrooms": "Bedrooms",
+    "bathrooms": "Bathrooms",
+    "viewDetails": "View Details"
+  },
+  "dashboard": {
+    "overview": "Overview",
+    "recentActivity": "Recent Activity",
+    "statistics": "Statistics",
+    "tenant": "Tenant Dashboard",
+    "landlord": "Landlord Dashboard",
+    "agent": "Agent Dashboard"
+  },
+  "currency": {
+    "ngn": "NGN",
+    "usd": "USD",
+    "xlm": "XLM"
+  },
+  "date": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "networkError": "Network error. Please check your connection.",
+    "unauthorized": "Unauthorized access",
+    "notFound": "Not found",
+    "validationError": "Validation error"
+  }
+}

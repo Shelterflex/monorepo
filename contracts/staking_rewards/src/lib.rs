@@ -56,6 +56,10 @@ impl StakingRewards {
             .unwrap_or(0u32)
     }
 
+    pub fn version(env: Env) -> u32 {
+        Self::contract_version(env)
+    }
+
     pub fn admin(env: Env) -> Address {
         env.storage()
             .instance()
@@ -359,6 +363,14 @@ mod test {
         assert_eq!(client.contract_version(), 1u32);
 
         (contract_id, client)
+    }
+
+    #[test]
+    fn version_matches_contract_version() {
+        let env = Env::default();
+        let (_contract_id, client) = setup(&env);
+        assert_eq!(client.version(), 1u32);
+        assert_eq!(client.version(), client.contract_version());
     }
 
     #[test]

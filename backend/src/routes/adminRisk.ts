@@ -1,7 +1,7 @@
-import { Router, type Response, type NextFunction } from 'express'
-import { validate } from '../middleware/validate.js'
-import { NgnWalletService } from '../services/ngnWalletService.js'
-import { userRiskStateStore } from '../models/userRiskStateStore.js'
+import { Router, type Response, type NextFunction } from "express";
+import { validate } from "../middleware/validate.js";
+import { NgnWalletService } from "../services/ngnWalletService.js";
+import { userRiskStateStore } from "../models/userRiskStateStore.js";
 import {
   freezeUserRequestSchema,
   unfreezeUserRequestSchema,
@@ -9,27 +9,36 @@ import {
   frozenUsersResponseSchema,
   type FreezeUserRequest,
   type UnfreezeUserRequest,
-} from '../schemas/risk.js'
-import { logger } from '../utils/logger.js'
-import { AppError } from '../errors/AppError.js'
-import { ErrorCode } from '../errors/errorCodes.js'
-import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth.js'
+} from "../schemas/risk.js";
+import { logger } from "../utils/logger.js";
+import { AppError } from "../errors/AppError.js";
+import { ErrorCode } from "../errors/errorCodes.js";
+import {
+  authenticateToken,
+  type AuthenticatedRequest,
+} from "../middleware/auth.js";
+import { auditAdminRiskOperation } from "../utils/auditLogger.js";
 
-export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Router {
-  const router = Router()
+export function createAdminRiskRouter(
+  ngnWalletService: NgnWalletService,
+): Router {
+  const router = Router();
 
   /**
    * GET /api/admin/risk/frozen-users
    * Returns all frozen user accounts
    */
   router.get(
-    '/frozen-users',
+    "/frozen-users",
     authenticateToken,
     async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        logger.info('Getting frozen users', { adminId: req.user!.id, requestId: req.requestId })
+        logger.info("Getting frozen users", {
+          adminId: req.user!.id,
+          requestId: req.requestId,
+        });
 
-        const frozenStates = await userRiskStateStore.getAllFrozen()
+        const frozenStates = await userRiskStateStore.getAllFrozen();
 
         const response = {
           success: true,
@@ -40,40 +49,40 @@ export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Route
             createdAt: state.createdAt.toISOString(),
             updatedAt: state.updatedAt.toISOString(),
           })),
-        }
+        };
 
-        logger.info('Frozen users retrieved', {
+        logger.info("Frozen users retrieved", {
           adminId: req.user!.id,
           count: frozenStates.length,
           requestId: req.requestId,
-        })
+        });
 
-        res.json(frozenUsersResponseSchema.parse(response))
+        res.json(frozenUsersResponseSchema.parse(response));
       } catch (error) {
-        next(error)
+        next(error);
       }
-    }
-  )
+    },
+  );
 
   /**
    * GET /api/admin/risk/:userId
    * Returns risk state and current balances for a specific user
    */
   router.get(
-    '/:userId',
+    "/:userId",
     authenticateToken,
     async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { userId } = req.params
+        const { userId } = req.params;
 
-        logger.info('Getting user risk details', {
+        logger.info("Getting user risk details", {
           adminId: req.user!.id,
           targetUserId: userId,
           requestId: req.requestId,
-        })
+        });
 
-        const riskState = await userRiskStateStore.getByUserId(userId)
-        const balances = await ngnWalletService.getBalance(userId)
+        const riskState = await userRiskStateStore.getByUserId(userId);
+        const balances = await ngnWalletService.getBalance(userId);
 
         if (!riskState) {
           // User has no risk state record - return default unfrozen state
@@ -90,10 +99,10 @@ export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Route
               updatedAt: new Date().toISOString(),
             },
             balances,
-          }
+          };
 
-          res.json(userRiskDetailResponseSchema.parse(response))
-          return
+          res.json(userRiskDetailResponseSchema.parse(response));
+          return;
         }
 
         const response = {
@@ -106,43 +115,47 @@ export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Route
             updatedAt: riskState.updatedAt.toISOString(),
           },
           balances,
-        }
+        };
 
-        logger.info('User risk details retrieved', {
+        logger.info("User risk details retrieved", {
           adminId: req.user!.id,
           targetUserId: userId,
           isFrozen: riskState.isFrozen,
           requestId: req.requestId,
-        })
+        });
 
-        res.json(userRiskDetailResponseSchema.parse(response))
+        res.json(userRiskDetailResponseSchema.parse(response));
       } catch (error) {
-        next(error)
+        next(error);
       }
-    }
-  )
+    },
+  );
 
   /**
    * POST /api/admin/risk/:userId/freeze
    * Manually freeze a user account
    */
   router.post(
-    '/:userId/freeze',
+    "/:userId/freeze",
     authenticateToken,
-    validate(freezeUserRequestSchema, 'body'),
+    validate(freezeUserRequestSchema, "body"),
     async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { userId } = req.params
-        const { reason, notes } = req.body as FreezeUserRequest
+        const { userId } = req.params;
+        const { reason, notes } = req.body as FreezeUserRequest;
 
-        logger.info('Freezing user account', {
+        logger.info("Freezing user account", {
           adminId: req.user!.id,
           targetUserId: userId,
           reason,
           requestId: req.requestId,
-        })
+        });
 
-        const riskState = await userRiskStateStore.freeze(userId, reason, notes)
+        const riskState = await userRiskStateStore.freeze(
+          userId,
+          reason,
+          notes,
+        );
 
         const response = {
           success: true,
@@ -153,42 +166,49 @@ export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Route
             createdAt: riskState.createdAt.toISOString(),
             updatedAt: riskState.updatedAt.toISOString(),
           },
-        }
+        };
 
-        logger.info('User account frozen', {
+        logger.info("User account frozen", {
           adminId: req.user!.id,
           targetUserId: userId,
           reason,
           requestId: req.requestId,
-        })
+        });
 
-        res.json(response)
+        // Audit log: admin risk freeze
+        auditAdminRiskOperation(req, "ADMIN_RISK_FREEZE", {
+          targetUserId: userId,
+          reason,
+          notes,
+        });
+
+        res.json(response);
       } catch (error) {
-        next(error)
+        next(error);
       }
-    }
-  )
+    },
+  );
 
   /**
    * POST /api/admin/risk/:userId/unfreeze
    * Manually unfreeze a user account
    */
   router.post(
-    '/:userId/unfreeze',
+    "/:userId/unfreeze",
     authenticateToken,
-    validate(unfreezeUserRequestSchema, 'body'),
+    validate(unfreezeUserRequestSchema, "body"),
     async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { userId } = req.params
-        const { notes } = req.body as UnfreezeUserRequest
+        const { userId } = req.params;
+        const { notes } = req.body as UnfreezeUserRequest;
 
-        logger.info('Unfreezing user account', {
+        logger.info("Unfreezing user account", {
           adminId: req.user!.id,
           targetUserId: userId,
           requestId: req.requestId,
-        })
+        });
 
-        const riskState = await userRiskStateStore.unfreeze(userId, notes)
+        const riskState = await userRiskStateStore.unfreeze(userId, notes);
 
         const response = {
           success: true,
@@ -199,20 +219,26 @@ export function createAdminRiskRouter(ngnWalletService: NgnWalletService): Route
             createdAt: riskState.createdAt.toISOString(),
             updatedAt: riskState.updatedAt.toISOString(),
           },
-        }
+        };
 
-        logger.info('User account unfrozen', {
+        logger.info("User account unfrozen", {
           adminId: req.user!.id,
           targetUserId: userId,
           requestId: req.requestId,
-        })
+        });
 
-        res.json(response)
+        // Audit log: admin risk unfreeze
+        auditAdminRiskOperation(req, "ADMIN_RISK_UNFREEZE", {
+          targetUserId: userId,
+          notes,
+        });
+
+        res.json(response);
       } catch (error) {
-        next(error)
+        next(error);
       }
-    }
-  )
+    },
+  );
 
-  return router
+  return router;
 }
