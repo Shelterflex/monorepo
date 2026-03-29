@@ -39,6 +39,7 @@ export const envSchema = z.object({
   // Resend configuration (required for email OTP delivery)
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
+  SOROBAN_ADAPTER_MODE: z.enum(['stub', 'real']).default('stub'),
 }).refine((data) => {
   // Accept either field name; prefer SOROBAN_USDC_TOKEN_ID if provided
   const tokenId = data.SOROBAN_USDC_TOKEN_ID || data.USDC_TOKEN_ADDRESS

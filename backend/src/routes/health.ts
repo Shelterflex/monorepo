@@ -30,8 +30,9 @@ router.get("/details", async (req: Request, res: Response) => {
     version: env.VERSION,
     nodeEnv: env.NODE_ENV,
     uptimeSeconds: Math.floor(process.uptime()),
+    sorobanAdapterMode: env.SOROBAN_ADAPTER_MODE,
+    databaseEnabled: dbConnected,
     requestId: req.requestId,
-    dbConnected,
   })
 })
 

@@ -33,7 +33,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 2000000
+                          "lo": 1000000
                         }
                       }
                     },
@@ -42,7 +42,7 @@
                         "symbol": "deal_id"
                       },
                       "val": {
-                        "string": "deal_evt_001"
+                        "string": "deal_dup"
                       }
                     },
                     {
@@ -50,7 +50,7 @@
                         "symbol": "external_ref"
                       },
                       "val": {
-                        "string": "ref_event_001"
+                        "string": "dup_ref_001"
                       }
                     },
                     {
@@ -121,7 +121,8 @@
           "sub_invocations": []
         }
       ]
-    ]
+    ],
+    []
   ],
   "ledger": {
     "protocol_version": 22,
@@ -143,7 +144,7 @@
                   "symbol": "DealCount"
                 },
                 {
-                  "string": "deal_evt_001"
+                  "string": "deal_dup"
                 }
               ]
             },
@@ -163,7 +164,7 @@
                       "symbol": "DealCount"
                     },
                     {
-                      "string": "deal_evt_001"
+                      "string": "deal_dup"
                     }
                   ]
                 },
@@ -188,7 +189,7 @@
                   "symbol": "DealIndex"
                 },
                 {
-                  "string": "deal_evt_001"
+                  "string": "deal_dup"
                 },
                 {
                   "u32": 0
@@ -211,7 +212,7 @@
                       "symbol": "DealIndex"
                     },
                     {
-                      "string": "deal_evt_001"
+                      "string": "deal_dup"
                     },
                     {
                       "u32": 0
@@ -220,7 +221,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
+                  "bytes": "0cbd846bf840818db5fcbe07d81a7c5f63bc795790979dde4a51b0ff9fec9475"
                 }
               }
             },
@@ -239,7 +240,7 @@
                   "symbol": "Receipt"
                 },
                 {
-                  "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
+                  "bytes": "0cbd846bf840818db5fcbe07d81a7c5f63bc795790979dde4a51b0ff9fec9475"
                 }
               ]
             },
@@ -259,7 +260,7 @@
                       "symbol": "Receipt"
                     },
                     {
-                      "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
+                      "bytes": "0cbd846bf840818db5fcbe07d81a7c5f63bc795790979dde4a51b0ff9fec9475"
                     }
                   ]
                 },
@@ -279,7 +280,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 2000000
+                          "lo": 1000000
                         }
                       }
                     },
@@ -288,7 +289,7 @@
                         "symbol": "deal_id"
                       },
                       "val": {
-                        "string": "deal_evt_001"
+                        "string": "deal_dup"
                       }
                     },
                     {
@@ -296,7 +297,7 @@
                         "symbol": "external_ref"
                       },
                       "val": {
-                        "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
+                        "bytes": "0cbd846bf840818db5fcbe07d81a7c5f63bc795790979dde4a51b0ff9fec9475"
                       }
                     },
                     {
@@ -356,7 +357,7 @@
                         "symbol": "tx_id"
                       },
                       "val": {
-                        "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
+                        "bytes": "0cbd846bf840818db5fcbe07d81a7c5f63bc795790979dde4a51b0ff9fec9475"
                       }
                     },
                     {
@@ -513,134 +514,5 @@
       ]
     ]
   },
-  "events": [
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "transaction_receipt"
-              },
-              {
-                "symbol": "receipt_recorded"
-              },
-              {
-                "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "amount_ngn"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "amount_usdc"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 2000000
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "deal_id"
-                  },
-                  "val": {
-                    "string": "deal_evt_001"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "external_ref"
-                  },
-                  "val": {
-                    "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "from"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "fx_provider"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "fx_rate_ngn_per_usdc"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "listing_id"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "metadata_hash"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "timestamp"
-                  },
-                  "val": {
-                    "u64": 0
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "to"
-                  },
-                  "val": "void"
-                },
-                {
-                  "key": {
-                    "symbol": "token"
-                  },
-                  "val": {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "tx_id"
-                  },
-                  "val": {
-                    "bytes": "a846067443ac8ae35bc2ac6d0faa1fc8ff08bb2dd10c1260e0824c8dbd4531e9"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "tx_type"
-                  },
-                  "val": {
-                    "symbol": "TENANT_REPAYMENT"
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    }
-  ]
+  "events": []
 }

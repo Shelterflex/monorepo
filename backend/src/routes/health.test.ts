@@ -31,7 +31,8 @@ describe('Health Routes', () => {
       expect(res.body).toHaveProperty('nodeEnv')
       expect(res.body).toHaveProperty('uptimeSeconds')
       expect(res.body).toHaveProperty('requestId')
-      expect(res.body).toHaveProperty('dbConnected', true)
+      expect(res.body).toHaveProperty('sorobanAdapterMode')
+      expect(res.body).toHaveProperty('databaseEnabled', true)
 
       // Absence check for forbidden fields
       expect(res.body).not.toHaveProperty('process.env')
@@ -51,7 +52,7 @@ describe('Health Routes', () => {
       const res = await request.get('/health/details')
 
       expect(res.status).toBe(200)
-      expect(res.body).toHaveProperty('dbConnected', false)
+      expect(res.body).toHaveProperty('databaseEnabled', false)
     })
 
     it('returns dbConnected: false when pool.query fails', async () => {
@@ -64,7 +65,7 @@ describe('Health Routes', () => {
       const res = await request.get('/health/details')
 
       expect(res.status).toBe(200)
-      expect(res.body).toHaveProperty('dbConnected', false)
+      expect(res.body).toHaveProperty('databaseEnabled', false)
     })
   })
 })
