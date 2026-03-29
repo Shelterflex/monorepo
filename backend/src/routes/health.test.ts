@@ -5,6 +5,7 @@ import * as db from '../db.js'
 // Mock the db module
 vi.mock('../db.js', () => ({
   getPool: vi.fn(),
+  getPoolMetrics: vi.fn(),
 }))
 
 describe('Health Routes', () => {

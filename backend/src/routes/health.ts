@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express"
 import { env } from "../schemas/env.js"
-import { getPoolMetrics } from "../db.js"
+import { getPoolMetrics, getPool } from "../db.js"
 import { getMetricsSnapshot } from "../utils/appMetrics.js"
 
 const router = Router()
@@ -32,8 +32,9 @@ router.get("/details", async (req: Request, res: Response) => {
   res.json({
     version: env.VERSION,
     nodeEnv: env.NODE_ENV,
-    sorobanAdapterMode,
-    databaseEnabled: !!process.env.DATABASE_URL,
+    uptimeSeconds: Math.floor(process.uptime()),
+    sorobanAdapterMode: env.SOROBAN_ADAPTER_MODE,
+    databaseEnabled: dbConnected,
     ...(poolMetrics ? { databasePool: poolMetrics } : {}),
     requestId: req.requestId,
   })
