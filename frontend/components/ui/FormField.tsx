@@ -45,6 +45,17 @@ export function FormField<T extends FieldValues>({
   const error = errors[name];
   const errorId = `${name}-error`;
   const descId = `${name}-desc`;
+  const describedBy = [description ? descId : null, error ? errorId : null]
+    .filter(Boolean)
+    .join(" ") || undefined;
+
+  const inputElement = children && React.isValidElement(children)
+    ? React.cloneElement(children as React.ReactElement<any, any>, {
+        id: (children.props as any).id ?? name,
+        "aria-describedby": (children.props as any)["aria-describedby"] ?? describedBy,
+        "aria-invalid": (children.props as any)["aria-invalid"] ?? !!error,
+      } as any)
+    : children;
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
@@ -61,17 +72,13 @@ export function FormField<T extends FieldValues>({
         </p>
       )}
 
-      {children ?? (
+      {inputElement ?? (
         <input
           id={name}
           type={type}
           placeholder={placeholder}
           disabled={disabled}
-          aria-describedby={
-            [description ? descId : null, error ? errorId : null]
-              .filter(Boolean)
-              .join(" ") || undefined
-          }
+          aria-describedby={describedBy}
           aria-invalid={!!error}
           className={cn(
             "rounded-md border border-input bg-background px-3 py-2 text-sm",

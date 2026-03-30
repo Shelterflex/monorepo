@@ -19,7 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { ZodType } from "zod";
 
 interface UseAppFormOptions<T extends FieldValues> extends UseFormProps<T> {
-  schema: ZodType<T>;
+  schema: ZodType<T, any, any>;
   /** localStorage key — enables auto-save draft when provided */
   draftKey?: string;
   /** Debounce delay for draft saves in ms (default 800) */
@@ -50,7 +50,8 @@ export function useAppForm<T extends FieldValues>({
   const form = useForm<T>({
     resolver: zodResolver(schema),
     defaultValues: mergedDefaults,
-    mode: "onChange",
+    mode: "all",
+    reValidateMode: "onChange",
     ...rest,
   });
 

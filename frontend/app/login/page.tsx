@@ -9,33 +9,40 @@ import { Input } from "@/components/ui/input";
 import { requestOtp } from "@/lib/authApi";
 import { StellarWalletConnect } from "@/components/wallet/StellarWalletConnect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAppForm } from "@/hooks/useAppForm";
+import { FormField } from "@/components/ui/FormField";
+import { Form } from "@/components/ui/form";
+import { loginSchema, type LoginFormValues } from "@/lib/formSchemas";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  const form = useAppForm<LoginFormValues>({
+    schema: loginSchema,
+    defaultValues: { email: "" },
+  });
+
+  const {
+    handleSubmit,
+    register,
+    formState: { isSubmitting },
+  } = form;
+
+  const onSubmit = async (values: LoginFormValues) => {
+    setServerError(null);
 
     try {
-      await requestOtp(email);
-      
-      // Preserve returnTo parameter when redirecting to verify-otp
-      const verifyOtpUrl = returnTo 
-        ? `/verify-otp?email=${encodeURIComponent(email)}&returnTo=${encodeURIComponent(returnTo)}`
-        : `/verify-otp?email=${encodeURIComponent(email)}`;
-      
+      await requestOtp(values.email);
+      const verifyOtpUrl = returnTo
+        ? `/verify-otp?email=${encodeURIComponent(values.email)}&returnTo=${encodeURIComponent(returnTo)}`
+        : `/verify-otp?email=${encodeURIComponent(values.email)}`;
+
       router.push(verifyOtpUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
+      setServerError(err instanceof Error ? err.message : "Something went wrong");
     }
   };
 
@@ -66,45 +73,39 @@ function LoginForm() {
             </TabsList>
 
             <TabsContent value="email" className="space-y-4">
-              {error && (
+                {serverError && (
                 <div className="border-2 border-destructive bg-destructive/10 p-3 text-sm font-medium text-destructive">
-                  {error}
+                  {serverError}
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="mb-2 block font-mono text-sm font-bold"
-                  >
-                    Email Address
-                  </label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@email.com"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                    required
-                    disabled={loading}
-                  />
-                </div>
+              <Form {...form}>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+                  <FormField name="email" label="Email Address">
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@email.com"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      disabled={isSubmitting}
+                      {...register("email")}
+                    />
+                  </FormField>
 
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-60"
-                >
-                  {loading ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  ) : (
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  )}
-                  {loading ? "Sending OTP..." : "Continue"}
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-60"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    )}
+                    {isSubmitting ? "Sending OTP..." : "Continue"}
+                  </Button>
+                </form>
+              </Form>
             </TabsContent>
 
             <TabsContent value="wallet">

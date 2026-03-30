@@ -5,15 +5,32 @@ import Link from "next/link"
 import { ArrowLeft, ArrowRight, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useAppForm } from "@/hooks/useAppForm"
+import { FormField } from "@/components/ui/FormField"
+import { Form } from "@/components/ui/form"
+import { forgotPasswordSchema, type ForgotPasswordFormValues } from "@/lib/formSchemas"
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [submittedEmail, setSubmittedEmail] = useState("")
 
-  const handleSubmit = (e: React.SyntheticEvent) => {
-    e.preventDefault()
+  const form = useAppForm<ForgotPasswordFormValues>({
+    schema: forgotPasswordSchema,
+    defaultValues: { email: "" },
+  })
+
+  const {
+    handleSubmit,
+    register,
+    getValues,
+    reset,
+  } = form
+
+  const onSubmit = async () => {
     // Handle password reset request
+    setSubmittedEmail(getValues("email"))
     setIsSubmitted(true)
+    reset()
   }
 
   return (
@@ -34,7 +51,7 @@ export default function ForgotPasswordPage() {
               </div>
               <h1 className="mb-2 font-mono text-2xl font-black">Check Your Email</h1>
               <p className="mb-6 text-sm text-muted-foreground">
-                We have sent a password reset link to <strong className="text-foreground">{email}</strong>.
+                We have sent a password reset link to <strong className="text-foreground">{submittedEmail}</strong>.
                 Please check your inbox and follow the instructions.
               </p>
               <p className="text-xs text-muted-foreground mb-6">
@@ -54,28 +71,27 @@ export default function ForgotPasswordPage() {
                 No worries! Enter your email address and we will send you a link to reset your password.
               </p>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label htmlFor="email" className="mb-2 block font-mono text-sm font-bold">Email Address</label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@email.com"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                    required
-                  />
-                </div>
+              <Form {...form}>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+                  <FormField name="email" label="Email Address">
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@email.com"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      {...register("email")}
+                    />
+                  </FormField>
 
-                <Button
-                  type="submit"
-                  className="w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                >
-                  Send Reset Link
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    className="w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                  >
+                    Send Reset Link
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </form>
+              </Form>
             </>
           )}
 

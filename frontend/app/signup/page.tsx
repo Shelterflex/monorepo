@@ -7,24 +7,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StellarWalletConnect } from "@/components/wallet/StellarWalletConnect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAppForm } from "@/hooks/useAppForm";
+import { FormField } from "@/components/ui/FormField";
+import { Form } from "@/components/ui/form";
+import { signupSchema, type SignupFormValues } from "@/lib/formSchemas";
 
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [userType, setUserType] = useState<"tenant" | "landlord">("tenant");
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    password: "",
+
+  const form = useAppForm<SignupFormValues>({
+    schema: signupSchema,
+    defaultValues: {
+      fullName: "",
+      email: "",
+      phone: "",
+      password: "",
+    },
   });
 
-  const handleSubmit: React.ComponentProps<'form'>['onSubmit'] = (e) => {
-    e.preventDefault();
-    // Handle signup
-  };
+  const {
+    handleSubmit,
+    register,
+    watch,
+    formState: { isSubmitting },
+  } = form;
 
-  const updateFormData = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const passwordValue = watch("password");
+
+  const onSubmit = async (values: SignupFormValues) => {
+    // Handle signup
   };
 
   const handleUserTypeKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
@@ -111,148 +123,137 @@ export default function SignupPage() {
                 </Link>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label htmlFor="full-name" className="mb-2 block font-mono text-sm font-bold">
-                    Full Name
-                  </label>
-                  <Input
-                    id="full-name"
-                    type="text"
-                    value={formData.fullName}
-                    onChange={(e) => updateFormData("fullName", e.target.value)}
-                    placeholder="Enter your full name"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="email" className="mb-2 block font-mono text-sm font-bold">
-                    Email Address
-                  </label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => updateFormData("email", e.target.value)}
-                    placeholder="you@email.com"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="phone" className="mb-2 block font-mono text-sm font-bold">
-                    Phone Number
-                  </label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => updateFormData("phone", e.target.value)}
-                    placeholder="08X XXX XXXX"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="password" className="mb-2 block font-mono text-sm font-bold">
-                    Password
-                  </label>
-                  <div className="relative">
+              <Form {...form}>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+                  <FormField name="fullName" label="Full Name">
                     <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={formData.password}
-                      onChange={(e) => updateFormData("password", e.target.value)}
-                      placeholder="Create a password"
-                      className="border-3 border-foreground py-6 pr-12 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                      required
+                      id="full-name"
+                      type="text"
+                      placeholder="Enter your full name"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      disabled={isSubmitting}
+                      {...register("fullName")}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      aria-pressed={showPassword}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    {[
-                      {
-                        label: "At least 8 characters",
-                        valid: formData.password.length >= 8,
-                      },
-                      {
-                        label: "Contains a number",
-                        valid: /\d/.test(formData.password),
-                      },
-                    ].map((rule) => (
-                      <div
-                        key={rule.label}
-                        className="flex items-center gap-2 text-xs"
-                      >
-                        <div
-                          className={`h-4 w-4 border-2 border-foreground flex items-center justify-center ${rule.valid ? "bg-secondary" : "bg-background"}`}
+                  </FormField>
+
+                  <FormField name="email" label="Email Address">
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@email.com"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      disabled={isSubmitting}
+                      {...register("email")}
+                    />
+                  </FormField>
+
+                  <FormField name="phone" label="Phone Number">
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="08X XXX XXXX"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      disabled={isSubmitting}
+                      {...register("phone")}
+                    />
+                  </FormField>
+
+                  <div>
+                    <FormField name="password" label="Password" description="Use at least 8 characters and one number">
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Create a password"
+                          className="border-3 border-foreground py-6 pr-12 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                          disabled={isSubmitting}
+                          {...register("password")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          aria-pressed={showPassword}
                         >
-                          {rule.valid && <Check className="h-3 w-3" />}
-                        </div>
-                        <span
-                          className={
-                            rule.valid ? "text-foreground" : "text-muted-foreground"
-                          }
-                        >
-                          {rule.label}
-                        </span>
+                          {showPassword ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
                       </div>
-                    ))}
+                    </FormField>
+                    <div className="mt-2 space-y-1">
+                      {[
+                        {
+                          label: "At least 8 characters",
+                          valid: passwordValue.length >= 8,
+                        },
+                        {
+                          label: "Contains a number",
+                          valid: /\d/.test(passwordValue),
+                        },
+                      ].map((rule) => (
+                        <div
+                          key={rule.label}
+                          className="flex items-center gap-2 text-xs"
+                        >
+                          <div
+                            className={`h-4 w-4 border-2 border-foreground flex items-center justify-center ${rule.valid ? "bg-secondary" : "bg-background"}`}
+                          >
+                            {rule.valid && <Check className="h-3 w-3" />}
+                          </div>
+                          <span
+                            className={
+                              rule.valid ? "text-foreground" : "text-muted-foreground"
+                            }
+                          >
+                            {rule.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="pt-2">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-5 w-5 border-2 border-foreground accent-primary"
-                      required
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      I agree to the{" "}
-                      <Link
-                        href="/terms-of-service"
-                        className="font-bold border-b-2 border-foreground hover:text-primary"
-                      >
-                        Terms of Service
-                      </Link>{" "}
-                      and{" "}
-                      <Link
-                        href="/privacy-policy"
-                        className="font-bold border-b-2 border-foreground hover:text-primary"
-                      >
-                        Privacy Policy
-                      </Link>
-                    </span>
-                  </label>
-                </div>
+                  <div className="pt-2">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-5 w-5 border-2 border-foreground accent-primary"
+                        required
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        I agree to the {" "}
+                        <Link
+                          href="/terms-of-service"
+                          className="font-bold border-b-2 border-foreground hover:text-primary"
+                        >
+                          Terms of Service
+                        </Link>{" "}
+                        and {" "}
+                        <Link
+                          href="/privacy-policy"
+                          className="font-bold border-b-2 border-foreground hover:text-primary"
+                        >
+                          Privacy Policy
+                        </Link>
+                      </span>
+                    </label>
+                  </div>
 
-                <Button
-                  type="submit"
-                  className={`w-full border-3 border-foreground px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] ${
-                    userType === "tenant" ? "bg-primary" : "bg-secondary"
-                  }`}
-                >
-                  Create Account
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`w-full border-3 border-foreground px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] ${
+                      userType === "tenant" ? "bg-primary" : "bg-secondary"
+                    }`}
+                  >
+                    Create Account
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </form>
+              </Form>
             </TabsContent>
           </Tabs>
 
