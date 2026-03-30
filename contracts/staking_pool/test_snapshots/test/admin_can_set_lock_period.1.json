@@ -196,30 +196,6 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "StakeTimestamps"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": []
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
-                              "symbol": "StakedBalances"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": []
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
                               "symbol": "Token"
                             }
                           ]

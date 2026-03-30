@@ -184,12 +184,12 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "DealBalances"
+                              "symbol": "ContractVersion"
                             }
                           ]
                         },
                         "val": {
-                          "map": []
+                          "u32": 1
                         }
                       },
                       {

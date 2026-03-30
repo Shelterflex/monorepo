@@ -10,9 +10,13 @@
 
 extern crate alloc;
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, String, Symbol,
 };
+
+#[cfg(kani)]
+pub mod formal_properties;
 
 /// Allowed external reference sources for transaction ID generation
 pub const ALLOWED_SOURCES: [&str; 8] = [
@@ -274,6 +278,8 @@ pub enum ContractError {
     InvalidMetadataHash = 10,
 }
 
+#[cfg(kani)]
+pub mod formal_properties;
 #[contract]
 /// Primary contract type. All public contract methods are implemented on this
 /// struct via the `#[contractimpl]` impl block.
@@ -341,76 +347,6 @@ impl TransactionReceiptContract {
 
     pub fn version(env: soroban_sdk::Env) -> u32 {
         Self::contract_version(env)
-    }
-
-    /// Pause the contract to prevent receipt recording
-    ///
-    /// # Arguments
-    /// * `env` - The Soroban environment
-    /// * `admin` - The admin address attempting to pause
-    ///
-    /// # Returns
-    /// * `Ok(())` - If pause succeeds
-    /// * `Err(ContractError::NotAuthorized)` - If caller is not admin
-    ///
-    /// # Requirements
-    /// * Only admin can pause (Requirement 5.3)
-    /// * Updates paused state to true (Requirement 6.1)
-    /// * Idempotent - succeeds even if already paused (Requirement 6.4)
-    pub fn pause(env: soroban_sdk::Env, admin: Address) -> Result<(), ContractError> {
-        // Require authentication from the admin
-        admin.require_auth();
-
-        // Verify caller is admin
-        require_admin(&env, &admin)?;
-
-        // Set paused state to true (idempotent - no error if already paused)
-        env.storage().instance().set(&StorageKey::Paused, &true);
-
-        env.events().publish(
-            (
-                Symbol::new(&env, "transaction_receipt"),
-                Symbol::new(&env, "pause"),
-            ),
-            admin,
-        );
-
-        Ok(())
-    }
-
-    /// Unpause the contract to allow receipt recording
-    ///
-    /// # Arguments
-    /// * `env` - The Soroban environment
-    /// * `admin` - The admin address attempting to unpause
-    ///
-    /// # Returns
-    /// * `Ok(())` - If unpause succeeds
-    /// * `Err(ContractError::NotAuthorized)` - If caller is not admin
-    ///
-    /// # Requirements
-    /// * Only admin can unpause (Requirement 5.4)
-    /// * Updates paused state to false (Requirement 6.1)
-    /// * Idempotent - succeeds even if already unpaused (Requirement 6.5)
-    pub fn unpause(env: soroban_sdk::Env, admin: Address) -> Result<(), ContractError> {
-        // Require authentication from the admin
-        admin.require_auth();
-
-        // Verify caller is admin
-        require_admin(&env, &admin)?;
-
-        // Set paused state to false (idempotent - no error if already unpaused)
-        env.storage().instance().set(&StorageKey::Paused, &false);
-
-        env.events().publish(
-            (
-                Symbol::new(&env, "transaction_receipt"),
-                Symbol::new(&env, "unpause"),
-            ),
-            admin,
-        );
-
-        Ok(())
     }
 
     /// Set a new operator address
@@ -720,6 +656,40 @@ impl TransactionReceiptContract {
         }
 
         results
+    }
+}
+
+#[contractimpl]
+impl Pausable for TransactionReceiptContract {
+    fn pause(env: soroban_sdk::Env, admin: Address) -> Result<(), PausableError> {
+        if require_admin(&env, &admin).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&StorageKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: soroban_sdk::Env, admin: Address) -> Result<(), PausableError> {
+        if require_admin(&env, &admin).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&StorageKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: soroban_sdk::Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<_, bool>(&StorageKey::Paused)
+            .unwrap_or(false)
     }
 }
 

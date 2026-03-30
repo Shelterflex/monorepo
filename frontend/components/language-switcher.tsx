@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import {
@@ -10,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { locales, type Locale } from "@/i18n";
+import usePreferencesStore from "@/store/usePreferencesStore";
 
 const languageNames: Record<Locale, string> = {
   en: "English",
@@ -23,11 +25,16 @@ export function LanguageSwitcher() {
   const locale = useLocale() as Locale;
   const router = useRouter();
   const pathname = usePathname();
+  const setPreference = usePreferencesStore((state) => state.setPreference);
+
+  useEffect(() => {
+    document.cookie = `NEXT_LOCALE=${locale}; path=/; max-age=${60 * 60 * 24 * 365}`;
+  }, [locale]);
 
   const handleLanguageChange = (newLocale: string) => {
-    // Remove current locale from pathname
-    const pathnameWithoutLocale = pathname.replace(`/${locale}`, "");
-    // Navigate to new locale
+    setPreference("language", newLocale);
+    document.cookie = `NEXT_LOCALE=${newLocale}; path=/; max-age=${60 * 60 * 24 * 365}`;
+    const pathnameWithoutLocale = pathname.replace(`/${locale}`, "") || "/";
     router.push(`/${newLocale}${pathnameWithoutLocale}`);
   };
 

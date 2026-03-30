@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, temporal } from "zustand/middleware";
-import { logger } from "./index";
+import { logger } from "./logger";
 
 export interface UserPreferences {
   theme: "light" | "dark" | "system";
@@ -11,11 +11,8 @@ export interface UserPreferences {
 }
 
 interface PreferencesState extends UserPreferences {
-  // Conflict resolution
   lastSyncedAt: string | null;
   isDirty: boolean;
-
-  // Actions
   setPreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => void;
   mergeServerPreferences: (serverPrefs: Partial<UserPreferences>, serverTimestamp: string) => void;
   markSynced: (timestamp: string) => void;
@@ -38,13 +35,8 @@ const usePreferencesStore = create<PreferencesState>()(
         lastSyncedAt: null,
         isDirty: false,
 
-        setPreference: (key, value) =>
-          set({ [key]: value, isDirty: true }),
+        setPreference: (key, value) => set({ [key]: value, isDirty: true }),
 
-        /**
-         * Conflict resolution: server wins only if server timestamp is newer
-         * than the last local sync. Otherwise local (user) changes are kept.
-         */
         mergeServerPreferences: (serverPrefs, serverTimestamp) => {
           const { lastSyncedAt } = get();
           const serverIsNewer =
@@ -63,7 +55,7 @@ const usePreferencesStore = create<PreferencesState>()(
         name: "sheltaflex-preferences-storage",
         storage: createJSONStorage(() => localStorage),
         version: 1,
-        // Don't persist internal sync metadata — only user prefs
+        // Persist user-facing preferences while leaving sync metadata internal.
         partialize: (state) => ({
           theme: state.theme,
           currency: state.currency,

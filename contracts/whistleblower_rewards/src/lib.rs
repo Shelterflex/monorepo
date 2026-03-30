@@ -2,8 +2,10 @@
 
 extern crate alloc;
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, token, Address, Env, String, Symbol,
+    contract, contracterror, contractimpl, contracttype, token, Address, BytesN, Env, String,
+    Symbol,
 };
 
 #[contracttype]
@@ -16,6 +18,11 @@ pub enum StorageKey {
     Paused,
     TotalAllocated(Address, String),
     TotalClaimed(Address, String),
+    // ── Upgrade governance (#392) ─────────────────────────────────────────
+    Guardian,
+    UpgradeDelay,
+    PendingUpgradeHash,
+    PendingUpgradeAt,
 }
 
 #[contracterror]
@@ -28,6 +35,10 @@ pub enum ContractError {
     InvalidAmount = 4,
     NothingToClaim = 5,
     AmountExceedsClaimable = 6,
+    // Upgrade governance errors (#392)
+    UpgradeAlreadyPending = 7,
+    NoUpgradePending = 8,
+    UpgradeDelayNotMet = 9,
 }
 
 #[contract]
@@ -257,35 +268,210 @@ impl WhistleblowerRewards {
     pub fn claimable(env: Env, whistleblower: Address, listing_id: String) -> i128 {
         claimable_get(&env, &whistleblower, &listing_id)
     }
-
-    pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
+    pub fn set_operator(
+        env: Env,
+        admin: Address,
+        new_operator: Address,
+    ) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
+        let old_operator = get_operator(&env);
+        env.storage()
+            .instance()
+            .set(&StorageKey::Operator, &new_operator);
+        env.events().publish(
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "set_operator"),
+            ),
+            (old_operator, new_operator),
+        );
+        Ok(())
+    }
+}
+
+#[contractimpl]
+impl Pausable for WhistleblowerRewards {
+    fn pause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        if require_admin(&env, &_admin).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
         env.storage().instance().set(&StorageKey::Paused, &true);
         env.events().publish(
-            (
-                Symbol::new(&env, "whistleblower_rewards"),
-                Symbol::new(&env, "pause"),
-            ),
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
             (),
         );
         Ok(())
     }
 
-    pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
-        require_admin(&env, &admin)?;
+    fn unpause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        if require_admin(&env, &_admin).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
         env.storage().instance().set(&StorageKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        get_paused(&env)
+    }
+}
+
+#[contractimpl]
+impl WhistleblowerRewards {
+    pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&StorageKey::Guardian, &guardian);
         env.events().publish(
             (
                 Symbol::new(&env, "whistleblower_rewards"),
-                Symbol::new(&env, "unpause"),
+                Symbol::new(&env, "set_guardian"),
             ),
-            (),
+            guardian,
         );
         Ok(())
     }
 
-    pub fn is_paused(env: Env) -> bool {
-        get_paused(&env)
+    pub fn set_upgrade_delay(env: Env, admin: Address, delay: u64) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&StorageKey::UpgradeDelay, &delay);
+        env.events().publish(
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "set_upgrade_delay"),
+            ),
+            delay,
+        );
+        Ok(())
+    }
+
+    pub fn propose_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        if env
+            .storage()
+            .instance()
+            .has(&StorageKey::PendingUpgradeHash)
+        {
+            return Err(ContractError::UpgradeAlreadyPending);
+        }
+        let delay: u64 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::UpgradeDelay)
+            .unwrap_or(0);
+        let execute_at = env.ledger().timestamp() + delay;
+        env.storage()
+            .instance()
+            .set(&StorageKey::PendingUpgradeHash, &new_wasm_hash);
+        env.storage()
+            .instance()
+            .set(&StorageKey::PendingUpgradeAt, &execute_at);
+        env.events().publish(
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "propose_upgrade"),
+            ),
+            (new_wasm_hash, execute_at),
+        );
+        Ok(())
+    }
+
+    pub fn execute_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        let hash = env
+            .storage()
+            .instance()
+            .get::<_, BytesN<32>>(&StorageKey::PendingUpgradeHash)
+            .ok_or(ContractError::NoUpgradePending)?;
+        let execute_at: u64 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::PendingUpgradeAt)
+            .ok_or(ContractError::NoUpgradePending)?;
+        if env.ledger().timestamp() < execute_at {
+            return Err(ContractError::UpgradeDelayNotMet);
+        }
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeHash);
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "execute_upgrade"),
+            ),
+            hash.clone(),
+        );
+        env.deployer().update_current_contract_wasm(hash);
+        Ok(())
+    }
+
+    pub fn emergency_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        if let Some(guardian) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&StorageKey::Guardian)
+        {
+            guardian.require_auth();
+        }
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeHash);
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "emergency_upgrade"),
+            ),
+            (admin.clone(), new_wasm_hash.clone()),
+        );
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        if !env
+            .storage()
+            .instance()
+            .has(&StorageKey::PendingUpgradeHash)
+        {
+            return Err(ContractError::NoUpgradePending);
+        }
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeHash);
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "whistleblower_rewards"),
+                Symbol::new(&env, "cancel_upgrade"),
+            ),
+            admin.clone(),
+        );
+        Ok(())
     }
 }
 

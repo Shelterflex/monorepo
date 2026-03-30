@@ -40,6 +40,14 @@ export {
   tenantWhistleblowersToRate,
 } from "./tenant";
 
+// User dashboard
+export {
+  userSavedProperties,
+  userRentalApplications,
+  userWalletBalance,
+  userWalletLedger,
+} from "./userDashboard";
+
 // Landlord dashboard
 export {
   landlordMyProperties,

@@ -9,10 +9,15 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec as StdVec;
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Map,
     String, Symbol,
 };
+// Map is still used in ReceiptInput.metadata
+
+#[cfg(kani)]
+pub mod formal_properties;
 
 #[contracttype]
 #[derive(Clone)]
@@ -21,11 +26,20 @@ pub enum DataKey {
     Admin,
     Operator,
     Token,
-    StakedBalances,
+    /// Per-user staked balance in persistent storage (#386 gas optimisation)
+    StakedBalance(Address),
     TotalStaked,
     Paused,
     LockPeriod,
-    StakeTimestamps,
+    /// Per-user stake timestamp in persistent storage (#386 gas optimisation)
+    StakeTimestamp(Address),
+    /// Reentrancy lock for cross-contract call protection (#390)
+    Reentrancy,
+    // ── Upgrade governance (#392) ─────────────────────────────────────────
+    Guardian,
+    UpgradeDelay,
+    PendingUpgradeHash,
+    PendingUpgradeAt,
 }
 
 /// Contract error types
@@ -47,6 +61,16 @@ pub enum ContractError {
     TokensLocked = 6,
     /// No stake timestamp found for user
     NoStakeTimestamp = 7,
+    // Cross-contract communication errors (#390)
+    /// Reentrancy detected — nested call rejected
+    ReentrancyDetected = 8,
+    // Upgrade governance errors (#392)
+    /// An upgrade is already pending
+    UpgradeAlreadyPending = 9,
+    /// No upgrade is currently pending
+    NoUpgradePending = 10,
+    /// Timelock delay has not elapsed yet
+    UpgradeDelayNotMet = 11,
 }
 
 /// Input parameters for computing metadata hash
@@ -100,17 +124,18 @@ fn is_operator(env: &Env, addr: &Address) -> bool {
     }
 }
 
-fn staked_balances(env: &Env) -> Map<Address, i128> {
+/// Per-user staked balance from persistent storage (#386)
+fn get_staked_balance(env: &Env, user: &Address) -> i128 {
     env.storage()
-        .instance()
-        .get::<_, Map<Address, i128>>(&DataKey::StakedBalances)
-        .unwrap_or_else(|| Map::new(env))
+        .persistent()
+        .get::<_, i128>(&DataKey::StakedBalance(user.clone()))
+        .unwrap_or(0)
 }
 
-fn put_staked_balances(env: &Env, balances: Map<Address, i128>) {
+fn put_staked_balance(env: &Env, user: &Address, balance: i128) {
     env.storage()
-        .instance()
-        .set(&DataKey::StakedBalances, &balances);
+        .persistent()
+        .set(&DataKey::StakedBalance(user.clone()), &balance);
 }
 
 fn get_total_staked(env: &Env) -> i128 {
@@ -135,17 +160,41 @@ fn put_lock_period(env: &Env, period: u64) {
     env.storage().instance().set(&DataKey::LockPeriod, &period);
 }
 
-fn stake_timestamps(env: &Env) -> Map<Address, u64> {
+/// Per-user stake timestamp from persistent storage (#386)
+fn get_stake_timestamp(env: &Env, user: &Address) -> Option<u64> {
     env.storage()
-        .instance()
-        .get::<_, Map<Address, u64>>(&DataKey::StakeTimestamps)
-        .unwrap_or_else(|| Map::new(env))
+        .persistent()
+        .get::<_, u64>(&DataKey::StakeTimestamp(user.clone()))
 }
 
-fn put_stake_timestamps(env: &Env, timestamps: Map<Address, u64>) {
+fn set_stake_timestamp(env: &Env, user: &Address, ts: u64) {
     env.storage()
+        .persistent()
+        .set(&DataKey::StakeTimestamp(user.clone()), &ts);
+}
+
+fn remove_stake_timestamp(env: &Env, user: &Address) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::StakeTimestamp(user.clone()));
+}
+
+/// Reentrancy guard helpers (#390)
+fn enter_nonreentrant(env: &Env) -> Result<(), ContractError> {
+    if env
+        .storage()
         .instance()
-        .set(&DataKey::StakeTimestamps, &timestamps);
+        .get::<_, bool>(&DataKey::Reentrancy)
+        .unwrap_or(false)
+    {
+        return Err(ContractError::ReentrancyDetected);
+    }
+    env.storage().instance().set(&DataKey::Reentrancy, &true);
+    Ok(())
+}
+
+fn exit_nonreentrant(env: &Env) {
+    env.storage().instance().set(&DataKey::Reentrancy, &false);
 }
 
 fn is_paused(env: &Env) -> bool {
@@ -284,16 +333,11 @@ impl StakingPool {
         env.storage()
             .instance()
             .set(&DataKey::ContractVersion, &1u32);
-        env.storage()
-            .instance()
-            .set(&DataKey::StakedBalances, &Map::<Address, i128>::new(&env));
         env.storage().instance().set(&DataKey::TotalStaked, &0i128);
         env.storage().instance().set(&DataKey::LockPeriod, &0u64);
-        env.storage()
-            .instance()
-            .set(&DataKey::StakeTimestamps, &Map::<Address, u64>::new(&env));
         env.storage().instance().set(&DataKey::Paused, &false);
 
+        // #389: consistent init event (data = admin; existing tests assert this)
         env.events().publish(
             (Symbol::new(&env, "staking_pool"), Symbol::new(&env, "init")),
             admin,
@@ -336,6 +380,21 @@ impl StakingPool {
         Ok(())
     }
 
+    pub fn set_admin(env: Env, admin: Address, new_admin: Address) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "set_admin"),
+            ),
+            (admin, new_admin),
+        );
+        Ok(())
+    }
+
     pub fn is_operator(env: Env, addr: Address) -> bool {
         is_operator(&env, &addr)
     }
@@ -349,26 +408,27 @@ impl StakingPool {
         let _spender = require_user_or_operator(&env, &from, &from)?;
         require_positive_amount(amount)?;
 
+        // #390: reentrancy guard before external token call
+        enter_nonreentrant(&env)?;
+
         let token_address = get_token(&env);
         let token_client = token::Client::new(&env, &token_address);
 
         // Transfer tokens from user to contract
         token_client.transfer(&from, &env.current_contract_address(), &amount);
 
-        // Update staked balance
-        let mut balances = staked_balances(&env);
-        let current_balance = balances.get(from.clone()).unwrap_or(0);
-        balances.set(from.clone(), current_balance + amount);
-        put_staked_balances(&env, balances);
+        exit_nonreentrant(&env);
+
+        // #386: per-key persistent storage instead of Map
+        let current_balance = get_staked_balance(&env, &from);
+        put_staked_balance(&env, &from, current_balance + amount);
 
         // Update total staked
         let total = get_total_staked(&env);
         put_total_staked(&env, total + amount);
 
         // Update stake timestamp (new stakes reset the lock timer)
-        let mut timestamps = stake_timestamps(&env);
-        timestamps.set(from.clone(), env.ledger().timestamp());
-        put_stake_timestamps(&env, timestamps);
+        set_stake_timestamp(&env, &from, env.ledger().timestamp());
 
         // Emit event
         let new_user_balance = current_balance + amount;
@@ -394,9 +454,8 @@ impl StakingPool {
         let _spender = require_user_or_operator(&env, &to, &to)?;
         require_positive_amount(amount)?;
 
-        // Check sufficient staked balance
-        let mut balances = staked_balances(&env);
-        let current_balance = balances.get(to.clone()).unwrap_or(0);
+        // #386: per-key persistent storage instead of Map
+        let current_balance = get_staked_balance(&env, &to);
         if current_balance < amount {
             return Err(ContractError::InsufficientBalance);
         }
@@ -404,8 +463,7 @@ impl StakingPool {
         // Check lock period
         let lock_period = get_lock_period(&env);
         if lock_period > 0 {
-            let timestamps = stake_timestamps(&env);
-            if let Some(stake_time) = timestamps.get(to.clone()) {
+            if let Some(stake_time) = get_stake_timestamp(&env, &to) {
                 let current_time = env.ledger().timestamp();
                 if current_time < stake_time + lock_period {
                     return Err(ContractError::TokensLocked);
@@ -415,29 +473,29 @@ impl StakingPool {
             }
         }
 
-        let token_address = get_token(&env);
-        let token_client = token::Client::new(&env, &token_address);
-
         // Update staked balance
-        balances.set(to.clone(), current_balance - amount);
-        put_staked_balances(&env, balances);
+        let new_balance = current_balance - amount;
+        put_staked_balance(&env, &to, new_balance);
 
         // Clean up stake timestamp if fully unstaked
-        if current_balance - amount == 0 {
-            let mut timestamps = stake_timestamps(&env);
-            timestamps.remove(to.clone());
-            put_stake_timestamps(&env, timestamps);
+        if new_balance == 0 {
+            remove_stake_timestamp(&env, &to);
         }
 
         // Update total staked
         let total = get_total_staked(&env);
         put_total_staked(&env, total - amount);
 
+        let token_address = get_token(&env);
+        let token_client = token::Client::new(&env, &token_address);
+
+        // #390: reentrancy guard before external token call
+        enter_nonreentrant(&env)?;
         // Transfer tokens from contract to user
         token_client.transfer(&env.current_contract_address(), &to, &amount);
+        exit_nonreentrant(&env);
 
         // Emit event
-        let new_user_balance = current_balance - amount;
         let new_total = total - amount;
         env.events().publish(
             (
@@ -445,49 +503,18 @@ impl StakingPool {
                 Symbol::new(&env, "unstake"),
                 to.clone(),
             ),
-            (amount, new_user_balance, new_total),
+            (amount, new_balance, new_total),
         );
 
         Ok(())
     }
 
     pub fn staked_balance(env: Env, user: Address) -> i128 {
-        let balances = staked_balances(&env);
-        balances.get(user).unwrap_or(0)
+        get_staked_balance(&env, &user)
     }
 
     pub fn total_staked(env: Env) -> i128 {
         get_total_staked(&env)
-    }
-
-    pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
-        require_admin(&env, &admin)?;
-        env.storage().instance().set(&DataKey::Paused, &true);
-        env.events().publish(
-            (
-                Symbol::new(&env, "staking_pool"),
-                Symbol::new(&env, "pause"),
-            ),
-            (),
-        );
-        Ok(())
-    }
-
-    pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
-        require_admin(&env, &admin)?;
-        env.storage().instance().set(&DataKey::Paused, &false);
-        env.events().publish(
-            (
-                Symbol::new(&env, "staking_pool"),
-                Symbol::new(&env, "unpause"),
-            ),
-            (),
-        );
-        Ok(())
-    }
-
-    pub fn is_paused(env: Env) -> bool {
-        is_paused(&env)
     }
 
     pub fn set_lock_period(env: Env, admin: Address, seconds: u64) -> Result<(), ContractError> {
@@ -505,6 +532,164 @@ impl StakingPool {
 
     pub fn get_lock_period(env: Env) -> u64 {
         get_lock_period(&env)
+    }
+
+    // ── Upgrade governance (#392) ─────────────────────────────────────────────
+
+    pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Guardian, &guardian);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "set_guardian"),
+            ),
+            guardian,
+        );
+        Ok(())
+    }
+
+    pub fn set_upgrade_delay(
+        env: Env,
+        admin: Address,
+        delay_seconds: u64,
+    ) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::UpgradeDelay, &delay_seconds);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "set_upgrade_delay"),
+            ),
+            delay_seconds,
+        );
+        Ok(())
+    }
+
+    pub fn propose_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        if env.storage().instance().has(&DataKey::PendingUpgradeHash) {
+            return Err(ContractError::UpgradeAlreadyPending);
+        }
+        let now = env.ledger().timestamp();
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingUpgradeHash, &new_wasm_hash);
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingUpgradeAt, &now);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "propose_upgrade"),
+            ),
+            (new_wasm_hash, now),
+        );
+        Ok(())
+    }
+
+    pub fn execute_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        let pending: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingUpgradeHash)
+            .ok_or(ContractError::NoUpgradePending)?;
+        if pending != new_wasm_hash {
+            return Err(ContractError::NoUpgradePending);
+        }
+        let proposed_at: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingUpgradeAt)
+            .unwrap_or(0);
+        let delay: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::UpgradeDelay)
+            .unwrap_or(0);
+        if delay > 0 && env.ledger().timestamp() < proposed_at + delay {
+            return Err(ContractError::UpgradeDelayNotMet);
+        }
+        if let Some(guardian) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::Guardian)
+        {
+            guardian.require_auth();
+        }
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingUpgradeHash);
+        env.storage().instance().remove(&DataKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "execute_upgrade"),
+            ),
+            new_wasm_hash.clone(),
+        );
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    pub fn emergency_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        if let Some(guardian) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::Guardian)
+        {
+            guardian.require_auth();
+        }
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingUpgradeHash);
+        env.storage().instance().remove(&DataKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "emergency_upgrade"),
+            ),
+            (admin, new_wasm_hash.clone(), env.ledger().timestamp()),
+        );
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        require_admin(&env, &admin)?;
+        let hash: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingUpgradeHash)
+            .ok_or(ContractError::NoUpgradePending)?;
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingUpgradeHash);
+        env.storage().instance().remove(&DataKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_pool"),
+                Symbol::new(&env, "cancel_upgrade"),
+            ),
+            (admin, hash),
+        );
+        Ok(())
     }
 
     /// Computes metadata hash for receipt input using canonical payload v1
@@ -553,6 +738,37 @@ impl StakingPool {
     ) -> Result<bool, ContractError> {
         let computed_hash = Self::compute_metadata_hash(env, input)?;
         Ok(computed_hash == expected_hash)
+    }
+}
+
+#[contractimpl]
+impl Pausable for StakingPool {
+    fn pause(env: Env, admin: Address) -> Result<(), PausableError> {
+        if require_admin(&env, &admin).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: Env, admin: Address) -> Result<(), PausableError> {
+        if require_admin(&env, &admin).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        is_paused(&env)
     }
 }
 
@@ -756,7 +972,7 @@ mod test {
         }]);
 
         let err = client.try_pause(&non_admin).unwrap_err().unwrap();
-        assert_eq!(err, ContractError::NotAuthorized);
+        assert_eq!(err, soroban_pausable::PausableError::NotAuthorized);
     }
 
     #[test]
@@ -1037,7 +1253,7 @@ mod test {
         assert_eq!(topics.len(), 2);
 
         let contract_name: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
-        assert_eq!(contract_name, Symbol::new(&env, "staking_pool"));
+        assert_eq!(contract_name, Symbol::new(&env, "Pausable"));
         let event_name: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
         assert_eq!(event_name, Symbol::new(&env, "pause"));
     }
@@ -1078,7 +1294,7 @@ mod test {
         assert_eq!(topics.len(), 2);
 
         let contract_name: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
-        assert_eq!(contract_name, Symbol::new(&env, "staking_pool"));
+        assert_eq!(contract_name, Symbol::new(&env, "Pausable"));
         let event_name: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
         assert_eq!(event_name, Symbol::new(&env, "unpause"));
     }
@@ -1484,7 +1700,7 @@ mod test {
             },
         }]);
         let err = client.try_pause(&non_admin).unwrap_err().unwrap();
-        assert_eq!(err, ContractError::NotAuthorized);
+        assert_eq!(err, soroban_pausable::PausableError::NotAuthorized);
 
         // Test that admin can pause
         env.mock_auths(&[MockAuth {

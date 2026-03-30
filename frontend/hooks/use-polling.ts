@@ -1,44 +1,24 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-/**
- * Configuration for the polling mechanism
- */
 export interface PollingConfig {
-  /** Initial polling interval in milliseconds (default: 2000) */
   initialInterval?: number
-  /** Maximum polling interval in milliseconds (default: 10000) */
   maxInterval?: number
-  /** Backoff multiplier for exponential backoff (default: 2) */
   backoffMultiplier?: number
-  /** Maximum number of retries on error (default: 5) */
   maxRetries?: number
-  /** Statuses that should stop polling (default: ['confirmed', 'conversion_failed', 'staking_failed']) */
   stopOnStatuses?: string[]
-  /** Whether polling is enabled (default: true) */
   enabled?: boolean
 }
 
-/**
- * Result returned by the usePolling hook
- */
 export interface PollingResult<T> {
-  /** Current data from the polling function */
   data: T | null
-  /** Current error if polling failed */
   error: Error | null
-  /** Whether polling is currently active */
   isPolling: boolean
-  /** Current polling interval in milliseconds */
   currentInterval: number
-  /** Number of consecutive errors */
   retryCount: number
-  /** Manually trigger a poll */
   poll: () => Promise<void>
-  /** Stop polling */
   stop: () => void
-  /** Restart polling from initial state */
   restart: () => void
 }
 
@@ -51,139 +31,134 @@ const DEFAULT_CONFIG: Required<PollingConfig> = {
   enabled: true,
 }
 
-/**
- * Custom hook for polling with exponential backoff
- * 
- * @param pollFn - Async function that returns data and status
- * @param config - Polling configuration
- * @returns Polling state and control functions
- * 
- * @example
- * ```tsx
- * const { data, error, isPolling } = usePolling(
- *   async () => {
- *     const response = await fetchStatus(transactionId)
- *     return { data: response, status: response.status }
- *   },
- *   {
- *     initialInterval: 2000,
- *     maxRetries: 5,
- *     stopOnStatuses: ['confirmed', 'failed']
- *   }
- * )
- * ```
- */
 export function usePolling<T>(
   pollFn: () => Promise<{ data: T; status: string }>,
-  config: PollingConfig = {}
+  config: PollingConfig = {},
 ): PollingResult<T> {
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config }
-  
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [isPolling, setIsPolling] = useState(false)
-  const [currentInterval, setCurrentInterval] = useState(mergedConfig.initialInterval)
+  const [currentInterval, setCurrentInterval] = useState(
+    (config.initialInterval ?? DEFAULT_CONFIG.initialInterval),
+  )
   const [retryCount, setRetryCount] = useState(0)
-  
+
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMountedRef = useRef(true)
   const isPollingRef = useRef(false)
-  const configRef = useRef(mergedConfig)
+  const configRef = useRef({ ...DEFAULT_CONFIG, ...config })
   const pollFnRef = useRef(pollFn)
-  
-  // Update refs when dependencies change
+  const executePollRef = useRef<(manual?: boolean) => Promise<void>>(async () => {})
+
   useEffect(() => {
     configRef.current = { ...DEFAULT_CONFIG, ...config }
   }, [config])
-  
+
   useEffect(() => {
     pollFnRef.current = pollFn
   }, [pollFn])
-  
-  // Sync isPollingRef with isPolling state
-  useEffect(() => {
-    isPollingRef.current = isPolling
-  }, [isPolling])
-  
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-      isPollingRef.current = false
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
-  
-  const stop = useCallback(() => {
-    isPollingRef.current = false
-    setIsPolling(false)
+
+  const clearPendingTimeout = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
   }, [])
-  
-  const poll = useCallback(async () => {
-    if (!isMountedRef.current || !isPollingRef.current) return
-    
-    try {
-      const result = await pollFnRef.current()
-      
-      if (!isMountedRef.current || !isPollingRef.current) return
-      
-      setData(result.data)
-      setError(null)
-      setRetryCount(0)
-      setCurrentInterval(configRef.current.initialInterval)
-      
-      // Check if we should stop polling based on status
-      if (configRef.current.stopOnStatuses.includes(result.status)) {
-        stop()
+
+  const stop = useCallback(() => {
+    isPollingRef.current = false
+    setIsPolling(false)
+    clearPendingTimeout()
+  }, [clearPendingTimeout])
+
+  const scheduleNextPoll = useCallback(
+    (interval: number, execute: () => Promise<void>) => {
+      clearPendingTimeout()
+      timeoutRef.current = setTimeout(() => {
+        void execute()
+      }, interval)
+    },
+    [clearPendingTimeout],
+  )
+
+  const executePoll = useCallback(
+    async (manual = false) => {
+      if (!isMountedRef.current || (!manual && !isPollingRef.current)) {
         return
       }
-      
-      // Schedule next poll
-      if (isPollingRef.current) {
-        timeoutRef.current = setTimeout(() => {
-          poll()
-        }, configRef.current.initialInterval)
-      }
-    } catch (err) {
-      if (!isMountedRef.current || !isPollingRef.current) return
-      
-      const error = err instanceof Error ? err : new Error('Polling failed')
-      setError(error)
-      
-      setRetryCount(prev => {
-        const newRetryCount = prev + 1
-        
-        // Check if we've exceeded max retries
-        if (newRetryCount >= configRef.current.maxRetries) {
+
+      try {
+        const result = await pollFnRef.current()
+        if (!isMountedRef.current || (!manual && !isPollingRef.current)) {
+          return
+        }
+
+        setData(result.data)
+        setError(null)
+        setRetryCount(0)
+        setCurrentInterval(configRef.current.initialInterval)
+
+        if (configRef.current.stopOnStatuses.includes(result.status)) {
           stop()
-          return newRetryCount
+          return
         }
-        
-        // Calculate next interval with exponential backoff
-        const nextInterval = Math.min(
-          configRef.current.initialInterval * Math.pow(configRef.current.backoffMultiplier, newRetryCount),
-          configRef.current.maxInterval
-        )
-        setCurrentInterval(nextInterval)
-        
-        // Schedule retry with backoff
+
         if (isPollingRef.current) {
-          timeoutRef.current = setTimeout(() => {
-            poll()
-          }, nextInterval)
+          scheduleNextPoll(configRef.current.initialInterval, () => executePollRef.current())
         }
-        
-        return newRetryCount
-      })
+      } catch (err) {
+        if (!isMountedRef.current || (!manual && !isPollingRef.current)) {
+          return
+        }
+
+        const nextError = err instanceof Error ? err : new Error('Polling failed')
+        setError(nextError)
+
+        setRetryCount((previous) => {
+          const nextRetryCount = previous + 1
+
+          if (nextRetryCount >= configRef.current.maxRetries) {
+            stop()
+            return nextRetryCount
+          }
+
+          const nextInterval = Math.min(
+            configRef.current.initialInterval *
+              Math.pow(configRef.current.backoffMultiplier, nextRetryCount),
+            configRef.current.maxInterval,
+          )
+
+          setCurrentInterval(nextInterval)
+
+          if (isPollingRef.current) {
+            scheduleNextPoll(nextInterval, () => executePollRef.current())
+          }
+
+          return nextRetryCount
+        })
+      }
+    },
+    [scheduleNextPoll, stop],
+  )
+
+  useEffect(() => {
+    executePollRef.current = executePoll
+  }, [executePoll])
+
+  const start = useCallback(() => {
+    if (isPollingRef.current || !configRef.current.enabled) {
+      return
     }
-  }, [stop])
-  
+
+    isPollingRef.current = true
+    setIsPolling(true)
+    void executePoll()
+  }, [executePoll])
+
+  const poll = useCallback(async () => {
+    await executePoll(true)
+  }, [executePoll])
+
   const restart = useCallback(() => {
     stop()
     setData(null)
@@ -192,32 +167,26 @@ export function usePolling<T>(
     setCurrentInterval(configRef.current.initialInterval)
     isPollingRef.current = true
     setIsPolling(true)
-  }, [stop])
-  
-  // Start polling when enabled
+    void executePoll()
+  }, [executePoll, stop])
+
   useEffect(() => {
-    if (configRef.current.enabled && !isPolling) {
-      isPollingRef.current = true
-      setIsPolling(true)
+    if (configRef.current.enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      start()
+    } else {
+      stop()
     }
-  }, [configRef.current.enabled, isPolling])
-  
-  // Trigger initial poll when polling starts
+  }, [start, stop, config.enabled])
+
   useEffect(() => {
-    if (isPolling && configRef.current.enabled) {
-      poll()
-    }
-    
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
+      isMountedRef.current = false
+      isPollingRef.current = false
+      clearPendingTimeout()
     }
-    // Only run when isPolling changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPolling])
-  
+  }, [clearPendingTimeout])
+
   return {
     data,
     error,

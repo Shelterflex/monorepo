@@ -1,4 +1,5 @@
 import type { BackendErrorResponse } from './errors'
+import { enqueueOfflineRequest } from './offline-queue'
 
 const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -94,6 +95,24 @@ export async function apiFetch<T>(
   }
 
   try {
+    if (
+      typeof window !== 'undefined' &&
+      !navigator.onLine &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+    ) {
+      enqueueOfflineRequest({
+        path,
+        method: method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+        body: typeof options?.body === 'string' ? options.body : null,
+        headers: headers as Record<string, string>,
+      })
+
+      return {
+        queued: true,
+        offline: true,
+      } as T
+    }
+
     const res = await fetch(`${baseUrl}${path}`, {
       cache: "no-store",
       headers,

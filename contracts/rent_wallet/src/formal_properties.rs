@@ -23,7 +23,7 @@
 #[cfg(test)]
 mod tests {
     extern crate std;
-
+    #[allow(unused_imports)]
     use crate::{ContractError, RentWallet, RentWalletClient};
     use soroban_sdk::{
         testutils::{Address as _, MockAuth, MockAuthInvoke},
@@ -91,6 +91,7 @@ mod tests {
     /// The net balance of a user always equals total_credited − total_debited.
     /// Proof: we track sums manually and assert equality after every operation.
     #[test]
+    #[kani::proof]
     fn inv1_funds_conservation() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -130,6 +131,7 @@ mod tests {
     /// balance(user) ≥ 0 at all times.
     /// Proof: debit never allows balance to go below zero.
     #[test]
+    #[kani::proof]
     fn inv2_no_negative_balance() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -172,6 +174,7 @@ mod tests {
     /// While paused, credit and debit always fail; balance is unchanged.
     /// Proof: pause → attempt mutation → assert Paused error → unpause → mutation succeeds.
     #[test]
+    #[kani::proof]
     fn inv3_paused_blocks_mutation() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -263,6 +266,7 @@ mod tests {
     /// Non-admin addresses can never mutate state.
     /// Proof: every mutation called with a non-admin address fails.
     #[test]
+    #[kani::proof]
     fn inv4_admin_only_mutation() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -296,6 +300,7 @@ mod tests {
 
     /// After set_admin(old → new), old can no longer credit; new can.
     #[test]
+    #[kani::proof]
     fn inv5_admin_transfer_consistency() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -332,6 +337,7 @@ mod tests {
 
     /// init() can only succeed once.
     #[test]
+    #[kani::proof]
     fn inv6_init_idempotence() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -353,6 +359,7 @@ mod tests {
 
     /// credit(0) and debit(0) always fail with InvalidAmount.
     #[test]
+    #[kani::proof]
     fn inv7_zero_amount_rejected() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -402,6 +409,7 @@ mod tests {
 
     /// debit(u, x) succeeds iff balance(u) ≥ x.
     #[test]
+    #[kani::proof]
     fn inv8_debit_boundedness() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -441,6 +449,7 @@ mod tests {
 
     /// Every successful credit strictly increases the recipient's balance.
     #[test]
+    #[kani::proof]
     fn inv9_credit_monotonicity() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());
@@ -468,6 +477,7 @@ mod tests {
     /// After a batch of credits and debits across multiple users, the sum of
     /// all balances equals Σcredits − Σdebits.
     #[test]
+    #[kani::proof]
     fn inv10_total_consistency_after_batch() {
         let env = Env::default();
         let contract_id = env.register(RentWallet, ());

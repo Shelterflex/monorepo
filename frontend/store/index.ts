@@ -1,23 +1,4 @@
-import { StateCreator } from "zustand";
-
-// Simple logger middleware for development
-export const logger = <T>(
-  config: StateCreator<T>,
-  name: string
-): StateCreator<T> => (set, get, api) =>
-  config(
-    (args) => {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`  [Zustand Store: ${name}] applying:`, args);
-      }
-      set(args);
-      if (process.env.NODE_ENV === "development") {
-        console.log(`  [Zustand Store: ${name}] new state:`, get());
-      }
-    },
-    get,
-    api
-  );
+export { logger } from "./logger";
 
 // Utility to check if we're in the browser
 export const isBrowser = typeof window !== "undefined";

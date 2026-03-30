@@ -8,7 +8,9 @@
     "lint": "eslint .",
     "analyze": "ANALYZE=true next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run --coverage",
+    "test:unit": "vitest run --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -68,9 +70,11 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^15.0.0",
+    "@playwright/test": "^1.53.2",
     "@tailwindcss/postcss": "^4.1.9",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -83,6 +87,7 @@
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
     "typescript": "^5",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8"
   }
 }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { ErrorCode } from '../errors/errorCodes.js'
 import type { ErrorResponse } from '../errors/errorCodes.js'
@@ -9,6 +10,8 @@ interface CachedResponse {
   status: number
   body: unknown
   createdAt: number
+  /** SHA-256 hex digest of the request body at the time of the first call. */
+  payloadHash: string
 }
 
 /**
@@ -140,9 +143,25 @@ export function idempotency(store: IdempotencyStore = defaultStore) {
       return
     }
 
+    // Compute a hash of the incoming payload for conflict detection
+    const incomingHash = createHash('sha256')
+      .update(JSON.stringify(req.body ?? null))
+      .digest('hex')
+
     // Check for cached response
     const cached = store.get(trimmedKey)
     if (cached) {
+      if (cached.payloadHash !== incomingHash) {
+        const body: ErrorResponse = {
+          error: {
+            code: ErrorCode.CONFLICT,
+            message:
+              'This idempotency key was already used with a different request payload',
+          },
+        }
+        res.status(409).json(body)
+        return
+      }
       res.setHeader('x-idempotent-replay', 'true')
       res.status(cached.status).json(cached.body)
       return
@@ -167,6 +186,7 @@ export function idempotency(store: IdempotencyStore = defaultStore) {
         status: res.statusCode,
         body,
         createdAt: Date.now(),
+        payloadHash: incomingHash,
       })
       return originalJson(body)
     }

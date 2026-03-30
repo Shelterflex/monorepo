@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Heart,
@@ -11,7 +12,6 @@ import {
   Square,
   ArrowLeft,
   Share2,
-  Check,
   Wifi,
   Car,
   Shield,
@@ -29,9 +29,29 @@ import {
   MessageSquare,
   Star,
   CheckCircle,
+  Flag,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { allProperties } from "@/lib/mockData/properties";
+
 
 const properties = allProperties;
 
@@ -79,6 +99,10 @@ export default function PropertyDetailClient({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
   const [paymentMonths, setPaymentMonths] = useState(12);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportCategory, setReportCategory] = useState("");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   const property = properties.find((p) => p.id === Number.parseInt(propertyId));
 
@@ -128,6 +152,25 @@ export default function PropertyDetailClient({
     );
   };
 
+  const handleReportSubmit = () => {
+    if (!reportCategory || !reportDetails.trim()) return;
+
+    // Stub: In production, this would send to backend
+    console.log("Report submitted:", {
+      propertyId,
+      reportCategory,
+      reportDetails,
+    });
+
+    setReportSubmitted(true);
+    setTimeout(() => {
+      setShowReportDialog(false);
+      setReportSubmitted(false);
+      setReportCategory("");
+      setReportDetails("");
+    }, 2000);
+  };
+
   return (
     <main className="min-h-screen bg-background">
       {/* Back Navigation */}
@@ -164,13 +207,15 @@ export default function PropertyDetailClient({
                     return (
                       <div className="w-full h-full flex items-center justify-center bg-muted">
                         {image.url ? (
-                          <img
+                          <Image
                             src={image.url}
                             alt={image.label}
-                            className="w-full h-full object-cover"
+                            fill
+                            className="object-cover"
                             onError={(e) => {
                               // Fallback to placeholder if image fails to load
-                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).style.display =
+                                "none";
                             }}
                           />
                         ) : null}
@@ -234,12 +279,13 @@ export default function PropertyDetailClient({
                     }`}
                   >
                     {image.url ? (
-                      <img
+                      <Image
                         src={image.url}
                         alt={image.label}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
                     ) : null}
@@ -380,12 +426,14 @@ export default function PropertyDetailClient({
                         className="group relative aspect-4/3 border-3 border-foreground bg-muted shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] overflow-hidden"
                       >
                         {image.url ? (
-                          <img
+                          <Image
                             src={image.url}
                             alt={image.label}
-                            className="w-full h-full object-cover"
+                            fill
+                            className="object-cover"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).style.display =
+                                "none";
                             }}
                           />
                         ) : null}
@@ -531,11 +579,21 @@ export default function PropertyDetailClient({
                     </div>
                     <div>
                       <p className="font-bold">{property.landlord.name}</p>
-                      {property.landlord.verified && (
-                        <span className="inline-flex items-center gap-1 text-xs text-secondary">
-                          <Check className="h-3 w-3" /> Verified Partner
-                        </span>
-                      )}
+                      <span
+                        className={`mt-1 inline-flex items-center gap-1 border px-2 py-0.5 text-xs font-bold ${
+                          property.landlord.verified
+                            ? "border-secondary bg-secondary/15 text-secondary"
+                            : "border-muted-foreground/40 bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {property.landlord.verified ? (
+                          <>
+                            <CheckCircle className="h-3 w-3" /> Verified Landlord
+                          </>
+                        ) : (
+                          "Verification pending"
+                        )}
+                      </span>
                     </div>
                   </div>
                   <div className="space-y-2 text-sm">
@@ -556,11 +614,33 @@ export default function PropertyDetailClient({
                       </span>
                     </p>
                   </div>
+                  <Link href={`/messages?contact=landlord&propertyId=${property.id}`}>
+                    <Button
+                      variant="outline"
+                      className="w-full mt-4 border-3 border-foreground bg-transparent py-5 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                    >
+                      <MessageSquare className="mr-2 h-5 w-5" /> Contact Landlord
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* Report Listing Card */}
+                <div className="border-3 border-foreground bg-card p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Flag className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-mono font-bold">Report an Issue</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    See something suspicious or incorrect about this listing?
+                    Let us know.
+                  </p>
                   <Button
+                    onClick={() => setShowReportDialog(true)}
                     variant="outline"
-                    className="w-full mt-4 border-3 border-foreground bg-transparent py-5 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                    className="w-full border-3 border-foreground bg-transparent py-5 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   >
-                    Contact Landlord
+                    <Flag className="mr-2 h-4 w-4" />
+                    Report Listing
                   </Button>
                 </div>
               </div>
@@ -593,12 +673,13 @@ export default function PropertyDetailClient({
                 return (
                   <div className="w-full h-full flex items-center justify-center">
                     {image.url ? (
-                      <img
+                      <Image
                         src={image.url}
                         alt={image.label}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
                     ) : null}
@@ -624,16 +705,19 @@ export default function PropertyDetailClient({
                     }`}
                   >
                     {image.url ? (
-                      <img
+                      <Image
                         src={image.url}
                         alt={image.label}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
                     ) : null}
-                    <span className="text-xs font-bold text-background">{image.label.charAt(0)}</span>
+                    <span className="text-xs font-bold text-background">
+                      {image.label.charAt(0)}
+                    </span>
                   </button>
                 );
               })}
@@ -648,6 +732,103 @@ export default function PropertyDetailClient({
           </button>
         </div>
       )}
+
+      {/* Report Listing Dialog */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent className="border-3 border-foreground shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] sm:max-w-md">
+          {reportSubmitted ? (
+            <div className="py-6 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center border-3 border-foreground bg-secondary">
+                <Check className="h-8 w-8 text-foreground" />
+              </div>
+              <h3 className="font-mono text-xl font-bold mb-2">
+                Report Submitted
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Thank you for helping keep our marketplace safe. We'll review
+                this report shortly.
+              </p>
+            </div>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-mono text-xl font-bold">
+                  Report Listing
+                </DialogTitle>
+                <DialogDescription>
+                  Help us maintain a trustworthy marketplace by reporting
+                  suspicious or incorrect listings.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category" className="font-bold">
+                    Report Category
+                  </Label>
+                  <Select
+                    value={reportCategory}
+                    onValueChange={setReportCategory}
+                  >
+                    <SelectTrigger
+                      id="category"
+                      className="border-3 border-foreground shadow-[3px_3px_0px_0px_rgba(26,26,26,1)]"
+                    >
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent className="border-3 border-foreground">
+                      <SelectItem value="fraud">Fraudulent Listing</SelectItem>
+                      <SelectItem value="incorrect">
+                        Incorrect Information
+                      </SelectItem>
+                      <SelectItem value="unavailable">
+                        Property Not Available
+                      </SelectItem>
+                      <SelectItem value="duplicate">
+                        Duplicate Listing
+                      </SelectItem>
+                      <SelectItem value="inappropriate">
+                        Inappropriate Content
+                      </SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="details" className="font-bold">
+                    Additional Details
+                  </Label>
+                  <Textarea
+                    id="details"
+                    placeholder="Please provide more information about the issue..."
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value)}
+                    className="min-h-[120px] border-3 border-foreground shadow-[3px_3px_0px_0px_rgba(26,26,26,1)]"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowReportDialog(false)}
+                  className="border-3 border-foreground bg-transparent shadow-[3px_3px_0px_0px_rgba(26,26,26,1)]"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleReportSubmit}
+                  disabled={!reportCategory || !reportDetails.trim()}
+                  className="border-3 border-foreground bg-primary shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-50"
+                >
+                  Submit Report
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

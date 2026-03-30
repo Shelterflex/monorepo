@@ -26,7 +26,10 @@ export interface SorobanAdapter {
   recordReceipt(params: RecordReceiptParams): Promise<void>
   getConfig(): SorobanConfig
   getReceiptEvents(fromLedger: number | null): Promise<RawReceiptEvent[]>
-  
+  getTimelockEvents(fromLedger: number | null): Promise<any[]>
+  executeTimelock(txHash: string, target: string, functionName: string, args: any[], eta: number): Promise<string>
+  cancelTimelock(txHash: string): Promise<string>
+
   // Admin operations (require SOROBAN_ADMIN_SIGNING_ENABLED=true)
   pause?(contractId: string): Promise<string>
   unpause?(contractId: string): Promise<string>

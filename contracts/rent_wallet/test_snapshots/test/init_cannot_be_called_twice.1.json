@@ -57,24 +57,24 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Balances"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": []
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
                               "symbol": "ContractVersion"
                             }
                           ]
                         },
                         "val": {
                           "u32": 1
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Paused"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "bool": false
                         }
                       }
                     ]

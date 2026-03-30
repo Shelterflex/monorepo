@@ -38,3 +38,44 @@ function req(d: Record<string, unknown>, k: string): string {
 }
 function opt(d: Record<string, unknown>, k: string) { return typeof d[k] === 'string' ? d[k] as string : undefined }
 function optNum(d: Record<string, unknown>, k: string) { return typeof d[k] === 'number' ? d[k] as number : undefined }
+export interface TimelockEvent {
+    txHash: string;
+    target?: string;
+    functionName?: string;
+    args?: any[];
+    delay?: number;
+    ledger: number;
+    type: 'queued' | 'executed' | 'cancelled';
+}
+
+export function parseTimelockEvent(raw: any): TimelockEvent | null {
+    try {
+        const topics = raw.topic || [];
+        if (topics[0] !== 'governance') return null;
+
+        const type = topics[1]; // e.g., "queued", "executed", "cancelled"
+        const d = raw.data;
+
+        if (type === 'queued' && Array.isArray(d) && d.length >= 5) {
+            return {
+                type: 'queued',
+                txHash: d[0], // Internal hash
+                target: d[1],
+                functionName: d[2],
+                args: d[3],
+                delay: d[4], // This is eta
+                ledger: raw.ledger,
+            };
+        } else if ((type === 'executed' || type === 'cancelled') && typeof d === 'string') {
+            return {
+                type: type,
+                txHash: d, // Single value
+                ledger: raw.ledger,
+            };
+        }
+        return null;
+    } catch (err) {
+        console.error("Failed to parse Timelock event:", err);
+        return null;
+    }
+}

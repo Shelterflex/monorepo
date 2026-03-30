@@ -40,6 +40,7 @@ export function formatDate(
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: options?.timeZone ?? "Africa/Lagos",
     ...options,
   };
 
@@ -65,6 +66,7 @@ export function formatDateTime(
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: options?.timeZone ?? "Africa/Lagos",
     ...options,
   };
 
@@ -133,4 +135,8 @@ export function formatPercentage(
  */
 export function getTextDirection(locale: Locale): "ltr" | "rtl" {
   return isRtlLocale(locale) ? "rtl" : "ltr";
+}
+
+export function getLocaleDisplayName(locale: Locale): string {
+  return new Intl.DisplayNames([locale], { type: "language" }).of(locale) ?? locale;
 }

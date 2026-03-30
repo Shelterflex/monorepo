@@ -8,7 +8,11 @@ members = [
   "staking_pool",
   "mvp_staking_pool",
   "whistleblower_rewards",
+  "soroban_pausable",
+  "deal_escrow",
   "contract_access",
+  "timelock",
+
 ]
 
 [profile.release-with-logs]

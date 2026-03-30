@@ -904,4 +904,124 @@ export class RealSorobanAdapter implements SorobanAdapter {
       server: this.server,
     })
   }
+
+  async getTimelockEvents(fromLedger: number | null): Promise<any[]> {
+    if (!this.config.timelockId) {
+      return []
+    }
+
+    try {
+      const latest = await this.withBackoff(
+        () => this.server.getLatestLedger(),
+        { op: 'getLatestLedger' }
+      )
+
+      const startLedger = fromLedger == null ? latest.sequence : fromLedger + 1
+      if (startLedger > latest.sequence) return []
+
+      const limit = 200
+      let cursor: string | undefined
+      const out: any[] = []
+
+      for (; ;) {
+        const params: any = cursor
+          ? {
+            cursor,
+            limit,
+            filters: [
+              {
+                type: 'contract',
+                contractIds: [this.config.timelockId],
+              },
+            ],
+          }
+          : {
+            startLedger,
+            limit,
+            filters: [
+              {
+                type: 'contract',
+                contractIds: [this.config.timelockId],
+              },
+            ],
+          }
+
+        const res = await this.withBackoff(
+          () => this.server.getEvents(params),
+          { op: 'getEvents' }
+        )
+
+        const resAny = res as any
+        const events = resAny?.events ?? []
+        for (const ev of events) {
+          const evAny = ev as any
+          if (!evAny?.inSuccessfulContractCall) continue
+          
+          out.push({
+            ledger: evAny.ledger,
+            txHash: evAny.txHash,
+            contractId: evAny.contractId,
+            topic: evAny.topic.map((t: string) => scValToNative(xdr.ScVal.fromXDR(t, 'base64'))),
+            data: scValToNative(xdr.ScVal.fromXDR(evAny.value, 'base64')),
+          })
+        }
+
+        const nextCursor: string | undefined = resAny?.cursor
+        if (!nextCursor || nextCursor === cursor) break
+        cursor = nextCursor
+
+        if (events.length < limit) break
+      }
+
+      return out
+    } catch (err) {
+      if (err instanceof SorobanError) throw err
+      throw new RpcError('Failed to get timelock events', undefined, err)
+    }
+  }
+
+   async executeTimelock(txHash: string, target: string, functionName: string, args: any[], eta: number): Promise<string> {
+    if (!this.config.timelockId) {
+      throw new ConfigurationError('SOROBAN_TIMELOCK_ID not configured')
+    }
+
+    const scArgs: xdr.ScVal[] = [
+      nativeToScVal(Address.fromString(target)),
+      nativeToScVal(functionName, { type: 'symbol' }),
+      nativeToScVal(args), 
+      nativeToScVal(eta, { type: 'u64' })
+    ]
+
+    return this.adminSigningService.executeAdminOperation({
+      contractId: this.config.timelockId,
+      operation: 'execute',
+      args: scArgs,
+      networkPassphrase: this.config.networkPassphrase,
+      adminSecret: this.config.adminSecret!,
+      server: this.server,
+    })
+  }
+
+  async cancelTimelock(txHash: string): Promise<string> {
+    if (!this.config.timelockId) {
+      throw new ConfigurationError('SOROBAN_TIMELOCK_ID not configured')
+    }
+
+    // Convert hex txHash (string) to Uint8Array for BytesN<32>
+    const hashBytes = new Uint8Array(txHash.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+
+    const scArgs: xdr.ScVal[] = [
+      nativeToScVal(this.config.adminSecret ? Keypair.fromSecret(this.config.adminSecret).publicKey() : '', { type: 'address' }),
+      xdr.ScVal.scvBytes(hashBytes)
+    ]
+
+    return this.adminSigningService.executeAdminOperation({
+      contractId: this.config.timelockId,
+      operation: 'cancel',
+      args: scArgs,
+      networkPassphrase: this.config.networkPassphrase,
+      adminSecret: this.config.adminSecret!,
+      server: this.server,
+    })
+  }
 }

@@ -17,7 +17,7 @@ fn test_integration_init_record_query() {
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
 
-    client.try_init(&admin, &operator).unwrap().unwrap();
+    let _ = client.try_init(&admin, &operator).unwrap();
 
     // Allow require_auth to succeed for our mock calls
     env.mock_all_auths();
@@ -32,7 +32,7 @@ fn test_integration_init_record_query() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "a_ref_1"),
         tx_type: Symbol::new(&env, "TENANT_REPAYMENT"),
-        amount_usdc: 10_000_000_000i128,
+        amount_usdc: 10_000_000_000_i128,
         token: token.clone(),
         deal_id: deal_a.clone(),
         listing_id: None,
@@ -48,7 +48,7 @@ fn test_integration_init_record_query() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "a_ref_2"),
         tx_type: Symbol::new(&env, "LANDLORD_PAYOUT"),
-        amount_usdc: 20_000_000_000i128,
+        amount_usdc: 20_000_000_000_i128,
         token: token.clone(),
         deal_id: deal_a.clone(),
         listing_id: None,
@@ -64,7 +64,7 @@ fn test_integration_init_record_query() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "b_ref_1"),
         tx_type: Symbol::new(&env, "WHISTLEBLOWER_REWARD"),
-        amount_usdc: 30_000_000_000i128,
+        amount_usdc: 30_000_000_000_i128,
         token: token.clone(),
         deal_id: deal_b.clone(),
         listing_id: None,
@@ -123,15 +123,12 @@ fn test_integration_authorization_flow() {
     let operator1 = Address::generate(&env);
     let operator2 = Address::generate(&env);
 
-    client.try_init(&admin, &operator1).unwrap().unwrap();
+    let _ = client.try_init(&admin, &operator1).unwrap();
 
     env.mock_all_auths();
 
     // Admin rotates operator to operator2
-    client
-        .try_set_operator(&admin, &operator2)
-        .unwrap()
-        .unwrap();
+    let _ = client.try_set_operator(&admin, &operator2).unwrap();
 
     let token = Address::generate(&env);
     let deal = String::from_str(&env, "auth_deal");
@@ -140,7 +137,7 @@ fn test_integration_authorization_flow() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "auth_ref"),
         tx_type: Symbol::new(&env, "STAKE"),
-        amount_usdc: 50_000_000_000i128,
+        amount_usdc: 50_000_000_000_i128,
         token: token.clone(),
         deal_id: deal.clone(),
         listing_id: None,
@@ -178,7 +175,7 @@ fn test_integration_pause_flow() {
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
 
-    client.try_init(&admin, &operator).unwrap().unwrap();
+    let _ = client.try_init(&admin, &operator).unwrap();
 
     env.mock_all_auths();
 
@@ -189,7 +186,7 @@ fn test_integration_pause_flow() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "pause_ref"),
         tx_type: Symbol::new(&env, "STAKE"),
-        amount_usdc: 100_000_000_000i128,
+        amount_usdc: 100_000_000_000_i128,
         token: token.clone(),
         deal_id: deal.clone(),
         listing_id: None,
@@ -208,7 +205,7 @@ fn test_integration_pause_flow() {
         .unwrap();
 
     // Pause contract
-    client.try_pause(&admin).unwrap().unwrap();
+    let _ = client.try_pause(&admin).unwrap();
 
     // Recording while paused should fail
     let input2 = ReceiptInput {
@@ -220,7 +217,7 @@ fn test_integration_pause_flow() {
     assert_eq!(res.unwrap_err().unwrap(), ContractError::Paused);
 
     // Unpause
-    client.try_unpause(&admin).unwrap().unwrap();
+    let _ = client.try_unpause(&admin).unwrap();
 
     // Now recording should succeed again
     let _tx2 = client
@@ -239,7 +236,7 @@ fn test_integration_deal_queries_and_pagination() {
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
 
-    client.try_init(&admin, &operator).unwrap().unwrap();
+    let _ = client.try_init(&admin, &operator).unwrap();
     env.mock_all_auths();
 
     let token = Address::generate(&env);
@@ -252,7 +249,7 @@ fn test_integration_deal_queries_and_pagination() {
             external_ref_source: Symbol::new(&env, "manual_admin"),
             external_ref: String::from_str(&env, &ext),
             tx_type: Symbol::new(&env, "STAKE"),
-            amount_usdc: 10_000_000_000i128 + (i as i128),
+            amount_usdc: 10_000_000_000_i128 + (i as i128),
             token: token.clone(),
             deal_id: deal.clone(),
             listing_id: None,
@@ -291,7 +288,7 @@ fn test_integration_invalid_tx_type_rejected() {
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
 
-    client.try_init(&admin, &operator).unwrap().unwrap();
+    let _ = client.try_init(&admin, &operator).unwrap();
 
     // Allow require_auth to succeed for our mock calls
     env.mock_all_auths();
@@ -303,7 +300,7 @@ fn test_integration_invalid_tx_type_rejected() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "invalid_ref"),
         tx_type: Symbol::new(&env, "INVALID_TYPE"), // Not in allowed list
-        amount_usdc: 10_000_000_000i128,
+        amount_usdc: 10_000_000_000_i128,
         token: token.clone(),
         deal_id: String::from_str(&env, "deal_invalid"),
         listing_id: None,
@@ -325,7 +322,7 @@ fn test_integration_invalid_tx_type_rejected() {
         external_ref_source: Symbol::new(&env, "manual_admin"),
         external_ref: String::from_str(&env, "valid_ref"),
         tx_type: Symbol::new(&env, "TENANT_REPAYMENT"), // Valid type
-        amount_usdc: 10_000_000_000i128,
+        amount_usdc: 10_000_000_000_i128,
         token: token.clone(),
         deal_id: String::from_str(&env, "deal_valid"),
         listing_id: None,

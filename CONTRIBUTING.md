@@ -92,6 +92,16 @@ npm run build
 
 If your PR changes UI, include **screenshots** (or a short screen recording) in the PR description.
 
+#### UI/Image change verification
+
+For PRs that modify UI components or add/change images:
+
+- Include before/after screenshots showing the changes
+- For new features, provide screenshots of different states (loading, error, success)
+- For responsive changes, include screenshots at different breakpoints (mobile, tablet, desktop)
+- Verify images are optimized and not excessively large (use tools like ImageOptim, TinyPNG, or Next.js Image component)
+- Confirm accessibility: check color contrast, alt text for images, keyboard navigation
+
 ### Backend checks
 
 ```bash
@@ -213,19 +223,25 @@ Copy/paste PR description example (passes validation):
 
 ```md
 ## Summary
+
 What does this PR do and why?
 
 ## Linked issue
+
 Closes #123
 
 ## Changes
+
 - Change 1
 - Change 2
 
 ## Checklist
+
 - [ ] I tested locally
 - [ ] I did not commit secrets
 - [ ] I updated docs if needed
+- [ ] If UI changes: I included before/after screenshots
+- [ ] If images added/changed: I verified they are optimized and accessible
 ```
 
 ### 0) Fork the repo (recommended for public contributions)

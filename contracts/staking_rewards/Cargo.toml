@@ -7,7 +7,9 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+soroban-pausable = { version = "0.1.0", path = "../soroban_pausable" }
 soroban-sdk = "22"
 
 [dev-dependencies]
 soroban-sdk = { version = "22", features = ["testutils"] }
+

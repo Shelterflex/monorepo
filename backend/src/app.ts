@@ -9,6 +9,8 @@ import { logger } from "./utils/logger.js"
 import { apiVersioning } from "./middleware/apiVersioning.js"
 import healthRouter from "./routes/health.js"
 import { createPublicRateLimiter, createAuthRateLimiter, createSensitiveRateLimiters } from "./middleware/rateLimit.js"
+import { createHealthRouter } from "./routes/health.js"
+import { createPublicRateLimiter, createAuthRateLimiter, createWalletRateLimiter } from "./middleware/rateLimit.js"
 import publicRouter from "./routes/publicRoutes.js"
 import { AppError } from "./errors/AppError.js"
 import { ErrorCode } from "./errors/errorCodes.js"
@@ -51,8 +53,13 @@ import { OutboxWorker } from "./outbox/worker.js"
 import { initializeAppSecretRotation, secretRotationMiddleware, createSecretRotationRouter } from "./middleware/secretRotation.js"
 import { getSecretRotationService } from "./services/secretRotationService.js"
 import migrationGuideRouter from "./routes/migrationGuide.js"
+import adminTimelockRouter from './routes/admin-timelock.js';
+import { TimelockIndexer } from './indexer/timelock-worker.js';
+import { PostgresTimelockRepository, StubTimelockRepository } from './indexer/timelock-repository.js';
+import { TimelockProcessor } from './indexer/timelock-processor.js';
 
-
+import { sanitizeRequest, detectMaliciousPatterns } from "./middleware/sanitization.js"
+import { createComprehensiveRateLimiter } from "./middleware/comprehensiveRateLimit.js"
 export function createApp() {
   const app = express()
   const sensitiveRateLimiters = createSensitiveRateLimiters(env)
@@ -172,6 +179,18 @@ export function createApp() {
   indexer.start()
   workers.push(indexer)
 
+  // Timelock Indexer
+  const timelockRepo = process.env.DATABASE_URL
+    ? new PostgresTimelockRepository()
+    : new StubTimelockRepository()
+  const timelockProcessor = new TimelockProcessor(timelockRepo)
+  const timelockIndexer = new TimelockIndexer(sorobanAdapter as any, timelockProcessor, {
+    pollIntervalMs: parseInt(process.env.INDEXER_POLL_MS ?? '5000'),
+    startLedger: process.env.INDEXER_START_LEDGER ? parseInt(process.env.INDEXER_START_LEDGER) : undefined,
+  })
+  timelockIndexer.start()
+  workers.push(timelockIndexer)
+
   // Graceful shutdown orchestration
   if (env.NODE_ENV !== 'test') {
     const shutdown = async (signal: string) => {
@@ -219,6 +238,9 @@ export function createApp() {
 
   app.use(express.json())
 
+  // Core administrative routes
+  app.use('/api/admin/timelock', adminTimelockRouter(sorobanAdapter as any, timelockRepo));
+
   app.use(
     cors({
       origin: env.CORS_ORIGINS.split(",").map((s: string) => s.trim()),
@@ -226,7 +248,7 @@ export function createApp() {
   )
 
   // Routes
-  app.use("/health", healthRouter)
+  app.use("/health", createHealthRouter(sorobanAdapter))
   app.use("/api/auth", createAuthRateLimiter(env), authRouter)
   app.use(createPublicRateLimiter(env))
 

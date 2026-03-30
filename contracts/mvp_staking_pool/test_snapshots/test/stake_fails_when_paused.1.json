@@ -34,7 +34,11 @@
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
               "function_name": "pause",
-              "args": []
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                }
+              ]
             }
           },
           "sub_invocations": []
@@ -154,18 +158,6 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "ClaimableRewards"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": []
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
                               "symbol": "ContractVersion"
                             }
                           ]
@@ -205,18 +197,6 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "StakedBalances"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": []
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
                               "symbol": "Token"
                             }
                           ]
@@ -238,18 +218,6 @@
                             "hi": 0,
                             "lo": 0
                           }
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
-                              "symbol": "UserRewardIndex"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "map": []
                         }
                       }
                     ]

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { logger } from "./index";
+import { logger } from "./logger";
 
 interface SessionState {
   /** Last visited route — used to restore navigation on reload */

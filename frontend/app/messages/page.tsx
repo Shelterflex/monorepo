@@ -17,6 +17,8 @@ import {
   File,
   ChevronLeft,
   MessageSquareOff,
+  MessageCircle,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,15 +30,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { conversations, messageThreads } from "@/lib/mockData";
+import useAuthStore from "@/store/useAuthStore";
 
 type Message = (typeof messageThreads)[number][number];
 
 export default function MessagesPage() {
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(1);
+  const { isAuthenticated } = useAuthStore();
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    number | null
+  >(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>(messageThreads[1] ?? []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Check if messaging feature is enabled (stub - always false for now)
+  const isMessagingEnabled = false;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,7 +84,80 @@ export default function MessagesPage() {
       conv.property.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const selectedConv = conversations.find((c) => c.id === selectedConversationId);
+  const selectedConv = conversations.find(
+    (c) => c.id === selectedConversationId,
+  );
+
+  // Show auth gate if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background pt-20">
+        <div className="mx-auto max-w-md border-3 border-foreground bg-card p-8 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] text-center">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center border-3 border-foreground bg-muted">
+            <Lock className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h1 className="font-mono text-2xl font-black mb-3">
+            Sign In Required
+          </h1>
+          <p className="text-muted-foreground mb-6">
+            You need to be signed in to access your messages and connect with
+            landlords and residents.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Link href="/login">
+              <Button className="w-full border-3 border-foreground bg-primary py-6 font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/signup">
+              <Button
+                variant="outline"
+                className="w-full border-3 border-foreground bg-transparent py-6 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+              >
+                Create Account
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show feature unavailable state if messaging is not enabled
+  if (!isMessagingEnabled) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background pt-20">
+        <div className="mx-auto max-w-md border-3 border-foreground bg-card p-8 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] text-center">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center border-3 border-foreground bg-muted">
+            <MessageCircle className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h1 className="font-mono text-2xl font-black mb-3">
+            Messaging Coming Soon
+          </h1>
+          <p className="text-muted-foreground mb-6">
+            We're working hard to bring you direct messaging with landlords and
+            residents. This feature will be available soon!
+          </p>
+          <div className="border-3 border-secondary bg-secondary/10 p-4 mb-6">
+            <p className="text-sm font-bold text-secondary mb-2">
+              What you can do now:
+            </p>
+            <ul className="text-left text-sm text-muted-foreground space-y-1">
+              <li>• Browse available properties</li>
+              <li>• Save your favorite listings</li>
+              <li>• Calculate payment plans</li>
+              <li>• Contact landlords via phone</li>
+            </ul>
+          </div>
+          <Link href="/properties">
+            <Button className="w-full border-3 border-foreground bg-primary py-6 font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+              Browse Properties
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background pt-20">
@@ -120,51 +202,53 @@ export default function MessagesPage() {
                   : "Your messages will appear here"}
               </p>
             </div>
-          ) : filteredConversations.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => handleSelectConversation(conv.id)}
-              className={`w-full border-b-3 border-foreground p-4 text-left transition-colors ${
-                selectedConversationId === conv.id
-                  ? "bg-muted"
-                  : "hover:bg-muted/50"
-              }`}
-            >
-              <div className="flex gap-3">
-                <div className="relative">
-                  <div className="flex h-12 w-12 items-center justify-center border-3 border-foreground bg-accent font-bold">
-                    {conv.participant.avatar}
+          ) : (
+            filteredConversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => handleSelectConversation(conv.id)}
+                className={`w-full border-b-3 border-foreground p-4 text-left transition-colors ${
+                  selectedConversationId === conv.id
+                    ? "bg-muted"
+                    : "hover:bg-muted/50"
+                }`}
+              >
+                <div className="flex gap-3">
+                  <div className="relative">
+                    <div className="flex h-12 w-12 items-center justify-center border-3 border-foreground bg-accent font-bold">
+                      {conv.participant.avatar}
+                    </div>
+                    {conv.participant.online && (
+                      <div className="absolute -bottom-1 -right-1 h-4 w-4 border-2 border-foreground bg-secondary" />
+                    )}
                   </div>
-                  {conv.participant.online && (
-                    <div className="absolute -bottom-1 -right-1 h-4 w-4 border-2 border-foreground bg-secondary" />
+                  <div className="flex-1 overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold">{conv.participant.name}</h3>
+                      <span className="text-xs text-muted-foreground">
+                        {conv.timestamp}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {conv.participant.role}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <p className="truncate text-xs text-muted-foreground">
+                        {conv.property}
+                      </p>
+                    </div>
+                    <p className="mt-1 truncate text-sm">{conv.lastMessage}</p>
+                  </div>
+                  {conv.unread > 0 && (
+                    <div className="flex h-6 w-6 items-center justify-center border-2 border-foreground bg-primary text-xs font-bold">
+                      {conv.unread}
+                    </div>
                   )}
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold">{conv.participant.name}</h3>
-                    <span className="text-xs text-muted-foreground">
-                      {conv.timestamp}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {conv.participant.role}
-                  </p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    <p className="truncate text-xs text-muted-foreground">
-                      {conv.property}
-                    </p>
-                  </div>
-                  <p className="mt-1 truncate text-sm">{conv.lastMessage}</p>
-                </div>
-                {conv.unread > 0 && (
-                  <div className="flex h-6 w-6 items-center justify-center border-2 border-foreground bg-primary text-xs font-bold">
-                    {conv.unread}
-                  </div>
-                )}
-              </div>
-            </button>
-          ))}
+              </button>
+            ))
+          )}
         </div>
       </aside>
 

@@ -1,5 +1,11 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol};
+use soroban_pausable::{Pausable, PausableError};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, Symbol,
+};
+
+#[cfg(kani)]
+pub mod formal_properties;
 
 #[contracttype]
 #[derive(Clone)]
@@ -8,6 +14,11 @@ pub enum StorageKey {
     Admin,
     Operator,
     Paused,
+    // Upgrade governance (#392)
+    Guardian,
+    UpgradeDelay,
+    PendingUpgradeHash,
+    PendingUpgradeAt,
 }
 
 #[contracterror]
@@ -17,6 +28,10 @@ pub enum ContractError {
     AlreadyInitialized = 1,
     NotAuthorized = 2,
     Paused = 3,
+    // Upgrade governance errors (#392)
+    UpgradeAlreadyPending = 4,
+    NoUpgradePending = 5,
+    UpgradeDelayNotMet = 6,
 }
 
 #[contracttype]
@@ -30,6 +45,7 @@ const REWARD_INDEX: &str = "REWARD_IDX";
 const TOTAL_STAKED: &str = "TOTAL_STK";
 const SCALE: i128 = 1_000_000_000;
 
+pub mod formal_properties;
 #[contract]
 pub struct StakingRewards;
 
@@ -45,6 +61,14 @@ impl StakingRewards {
             .instance()
             .set(&StorageKey::ContractVersion, &1u32);
         env.storage().instance().set(&StorageKey::Paused, &false);
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "init"),
+            ),
+            (admin, 1u32),
+        );
 
         Ok(())
     }
@@ -69,7 +93,19 @@ impl StakingRewards {
 
     pub fn set_admin(env: Env, new_admin: Address) -> Result<(), ContractError> {
         Self::require_admin(&env)?;
+        let old_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .expect("admin not set");
         env.storage().instance().set(&StorageKey::Admin, &new_admin);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "set_admin"),
+            ),
+            (old_admin, new_admin),
+        );
         Ok(())
     }
 
@@ -119,43 +155,6 @@ impl StakingRewards {
             .unwrap_or(false)
     }
 
-    pub fn pause(env: Env) -> Result<(), ContractError> {
-        Self::require_admin(&env)?;
-        env.storage().instance().set(&StorageKey::Paused, &true);
-
-        env.events().publish(
-            (
-                Symbol::new(&env, "staking_rewards"),
-                Symbol::new(&env, "pause"),
-            ),
-            (),
-        );
-
-        Ok(())
-    }
-
-    pub fn unpause(env: Env) -> Result<(), ContractError> {
-        Self::require_admin(&env)?;
-        env.storage().instance().set(&StorageKey::Paused, &false);
-
-        env.events().publish(
-            (
-                Symbol::new(&env, "staking_rewards"),
-                Symbol::new(&env, "unpause"),
-            ),
-            (),
-        );
-
-        Ok(())
-    }
-
-    pub fn is_paused(env: &Env) -> bool {
-        env.storage()
-            .instance()
-            .get::<_, bool>(&StorageKey::Paused)
-            .unwrap_or(false)
-    }
-
     fn require_admin(env: &Env) -> Result<(), ContractError> {
         let admin = env
             .storage()
@@ -185,7 +184,12 @@ impl StakingRewards {
     }
 
     fn require_not_paused(env: &Env) -> Result<(), ContractError> {
-        if Self::is_paused(env) {
+        let paused = env
+            .storage()
+            .instance()
+            .get::<_, bool>(&StorageKey::Paused)
+            .unwrap_or(false);
+        if paused {
             Err(ContractError::Paused)
         } else {
             Ok(())
@@ -345,14 +349,251 @@ impl StakingRewards {
     fn get_total_staked(env: &Env) -> i128 {
         env.storage().persistent().get(&TOTAL_STAKED).unwrap_or(0)
     }
+
+    // ── Upgrade governance (#392) ──────────────────────────────────────────────
+
+    pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .ok_or(ContractError::NotAuthorized)?;
+        if admin != stored_admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        env.storage()
+            .instance()
+            .set(&StorageKey::Guardian, &guardian);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "set_guardian"),
+            ),
+            guardian,
+        );
+        Ok(())
+    }
+
+    pub fn set_upgrade_delay(env: Env, admin: Address, delay: u64) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .ok_or(ContractError::NotAuthorized)?;
+        if admin != stored_admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        env.storage()
+            .instance()
+            .set(&StorageKey::UpgradeDelay, &delay);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "set_upgrade_delay"),
+            ),
+            delay,
+        );
+        Ok(())
+    }
+
+    pub fn propose_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .ok_or(ContractError::NotAuthorized)?;
+        if admin != stored_admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        if env
+            .storage()
+            .instance()
+            .has(&StorageKey::PendingUpgradeHash)
+        {
+            return Err(ContractError::UpgradeAlreadyPending);
+        }
+        let delay: u64 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::UpgradeDelay)
+            .unwrap_or(0);
+        let execute_at = env.ledger().timestamp() + delay;
+        env.storage()
+            .instance()
+            .set(&StorageKey::PendingUpgradeHash, &new_wasm_hash);
+        env.storage()
+            .instance()
+            .set(&StorageKey::PendingUpgradeAt, &execute_at);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "propose_upgrade"),
+            ),
+            (new_wasm_hash, execute_at),
+        );
+        Ok(())
+    }
+
+    pub fn execute_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .ok_or(ContractError::NotAuthorized)?;
+        if admin != stored_admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        let hash = env
+            .storage()
+            .instance()
+            .get::<_, BytesN<32>>(&StorageKey::PendingUpgradeHash)
+            .ok_or(ContractError::NoUpgradePending)?;
+        let execute_at: u64 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::PendingUpgradeAt)
+            .ok_or(ContractError::NoUpgradePending)?;
+        if env.ledger().timestamp() < execute_at {
+            return Err(ContractError::UpgradeDelayNotMet);
+        }
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeHash);
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "execute_upgrade"),
+            ),
+            hash.clone(),
+        );
+        env.deployer().update_current_contract_wasm(hash);
+        Ok(())
+    }
+
+    pub fn emergency_upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .ok_or(ContractError::NotAuthorized)?;
+        if admin != stored_admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        if let Some(guardian) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&StorageKey::Guardian)
+        {
+            guardian.require_auth();
+        }
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeHash);
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "emergency_upgrade"),
+            ),
+            (admin.clone(), new_wasm_hash.clone()),
+        );
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .ok_or(ContractError::NotAuthorized)?;
+        if admin != stored_admin {
+            return Err(ContractError::NotAuthorized);
+        }
+        if !env
+            .storage()
+            .instance()
+            .has(&StorageKey::PendingUpgradeHash)
+        {
+            return Err(ContractError::NoUpgradePending);
+        }
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeHash);
+        env.storage()
+            .instance()
+            .remove(&StorageKey::PendingUpgradeAt);
+        env.events().publish(
+            (
+                Symbol::new(&env, "staking_rewards"),
+                Symbol::new(&env, "cancel_upgrade"),
+            ),
+            admin.clone(),
+        );
+        Ok(())
+    }
+}
+
+#[contractimpl]
+impl Pausable for StakingRewards {
+    fn pause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        if StakingRewards::require_admin(&env).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&StorageKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        if StakingRewards::require_admin(&env).is_err() {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&StorageKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<_, bool>(&StorageKey::Paused)
+            .unwrap_or(false)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env, IntoVal};
+    use soroban_sdk::testutils::{Address as _, MockAuth, MockAuthInvoke};
+    use soroban_sdk::{Address, Env, IntoVal};
 
-    fn setup(env: &Env) -> (soroban_sdk::Address, StakingRewardsClient<'_>) {
+    pub fn setup(env: &Env) -> (soroban_sdk::Address, StakingRewardsClient<'_>) {
         env.mock_all_auths();
         let contract_id = env.register(StakingRewards, ());
         let client = StakingRewardsClient::new(env, &contract_id);
@@ -454,11 +695,11 @@ mod test {
             invoke: &soroban_sdk::testutils::MockAuthInvoke {
                 contract: &contract_id,
                 fn_name: "pause",
-                args: ().into_val(&env),
+                args: (admin.clone(),).into_val(&env),
                 sub_invokes: &[],
             },
         }]);
-        client.pause();
+        client.pause(&admin);
         assert!(client.is_paused());
     }
 
@@ -495,7 +736,7 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        client.unpause();
+        client.unpause(&admin);
     }
 
     #[test]

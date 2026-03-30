@@ -5,10 +5,21 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   test: {
+    include: ['components/**/*.{test,spec}.{ts,tsx}', 'lib/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['e2e/**', 'node_modules/**'],
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
     css: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'json-summary'],
+      include: [
+        'components/**/*.{ts,tsx}',
+        'lib/**/*.{ts,tsx}',
+        'store/**/*.{ts,tsx}',
+      ],
+    },
   },
   resolve: {
     alias: {

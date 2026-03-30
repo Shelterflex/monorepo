@@ -49,4 +49,54 @@ describe('POST /api/deposits/confirm', () => {
     expect(res1.body.conversion.conversionId).toBe(res2.body.conversion.conversionId)
     expect(res1.body.conversion.amountUsdc).toBe(res2.body.conversion.amountUsdc)
   })
+
+  it('replays the original response for duplicate key + same payload', async () => {
+    const payload = {
+      depositId: 'onramp:dep_003',
+      userId: 'user_1',
+      amountNgn: 50000,
+      provider: 'onramp',
+      providerRef: 'provider-ref-003',
+    }
+
+    const res1 = await request(app)
+      .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'idem-key-003')
+      .send(payload)
+      .expect(200)
+
+    const res2 = await request(app)
+      .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'idem-key-003')
+      .send(payload)
+      .expect(200)
+
+    expect(res2.headers['x-idempotent-replay']).toBe('true')
+    expect(res2.body.conversion.conversionId).toBe(res1.body.conversion.conversionId)
+  })
+
+  it('returns 409 for same idempotency key with a different payload', async () => {
+    const payload = {
+      depositId: 'onramp:dep_004',
+      userId: 'user_1',
+      amountNgn: 50000,
+      provider: 'onramp',
+      providerRef: 'provider-ref-004',
+    }
+
+    await request(app)
+      .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'idem-key-004')
+      .send(payload)
+      .expect(200)
+
+    const conflictRes = await request(app)
+      .post('/api/deposits/confirm')
+      .set('x-idempotency-key', 'idem-key-004')
+      .send({ ...payload, amountNgn: 99999 })
+      .expect(409)
+
+    expect(conflictRes.body.error.code).toBe('CONFLICT')
+    expect(conflictRes.body.error.message).toMatch(/different request payload/)
+  })
 })

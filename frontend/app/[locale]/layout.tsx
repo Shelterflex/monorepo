@@ -7,7 +7,9 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/ui/toaster";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LocaleDocumentSync } from "@/components/locale-document-sync";
 import { NetworkStatusBanner } from "@/components/network-status-banner";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { locales, type Locale, rtlLocales } from "@/i18n";
 import "../globals.css";
@@ -61,19 +63,17 @@ export default async function LocaleLayout({
   const dir = rtlLocales.includes(locale as Locale) ? "rtl" : "ltr";
 
   return (
-    <html lang={locale} dir={dir}>
-      <body className={`font-sans antialiased`}>
-        <NextIntlClientProvider messages={messages}>
-          <ErrorBoundary>
-            <WebVitalsReporter />
-            <NetworkStatusBanner />
-            <Header />
-            {children}
-            <Footer />
-            <Toaster />
-          </ErrorBoundary>
-        </NextIntlClientProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider messages={messages}>
+      <LocaleDocumentSync locale={locale} dir={dir} />
+      <ErrorBoundary>
+        <ServiceWorkerRegister />
+        <WebVitalsReporter />
+        <NetworkStatusBanner />
+        <Header />
+        {children}
+        <Footer />
+        <Toaster />
+      </ErrorBoundary>
+    </NextIntlClientProvider>
   );
 }
