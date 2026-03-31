@@ -59,7 +59,7 @@ const useRiskStore = create<RiskState>()(
         }),
       }),
       {
-        name: "sheltaflex-risk-storage",
+        name: "shelterflex-risk-storage",
         storage: createJSONStorage(() => localStorage),
         version: 1,
       }

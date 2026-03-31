@@ -36,6 +36,7 @@ import { CustodialWalletServiceImpl } from "./services/CustodialWalletServiceImp
 import { NgnWalletService } from "./services/ngnWalletService.js"
 import { createAdminReconciliationRouter } from "./routes/adminReconciliation.js"
 import { createGasMetricsRouter } from "./routes/gas-metrics.js"
+import { createAdminAuditRouter } from "./routes/adminAudit.js"
 import { InMemoryWalletStore, PostgresWalletStore } from "./models/walletStore.js"
 import { InMemoryLinkedAddressStore, PostgresLinkedAddressStore } from "./models/linkedAddressStore.js"
 import { StubRewardsDataLayer } from "./services/stub-rewards-data-layer.js"
@@ -43,7 +44,7 @@ import authRouter from "./routes/auth.js"
 import { StubReceiptRepository, PostgresReceiptRepository } from "./indexer/receipt-repository.js"
 import { ReceiptIndexer } from "./indexer/worker.js"
 import { createReceiptsRouter } from "./routes/receiptsRoute.js"
-import { getPool } from "./db.js"
+import { getPool, getPoolMetricsForOtel } from "./db.js"
 import { StakingService } from "./services/stakingService.js"
 import { StakingFinalizer } from "./jobs/stakingFinalizer.js"
 import { initOutboxStore, PostgresOutboxStore } from "./outbox/store.js"
@@ -56,6 +57,12 @@ import adminTimelockRouter from './routes/admin-timelock.js';
 import { TimelockIndexer } from './indexer/timelock-worker.js';
 import { PostgresTimelockRepository, StubTimelockRepository } from './indexer/timelock-repository.js';
 import { TimelockProcessor } from './indexer/timelock-processor.js';
+import { MetricsSorobanAdapter } from './soroban/metrics-adapter.js';
+import { CircuitBreakerAdapter } from './soroban/circuit-breaker-adapter.js';
+import { setDbPoolMetricsCallback, setSorobanCircuitBreakerCallback, shutdownMetrics } from './utils/metrics.js';
+import { metricsMiddleware } from './middleware/metricsMiddleware.js';
+import { JobScheduler, initJobStore, PostgresJobStore } from "./jobs/scheduler/index.js"
+import { createAdminJobsRouter } from "./routes/adminJobs.js"
 
 import { sanitizeRequest, detectMaliciousPatterns } from "./middleware/sanitization.js"
 import { createComprehensiveRateLimiter } from "./middleware/comprehensiveRateLimit.js"
@@ -81,7 +88,23 @@ export function createApp() {
 
   // Initialize Soroban adapter using your existing config function
   const sorobanConfig = getSorobanConfigFromEnv(process.env)
-  const sorobanAdapter = createSorobanAdapter(sorobanConfig)
+  const baseSorobanAdapter = createSorobanAdapter(sorobanConfig)
+  
+  // Wrap with metrics tracking
+  const sorobanAdapter = new MetricsSorobanAdapter(baseSorobanAdapter)
+  
+  // Set up circuit breaker metrics callback if using circuit breaker
+  if (baseSorobanAdapter instanceof CircuitBreakerAdapter) {
+    setSorobanCircuitBreakerCallback(() => {
+      const status = baseSorobanAdapter.getHealthStatus()
+      return status.state
+    })
+  }
+  
+  // Set up database pool metrics callback
+  if (env.NODE_ENV !== 'test') {
+    setDbPoolMetricsCallback(getPoolMetricsForOtel)
+  }
 
   // Initialize earnings service with stub data layer
   // Initialize wallet service and store
@@ -166,6 +189,18 @@ export function createApp() {
     workers.push(outboxWorker)
   }
 
+  // Job Scheduler — swap to Postgres store when DATABASE_URL is set
+  if (process.env.DATABASE_URL) {
+    initJobStore(new PostgresJobStore())
+  }
+  const jobScheduler = new JobScheduler(
+    parseInt(process.env.JOB_SCHEDULER_POLL_MS ?? '5000', 10),
+  )
+  if (env.NODE_ENV !== 'test') {
+    jobScheduler.start()
+    workers.push(jobScheduler)
+  }
+
   // Indexer
   const receiptRepo = process.env.DATABASE_URL
     ? new PostgresReceiptRepository()
@@ -207,6 +242,10 @@ export function createApp() {
 
         // Stop all workers
         await Promise.all(workers.map(w => w.stop()))
+        
+        // Shutdown metrics
+        await shutdownMetrics()
+        
         clearTimeout(timeout)
         logger.info('Graceful shutdown completed successfully')
         process.exit(0)
@@ -223,6 +262,11 @@ export function createApp() {
   // Core middleware
   app.use(requestIdMiddleware)
   app.use(traceResponseMiddleware)
+
+  // Metrics middleware - track all HTTP requests
+  if (env.NODE_ENV !== 'test') {
+    app.use(metricsMiddleware)
+  }
 
   // Secret rotation middleware
   app.use(secretRotationMiddleware)
@@ -265,6 +309,8 @@ export function createApp() {
   app.use('/api/admin', createAdminRouter(sorobanAdapter, walletStore as any, encryptionService as any, indexer))
   app.use('/api/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService))
   app.use('/api/admin/secrets', createSecretRotationRouter())
+  app.use('/api/admin/jobs', createAdminJobsRouter())
+  app.use('/api/admin', createAdminAuditRouter())
   app.use('/api/deals', createDealsRouter())
   app.use('/api/whistleblower', createWhistleblowerRouter(earningsService))
   app.use('/api/staking', createStakingRouter(sorobanAdapter, walletService, linkedAddressStore, ngnWalletService, conversionService, stakingService))

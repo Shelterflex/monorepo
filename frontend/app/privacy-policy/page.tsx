@@ -23,7 +23,7 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">1. Introduction</h2>
               <p className="text-muted-foreground">
-                Sheltaflex ("we", "our", "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our services.
+                Shelterflex ("we", "our", "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our services.
               </p>
             </section>
 
@@ -39,7 +39,7 @@ export default function PrivacyPolicyPage() {
                 <li>• Account registration information (name, email, phone, address)</li>
                 <li>• Payment information (banking details, transaction history)</li>
                 <li>• Application and lease information</li>
-                <li>• Communication and correspondence with Sheltaflex</li>
+                <li>• Communication and correspondence with Shelterflex</li>
                 <li>• Identity verification documents</li>
               </ul>
               <p className="text-muted-foreground mb-2">
@@ -114,7 +114,7 @@ export default function PrivacyPolicyPage() {
                 <li>• <strong>Right to Opt-Out:</strong> Opt-out of marketing communications</li>
               </ul>
               <p className="text-muted-foreground mt-3">
-                To exercise any of these rights, please contact us at privacy@sheltaflex.com.
+                To exercise any of these rights, please contact us at privacy@shelterflex.com.
               </p>
             </section>
 
@@ -135,7 +135,7 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">10. Children's Privacy</h2>
               <p className="text-muted-foreground">
-                Sheltaflex is not intended for children under 18 years of age. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal information, we will take steps to delete such information.
+                Shelterflex is not intended for children under 18 years of age. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal information, we will take steps to delete such information.
               </p>
             </section>
 
@@ -152,7 +152,7 @@ export default function PrivacyPolicyPage() {
                 If you have questions about this Privacy Policy or our privacy practices, please contact us:
               </p>
               <div className="text-muted-foreground space-y-2">
-                <p><strong>Email:</strong> privacy@sheltaflex.com</p>
+                <p><strong>Email:</strong> privacy@shelterflex.com</p>
                 <p><strong>Phone:</strong> +234 (0) XXX XXX XXXX</p>
                 <p><strong>Address:</strong> Lagos, Nigeria</p>
               </div>

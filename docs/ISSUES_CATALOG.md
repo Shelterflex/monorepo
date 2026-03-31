@@ -51,7 +51,7 @@ Each issue includes the goal, suggested labels, and what success looks like.
   - Skeleton matches layout spacing of the real UI
   - Toggleable via a local `loading` state
 
-#### FE-3: Fix inconsistent naming: “Sheltaflex” vs “Shelterflex”
+#### FE-3: Fix inconsistent naming: “Shelterflex” vs “Shelterflex”
 
 - **Type**: Chore
 - **Labels**:

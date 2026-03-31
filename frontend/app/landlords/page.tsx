@@ -73,7 +73,7 @@ export default function LandlordsPage() {
                 <span className="text-primary">Upfront.</span>
               </h1>
               <p className="text-lg text-muted-foreground md:text-xl max-w-lg leading-relaxed">
-                Stop waiting for monthly payments. Partner with Sheltaflex and
+                Stop waiting for monthly payments. Partner with Shelterflex and
                 receive your annual rent within 48 hours of tenant move-in.
               </p>
               <div className="flex flex-wrap gap-4">

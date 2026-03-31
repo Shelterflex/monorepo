@@ -14,9 +14,11 @@ import { SorobanAdapter } from "../soroban/adapter.js";
 import { logger } from "../utils/logger.js";
 import {
   auditAdminWalletAction,
-  auditAdminOutboxOperation,
-  auditAdminRewardOperation,
-  auditAdminListingModeration,
+  auditListingApproved,
+  auditListingRejected,
+  auditRewardMarkedPaid,
+  auditAdminOutboxMarkDead,
+  auditAdminOutboxRetry,
 } from "../utils/auditLogger.js";
 import { AppError, notFound } from "../errors/AppError.js";
 import { ErrorCode } from "../errors/errorCodes.js";
@@ -354,12 +356,7 @@ export function createAdminRouter(
           requestId: req.requestId,
         });
 
-        // Audit log: admin outbox mark dead
-        auditAdminOutboxOperation(req, "ADMIN_OUTBOX_MARK_DEAD", {
-          outboxId: id,
-          txId: dead.txId,
-          reason: reason.trim(),
-        });
+        auditAdminOutboxMarkDead(req, { outboxId: id, reason: reason.trim() });
 
         res.json({
           success: true,
@@ -396,10 +393,7 @@ export function createAdminRouter(
           requestId: req.requestId,
         });
 
-        // Audit log: admin outbox retry
-        auditAdminOutboxOperation(req, "ADMIN_OUTBOX_RETRY", {
-          outboxId: id,
-        });
+        auditAdminOutboxRetry(req, { outboxId: id });
 
         const item = await outboxStore.getById(id);
         if (!item) {
@@ -600,11 +594,10 @@ export function createAdminRouter(
           requestId: req.requestId,
         });
 
-        // Audit log: admin reward mark paid
-        auditAdminRewardOperation(req, {
+        auditRewardMarkedPaid(req, {
           rewardId,
-          amountUsdc,
-          externalRef,
+          amountUsdc: amountUsdc as number,
+          txId: outboxItem.txId,
         });
 
         res.status(sent ? 200 : 202).json({
@@ -729,11 +722,7 @@ export function createAdminRouter(
           requestId: req.requestId,
         });
 
-        // Audit log: admin listing approve
-        auditAdminListingModeration(req, "ADMIN_LISTING_APPROVE", {
-          listingId: id,
-          reviewedBy,
-        });
+        auditListingApproved(req, { listingId: id, reviewedBy });
 
         res.json({
           listing: {
@@ -794,12 +783,7 @@ export function createAdminRouter(
           requestId: req.requestId,
         });
 
-        // Audit log: admin listing reject
-        auditAdminListingModeration(req, "ADMIN_LISTING_REJECT", {
-          listingId: id,
-          reviewedBy,
-          reason,
-        });
+        auditListingRejected(req, { listingId: id, reviewedBy, reason });
 
         res.json({
           listing: {

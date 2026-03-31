@@ -9,7 +9,7 @@ export interface OfflineQueueEntry {
   createdAt: string
 }
 
-const STORAGE_KEY = 'sheltaflex-offline-queue'
+const STORAGE_KEY = 'shelterflex-offline-queue'
 
 function getStorage() {
   if (typeof window === 'undefined') {

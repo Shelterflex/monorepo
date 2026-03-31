@@ -23,19 +23,19 @@ export default function TermsOfServicePage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">1. Acceptance of Terms</h2>
               <p className="text-muted-foreground">
-                By accessing and using Sheltaflex, you agree to be bound by these Terms of Service. If you do not agree to abide by the above, please do not use this service.
+                By accessing and using Shelterflex, you agree to be bound by these Terms of Service. If you do not agree to abide by the above, please do not use this service.
               </p>
             </section>
 
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">2. Use License</h2>
               <p className="text-muted-foreground mb-3">
-                Permission is granted to temporarily download one copy of the materials (information or software) on Sheltaflex for personal, non-commercial transitory viewing only. This is the grant of a license, not a transfer of title, and under this license you may not:
+                Permission is granted to temporarily download one copy of the materials (information or software) on Shelterflex for personal, non-commercial transitory viewing only. This is the grant of a license, not a transfer of title, and under this license you may not:
               </p>
               <ul className="text-muted-foreground space-y-2 ml-4">
                 <li>• Modifying or copying the materials</li>
                 <li>• Using the materials for any commercial purpose, or for any public display</li>
-                <li>• Attempting to decompile or reverse engineer any software contained on Sheltaflex</li>
+                <li>• Attempting to decompile or reverse engineer any software contained on Shelterflex</li>
                 <li>• Removing any copyright or other proprietary notations from the materials</li>
                 <li>• Transferring the materials to another person or "mirroring" the materials on any other server</li>
               </ul>
@@ -44,16 +44,16 @@ export default function TermsOfServicePage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">3. Tenant Payment Terms</h2>
               <p className="text-muted-foreground mb-3">
-                <strong>3.1 Rent Financing:</strong> Sheltaflex finances the rental amount to the landlord upfront. You agree to repay this amount in monthly installments as calculated in your application.
+                <strong>3.1 Rent Financing:</strong> Shelterflex finances the rental amount to the landlord upfront. You agree to repay this amount in monthly installments as calculated in your application.
               </p>
               <p className="text-muted-foreground mb-3">
                 <strong>3.2 Monthly Payments:</strong> Payments must be made on or before the due date. Late payments may incur additional fees and penalties as outlined in your agreement.
               </p>
               <p className="text-muted-foreground mb-3">
-                <strong>3.3 Deposit (NON-REFUNDABLE):</strong> Your initial deposit is NON-REFUNDABLE. It serves as a security measure for Sheltaflex to mitigate risk. The deposit must be renewed annually to demonstrate your commitment to retaining the property. Minimum deposit is 20% of the yearly rent.
+                <strong>3.3 Deposit (NON-REFUNDABLE):</strong> Your initial deposit is NON-REFUNDABLE. It serves as a security measure for Shelterflex to mitigate risk. The deposit must be renewed annually to demonstrate your commitment to retaining the property. Minimum deposit is 20% of the yearly rent.
               </p>
               <p className="text-muted-foreground">
-                <strong>3.4 Additional Fees:</strong> You are responsible for paying inspection fees, agreement fees, commission, and any other charges directly to the agent or landlord. These are separate from your monthly payments to Sheltaflex.
+                <strong>3.4 Additional Fees:</strong> You are responsible for paying inspection fees, agreement fees, commission, and any other charges directly to the agent or landlord. These are separate from your monthly payments to Shelterflex.
               </p>
             </section>
 
@@ -67,7 +67,7 @@ export default function TermsOfServicePage() {
                 <li>• Maintain the property in good condition</li>
                 <li>• Comply with all terms of the lease agreement with the landlord</li>
                 <li>• Provide accurate information in your application</li>
-                <li>• Notify Sheltaflex of any changes in contact information</li>
+                <li>• Notify Shelterflex of any changes in contact information</li>
               </ul>
             </section>
 
@@ -87,14 +87,14 @@ export default function TermsOfServicePage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">6. Early Settlement</h2>
               <p className="text-muted-foreground">
-                You may settle your remaining balance early without penalty. Contact Sheltaflex for settlement options and amounts.
+                You may settle your remaining balance early without penalty. Contact Shelterflex for settlement options and amounts.
               </p>
             </section>
 
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">7. Landlord and Property Terms</h2>
               <p className="text-muted-foreground mb-2">
-                <strong>7.1 Lease Agreement:</strong> The lease agreement remains between you and the landlord. Sheltaflex only finances the rent and is not party to the lease.
+                <strong>7.1 Lease Agreement:</strong> The lease agreement remains between you and the landlord. Shelterflex only finances the rent and is not party to the lease.
               </p>
               <p className="text-muted-foreground">
                 <strong>7.2 Property Disputes:</strong> Any disputes regarding the property condition, maintenance, or other lease terms should be addressed with the landlord directly.
@@ -104,14 +104,14 @@ export default function TermsOfServicePage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">8. Limitation of Liability</h2>
               <p className="text-muted-foreground">
-                Sheltaflex is provided on an "as is" basis. Sheltaflex shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use Sheltaflex or the materials, even if Sheltaflex has been advised of the possibility of such damages.
+                Shelterflex is provided on an "as is" basis. Shelterflex shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use Shelterflex or the materials, even if Shelterflex has been advised of the possibility of such damages.
               </p>
             </section>
 
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">9. Modifications to Terms</h2>
               <p className="text-muted-foreground">
-                Sheltaflex may revise these terms of service for its website at any time without notice. By using this website, you are agreeing to be bound by the then current version of these terms of service.
+                Shelterflex may revise these terms of service for its website at any time without notice. By using this website, you are agreeing to be bound by the then current version of these terms of service.
               </p>
             </section>
 
@@ -125,7 +125,7 @@ export default function TermsOfServicePage() {
             <section>
               <h2 className="mb-3 font-mono text-xl font-bold">11. Contact Information</h2>
               <p className="text-muted-foreground">
-                For questions about these Terms of Service, please contact us at support@sheltaflex.com or visit our <Link href="/contact" className="font-bold border-b-2 border-foreground hover:text-primary">contact page</Link>.
+                For questions about these Terms of Service, please contact us at support@shelterflex.com or visit our <Link href="/contact" className="font-bold border-b-2 border-foreground hover:text-primary">contact page</Link>.
               </p>
             </section>
           </div>

@@ -1,47 +1,66 @@
 /**
- * Structured Audit Logger for Sensitive Custodial Wallet Operations
+ * Structured Audit Logger for Sensitive Operations
  *
- * This module provides structured JSON logging for security-sensitive events.
- * All audit logs are output as structured JSON for easy searching and filtering.
+ * Writes structured JSON to stdout AND (when a database is configured)
+ * persists each entry to the audit_log table with a cryptographic hash chain
+ * that makes retroactive tampering detectable.
  *
  * Security Notes:
  * - NEVER include secrets, keys, or sensitive values in any log entry
  * - metadata must only contain a safe subset of context
  * - Excluded by design, not by accident
- *
- * Audit Log Format:
- * {
- *   eventType: string,    // e.g., "WALLET_CREATED", "WALLET_SIGNING_USED"
- *   userId: string,       // User identifier
- *   requestId: string,    // Request correlation ID
- *   ip: string,           // Client IP address
- *   actorType: string,    // "user" | "admin" | "system"
- *   timestamp: string,    // ISO 8601 timestamp
- *   metadata: object      // Safe context (no secrets)
- * }
  */
 
-import type { Request } from "express";
+import type { Request } from 'express'
+import { getPool } from '../db.js'
+import { logger } from './logger.js'
 
 /**
- * Valid audit event types for custodial wallet operations and admin operations
+ * All audit event types across the system.
+ * Grouped by domain for readability.
  */
 export type AuditEventType =
-  | "WALLET_CREATED"
-  | "WALLET_SIGNING_USED"
-  | "WALLET_EXPORT_ATTEMPT"
-  | "ADMIN_WALLET_ACTION"
-  | "ADMIN_CONTRACT_PAUSE"
-  | "ADMIN_CONTRACT_UNPAUSE"
-  | "ADMIN_CONTRACT_UPGRADE"
-  | "ADMIN_SET_OPERATOR"
-  | "ADMIN_OUTBOX_RETRY"
-  | "ADMIN_OUTBOX_MARK_DEAD"
-  | "ADMIN_REWARD_MARK_PAID"
-  | "ADMIN_LISTING_APPROVE"
-  | "ADMIN_LISTING_REJECT"
-  | "ADMIN_RISK_FREEZE"
-  | "ADMIN_RISK_UNFREEZE";
+  // Authentication
+  | 'AUTH_OTP_REQUESTED'
+  | 'AUTH_LOGIN_SUCCESS'
+  | 'AUTH_LOGIN_FAILED'
+  | 'AUTH_LOGOUT'
+  | 'AUTH_LOGOUT_ALL'
+  | 'AUTH_WALLET_CHALLENGE_ISSUED'
+  | 'AUTH_WALLET_LOGIN_SUCCESS'
+  | 'AUTH_WALLET_LOGIN_FAILED'
+  // Wallet
+  | 'WALLET_CREATED'
+  | 'WALLET_SIGNING_USED'
+  | 'WALLET_EXPORT_ATTEMPT'
+  | 'ADMIN_WALLET_ACTION'
+  // Deals
+  | 'DEAL_CREATED'
+  | 'DEAL_UPDATED'
+  | 'DEAL_STATUS_CHANGED'
+  // Listings
+  | 'LISTING_CREATED'
+  | 'LISTING_APPROVED'
+  | 'LISTING_REJECTED'
+  // Deposits & Payments
+  | 'NGN_DEPOSIT_INITIATED'
+  | 'NGN_WITHDRAWAL_INITIATED'
+  | 'PAYMENT_INITIATED'
+  // Staking
+  | 'STAKING_INITIATED'
+  // Rewards
+  | 'REWARD_MARKED_PAID'
+  // Admin operations
+  | 'ADMIN_OUTBOX_MARK_DEAD'
+  | 'ADMIN_OUTBOX_RETRY'
+  | 'ADMIN_INDEXER_PAUSE'
+  | 'ADMIN_INDEXER_RESUME'
+  | 'ADMIN_SECRET_ROTATED'
+  // Risk
+  | 'RISK_ACCOUNT_FROZEN'
+  | 'RISK_TIER_CHANGED'
+  | 'ADMIN_RISK_FREEZE'
+  | 'ADMIN_RISK_UNFREEZE'
 
 /**
  * Valid actor types
@@ -49,341 +68,298 @@ export type AuditEventType =
 export type ActorType = "user" | "admin" | "system";
 
 /**
- * Audit log entry structure
+ * Audit log entry structure (in-memory / stdout representation)
  */
 export interface AuditLogEntry {
-  /** Event type identifier */
-  eventType: AuditEventType;
-  /** User identifier */
-  userId: string;
-  /** Request correlation ID */
-  requestId: string;
-  /** Client IP address */
-  ip: string;
-  /** Type of actor performing the action */
-  actorType: ActorType;
-  /** ISO 8601 timestamp */
-  timestamp: string;
-  /** Safe metadata - never contains secrets */
-  metadata: Record<string, unknown>;
+  eventType: AuditEventType
+  userId: string
+  requestId: string
+  ip: string
+  actorType: ActorType
+  timestamp: string
+  metadata: Record<string, unknown>
+  httpMethod?: string
+  httpPath?: string
 }
 
 /**
  * Context required for audit logging
  */
 export interface AuditContext {
-  /** User identifier */
-  userId: string;
-  /** Request correlation ID */
-  requestId: string;
-  /** Client IP address */
-  ip: string;
-  /** Type of actor */
-  actorType: ActorType;
+  userId: string
+  requestId: string
+  ip: string
+  actorType: ActorType
+  httpMethod?: string
+  httpPath?: string
 }
 
 /**
  * Extract audit context from Express request
- *
- * @param req - Express request object
- * @param actorType - Type of actor (user, admin, system)
- * @returns AuditContext with userId, requestId, ip, actorType
  */
-export function extractAuditContext(
-  req: Request,
-  actorType: ActorType,
-): AuditContext {
-  // Get userId from request - supports various auth patterns
-  const userId = extractUserId(req);
-
-  // Get requestId from request (set by requestIdMiddleware)
-  const requestId = req.requestId || "unknown";
-
-  // Get IP address - handle proxies
-  const ip = extractIp(req);
-
+export function extractAuditContext(req: Request, actorType: ActorType): AuditContext {
   return {
-    userId,
-    requestId,
-    ip,
+    userId: extractUserId(req),
+    requestId: req.requestId || 'unknown',
+    ip: extractIp(req),
     actorType,
-  };
+    httpMethod: req.method,
+    httpPath: req.path,
+  }
 }
 
-/**
- * Extract user ID from request
- * Supports: req.user.id, req.userId, headers
- */
 function extractUserId(req: Request): string {
-  // Try common patterns for user ID
-  const user = (req as any).user;
-  if (user && typeof user === "object") {
-    if (user.id) return String(user.id);
-    if (user.userId) return String(user.userId);
-    if (user.sub) return String(user.sub);
+  const user = (req as any).user
+  if (user && typeof user === 'object') {
+    if (user.id) return String(user.id)
+    if (user.userId) return String(user.userId)
+    if (user.sub) return String(user.sub)
   }
-
-  // Try direct property
-  if ((req as any).userId) {
-    return String((req as any).userId);
-  }
-
-  // Try header (for service-to-service calls)
-  const headerUserId = req.headers["x-user-id"];
-  if (headerUserId && typeof headerUserId === "string") {
-    return headerUserId;
-  }
-
-  // Fallback to anonymous
-  return "anonymous";
+  if ((req as any).userId) return String((req as any).userId)
+  const headerUserId = req.headers['x-user-id']
+  if (typeof headerUserId === 'string' && headerUserId) return headerUserId
+  return 'anonymous'
 }
 
-/**
- * Extract client IP from request
- * Handles proxies and various header formats
- */
 function extractIp(req: Request): string {
-  // Check for forwarded IP (behind proxy)
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded) {
-    // Get first IP in the chain
-    return forwarded.split(",")[0].trim();
+  const forwarded = req.headers['x-forwarded-for']
+  if (typeof forwarded === 'string' && forwarded) {
+    return forwarded.split(',')[0].trim()
   }
-
-  // Check other proxy headers
-  const realIp = req.headers["x-real-ip"];
-  if (typeof realIp === "string" && realIp) {
-    return realIp;
-  }
-
-  // Fall back to connection remote address
-  return req.socket?.remoteAddress || req.ip || "unknown";
+  const realIp = req.headers['x-real-ip']
+  if (typeof realIp === 'string' && realIp) return realIp
+  return req.socket?.remoteAddress || req.ip || 'unknown'
 }
 
 /**
- * Sanitize metadata to ensure no secrets are logged
- *
- * @param metadata - Raw metadata object
- * @returns Sanitized metadata with secrets removed
+ * Sanitize metadata — strips any key whose name suggests it contains a secret.
  */
-function sanitizeMetadata(
-  metadata: Record<string, unknown>,
-): Record<string, unknown> {
-  const sanitized: Record<string, unknown> = {};
-
-  // Keys that should never be logged
+function sanitizeMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
   const SENSITIVE_KEYS = new Set([
-    "password",
-    "secret",
-    "token",
-    "authorization",
-    "apiKey",
-    "api_key",
-    "privateKey",
-    "private_key",
-    "accessToken",
-    "access_token",
-    "secretKey",
-    "secret_key",
-    "masterKey",
-    "master_key",
-    "encryptedSecretKey",
-    "envelope",
-    "cipherText",
-    "ciphertext",
-    "authTag",
-    "iv",
-    "key",
-    "signature",
-    "seed",
-    "mnemonic",
-    "passphrase",
-  ]);
+    'password', 'secret', 'token', 'authorization', 'apiKey', 'api_key',
+    'privateKey', 'private_key', 'accessToken', 'access_token', 'secretKey',
+    'secret_key', 'masterKey', 'master_key', 'encryptedSecretKey', 'envelope',
+    'cipherText', 'ciphertext', 'authTag', 'iv', 'key', 'signature', 'seed',
+    'mnemonic', 'passphrase',
+  ])
 
-  for (const [key, value] of Object.entries(metadata)) {
-    // Skip sensitive keys
-    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
-      sanitized[key] = "[REDACTED]";
-      continue;
-    }
-
-    // Skip keys containing sensitive substrings
-    const lowerKey = key.toLowerCase();
+  const sanitized: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(metadata)) {
+    const lk = k.toLowerCase()
     if (
-      lowerKey.includes("secret") ||
-      lowerKey.includes("password") ||
-      lowerKey.includes("token") ||
-      lowerKey.includes("key") ||
-      lowerKey.includes("private") ||
-      lowerKey.includes("credential")
+      SENSITIVE_KEYS.has(lk) ||
+      lk.includes('secret') ||
+      lk.includes('password') ||
+      lk.includes('token') ||
+      lk.includes('key') ||
+      lk.includes('private') ||
+      lk.includes('credential')
     ) {
-      sanitized[key] = "[REDACTED]";
-      continue;
+      sanitized[k] = '[REDACTED]'
+      continue
     }
-
-    // Recursively sanitize nested objects
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      sanitized[key] = sanitizeMetadata(value as Record<string, unknown>);
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      sanitized[k] = sanitizeMetadata(v as Record<string, unknown>)
     } else {
-      sanitized[key] = value;
+      sanitized[k] = v
     }
   }
-
-  return sanitized;
+  return sanitized
 }
 
 /**
- * Write an audit log entry
- *
- * @param eventType - Type of audit event
- * @param context - Audit context (userId, requestId, ip, actorType)
- * @param metadata - Safe metadata (will be sanitized)
+ * Persist audit entry to the database (best-effort, non-blocking).
+ * Failures are logged as warnings and never propagate to callers.
+ */
+async function persistToDatabase(
+  eventType: AuditEventType,
+  context: AuditContext,
+  metadata: Record<string, unknown>,
+  timestamp: string,
+): Promise<void> {
+  try {
+    const pool = await getPool()
+    if (!pool) return // no database configured
+
+    // Lazy import to avoid circular dependency at module load time
+    const { auditRepository } = await import('../repositories/AuditRepository.js')
+
+    await auditRepository.append({
+      eventType,
+      actorType: context.actorType,
+      userId: context.userId !== 'anonymous' ? context.userId : null,
+      requestId: context.requestId !== 'unknown' ? context.requestId : null,
+      ipAddress: context.ip !== 'unknown' ? context.ip : null,
+      httpMethod: context.httpMethod ?? null,
+      httpPath: context.httpPath ?? null,
+      metadata,
+      createdAt: new Date(timestamp),
+    })
+  } catch (err) {
+    logger.warn('Failed to persist audit entry to database', {
+      eventType,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+/**
+ * Write an audit log entry to stdout and (asynchronously) to the database.
  */
 export function auditLog(
   eventType: AuditEventType,
   context: AuditContext,
   metadata: Record<string, unknown> = {},
 ): void {
+  const safeMetadata = sanitizeMetadata(metadata)
+  const timestamp = new Date().toISOString()
+
   const entry: AuditLogEntry = {
     eventType,
     userId: context.userId,
     requestId: context.requestId,
     ip: context.ip,
     actorType: context.actorType,
-    timestamp: new Date().toISOString(),
-    metadata: sanitizeMetadata(metadata),
-  };
+    timestamp,
+    metadata: safeMetadata,
+    httpMethod: context.httpMethod,
+    httpPath: context.httpPath,
+  }
 
-  // Output structured JSON to stdout
-  process.stdout.write(JSON.stringify(entry) + "\n");
+  // Synchronous stdout write — always happens
+  process.stdout.write(JSON.stringify(entry) + '\n')
+
+  // Async DB persistence — failures are swallowed after logging a warning
+  void persistToDatabase(eventType, context, safeMetadata, timestamp)
 }
 
-/**
- * Convenience function for logging wallet creation events
- */
+// ---------------------------------------------------------------------------
+// Convenience helpers
+// ---------------------------------------------------------------------------
+
 export function auditWalletCreated(
   req: Request,
   metadata: { walletId?: string; publicAddress?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "user");
-  auditLog("WALLET_CREATED", context, metadata);
+  auditLog('WALLET_CREATED', extractAuditContext(req, 'user'), metadata)
 }
 
-/**
- * Convenience function for logging wallet signing usage
- */
 export function auditWalletSigningUsed(
   req: Request,
   metadata: { dealId?: string; txType?: string; txId?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "user");
-  auditLog("WALLET_SIGNING_USED", context, metadata);
+  auditLog('WALLET_SIGNING_USED', extractAuditContext(req, 'user'), metadata)
 }
 
-/**
- * Convenience function for logging wallet export attempts
- */
 export function auditWalletExportAttempt(
   req: Request,
   metadata: { walletId?: string; reason?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "user");
-  auditLog("WALLET_EXPORT_ATTEMPT", context, metadata);
+  auditLog('WALLET_EXPORT_ATTEMPT', extractAuditContext(req, 'user'), metadata)
 }
 
-/**
- * Convenience function for logging admin wallet actions
- */
 export function auditAdminWalletAction(
   req: Request,
-  metadata: {
-    action?: string;
-    walletId?: string;
-    details?: Record<string, unknown>;
-  } = {},
+  metadata: { action?: string; walletId?: string; details?: Record<string, unknown> } = {},
 ): void {
-  const context = extractAuditContext(req, "admin");
-  auditLog("ADMIN_WALLET_ACTION", context, metadata);
+  auditLog('ADMIN_WALLET_ACTION', extractAuditContext(req, 'admin'), metadata)
 }
 
-/**
- * Convenience function for logging admin contract operations
- */
-export function auditAdminContractOperation(
+export function auditAuthOtpRequested(
   req: Request,
-  eventType: Extract<
-    AuditEventType,
-    | "ADMIN_CONTRACT_PAUSE"
-    | "ADMIN_CONTRACT_UNPAUSE"
-    | "ADMIN_CONTRACT_UPGRADE"
-    | "ADMIN_SET_OPERATOR"
-  >,
-  metadata: {
-    contractId?: string;
-    operation?: string;
-    parameters?: Record<string, unknown>;
-  } = {},
+  metadata: { email?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "admin");
-  auditLog(eventType, context, metadata);
+  auditLog('AUTH_OTP_REQUESTED', extractAuditContext(req, 'user'), metadata)
 }
 
-/**
- * Convenience function for logging admin outbox operations
- */
-export function auditAdminOutboxOperation(
+export function auditAuthLoginSuccess(
   req: Request,
-  eventType: Extract<
-    AuditEventType,
-    "ADMIN_OUTBOX_RETRY" | "ADMIN_OUTBOX_MARK_DEAD"
-  >,
-  metadata: { outboxId?: string; txId?: string; reason?: string } = {},
+  metadata: { userId?: string; email?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "admin");
-  auditLog(eventType, context, metadata);
+  auditLog('AUTH_LOGIN_SUCCESS', extractAuditContext(req, 'user'), metadata)
 }
 
-/**
- * Convenience function for logging admin reward operations
- */
-export function auditAdminRewardOperation(
+export function auditAuthLoginFailed(
   req: Request,
-  metadata: {
-    rewardId?: string;
-    amountUsdc?: number;
-    externalRef?: string;
-  } = {},
+  metadata: { email?: string; reason?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "admin");
-  auditLog("ADMIN_REWARD_MARK_PAID", context, metadata);
+  auditLog('AUTH_LOGIN_FAILED', extractAuditContext(req, 'user'), metadata)
 }
 
-/**
- * Convenience function for logging admin listing moderation
- */
-export function auditAdminListingModeration(
+export function auditAuthLogout(
   req: Request,
-  eventType: Extract<
-    AuditEventType,
-    "ADMIN_LISTING_APPROVE" | "ADMIN_LISTING_REJECT"
-  >,
+  metadata: { userId?: string } = {},
+): void {
+  auditLog('AUTH_LOGOUT', extractAuditContext(req, 'user'), metadata)
+}
+
+export function auditAuthLogoutAll(
+  req: Request,
+  metadata: { userId?: string; sessionCount?: number } = {},
+): void {
+  auditLog('AUTH_LOGOUT_ALL', extractAuditContext(req, 'user'), metadata)
+}
+
+export function auditAuthWalletChallengeIssued(
+  req: Request,
+  metadata: { address?: string } = {},
+): void {
+  auditLog('AUTH_WALLET_CHALLENGE_ISSUED', extractAuditContext(req, 'user'), metadata)
+}
+
+export function auditAuthWalletLoginSuccess(
+  req: Request,
+  metadata: { address?: string; userId?: string } = {},
+): void {
+  auditLog('AUTH_WALLET_LOGIN_SUCCESS', extractAuditContext(req, 'user'), metadata)
+}
+
+export function auditAuthWalletLoginFailed(
+  req: Request,
+  metadata: { address?: string; reason?: string } = {},
+): void {
+  auditLog('AUTH_WALLET_LOGIN_FAILED', extractAuditContext(req, 'user'), metadata)
+}
+
+export function auditListingApproved(
+  req: Request,
+  metadata: { listingId?: string; reviewedBy?: string } = {},
+): void {
+  auditLog('LISTING_APPROVED', extractAuditContext(req, 'admin'), metadata)
+}
+
+export function auditListingRejected(
+  req: Request,
   metadata: { listingId?: string; reviewedBy?: string; reason?: string } = {},
 ): void {
-  const context = extractAuditContext(req, "admin");
-  auditLog(eventType, context, metadata);
+  auditLog('LISTING_REJECTED', extractAuditContext(req, 'admin'), metadata)
 }
 
-/**
- * Convenience function for logging admin risk operations
- */
+export function auditRewardMarkedPaid(
+  req: Request,
+  metadata: { rewardId?: string; amountUsdc?: number; txId?: string } = {},
+): void {
+  auditLog('REWARD_MARKED_PAID', extractAuditContext(req, 'admin'), metadata)
+}
+
+export function auditAdminOutboxMarkDead(
+  req: Request,
+  metadata: { outboxId?: string; reason?: string } = {},
+): void {
+  auditLog('ADMIN_OUTBOX_MARK_DEAD', extractAuditContext(req, 'admin'), metadata)
+}
+
+export function auditAdminOutboxRetry(
+  req: Request,
+  metadata: { outboxId?: string } = {},
+): void {
+  auditLog('ADMIN_OUTBOX_RETRY', extractAuditContext(req, 'admin'), metadata)
+}
+
 export function auditAdminRiskOperation(
   req: Request,
-  eventType: Extract<
-    AuditEventType,
-    "ADMIN_RISK_FREEZE" | "ADMIN_RISK_UNFREEZE"
-  >,
-  metadata: { targetUserId?: string; reason?: string; notes?: string } = {},
+  eventType: 'ADMIN_RISK_FREEZE' | 'ADMIN_RISK_UNFREEZE',
+  metadata: Record<string, unknown> = {},
 ): void {
-  const context = extractAuditContext(req, "admin");
-  auditLog(eventType, context, metadata);
+  auditLog(eventType, extractAuditContext(req, 'admin'), metadata)
 }

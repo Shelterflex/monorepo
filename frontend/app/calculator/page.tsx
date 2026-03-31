@@ -14,7 +14,7 @@ export default function CalculatorPage() {
 
   const minDeposit = annualRent * 0.2 // Minimum 20% deposit required
   const maxDeposit = annualRent // Maximum 100% for those paying in full
-  const totalAmount = annualRent - deposit // Amount Sheltaflex finances (rent only)
+  const totalAmount = annualRent - deposit // Amount Shelterflex finances (rent only)
   const monthlyPayment = totalAmount / duration
 
   const formatCurrency = (amount: number) => {

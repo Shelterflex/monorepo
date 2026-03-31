@@ -102,6 +102,27 @@ export function getPoolMetrics(): PoolMetrics | null {
   }
 }
 
+/**
+ * Get pool metrics for OpenTelemetry callback
+ */
+export function getPoolMetricsForOtel() {
+  const metrics = getPoolMetrics();
+  if (!metrics) {
+    return {
+      totalCount: 0,
+      idleCount: 0,
+      waitingCount: 0,
+      activeCount: 0,
+    };
+  }
+  return {
+    totalCount: metrics.totalCount,
+    idleCount: metrics.idleCount,
+    waitingCount: metrics.waitingCount,
+    activeCount: metrics.activeCount,
+  };
+}
+
 export function setPool(newPool: PgPoolLike | null) {
   pool = newPool
 }
@@ -192,17 +213,22 @@ export async function getReadPool(): Promise<PgPoolLike | null> {
 }
 
 /**
- * Wraps a pool to add slow-query logging on every query call.
+ * Wraps a pool to add slow-query logging and metrics tracking on every query call.
  */
 function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
   const originalQuery = candidate.query.bind(candidate)
   candidate.query = async (text: string, params?: unknown[]) => {
     const start = Date.now()
+    let success = true
+    let isSlow = false
+    
     try {
       const result = await originalQuery(text, params)
       const durationMs = Date.now() - start
+      
       if (durationMs >= DB_SLOW_QUERY_THRESHOLD_MS) {
         slowQueryCount++
+        isSlow = true
         console.warn(
           JSON.stringify({
             level: 'warn',
@@ -214,8 +240,20 @@ function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
           }),
         )
       }
+      
+      // Track metrics (lazy import to avoid circular dependencies)
+      if (process.env.NODE_ENV !== 'test') {
+        import('../utils/metrics.js').then(({ recordDbQuery }) => {
+          const operation = text.trim().split(' ')[0].toUpperCase()
+          recordDbQuery(operation, durationMs, true, isSlow)
+        }).catch(() => {
+          // Silently fail if metrics not available
+        })
+      }
+      
       return result
     } catch (err) {
+      success = false
       const durationMs = Date.now() - start
       console.error(
         JSON.stringify({
@@ -227,6 +265,17 @@ function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
           timestamp: new Date().toISOString(),
         }),
       )
+      
+      // Track error metrics
+      if (process.env.NODE_ENV !== 'test') {
+        import('../utils/metrics.js').then(({ recordDbQuery }) => {
+          const operation = text.trim().split(' ')[0].toUpperCase()
+          recordDbQuery(operation, durationMs, false, isSlow)
+        }).catch(() => {
+          // Silently fail if metrics not available
+        })
+      }
+      
       throw err
     }
   }

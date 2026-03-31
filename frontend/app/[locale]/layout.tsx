@@ -15,9 +15,9 @@ import { locales, type Locale, rtlLocales } from "@/i18n";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "Sheltaflex - Rent Now, Pay Later",
+  title: "Shelterflex - Rent Now, Pay Later",
   description:
-    "The smarter way to pay your rent. Split your rent payments into affordable monthly installments.",
+    "Shelterflex - The modern way to rent. Get your rent financed upfront and pay back in flexible monthly installments.",
   generator: "v0.app",
   icons: {
     icon: [

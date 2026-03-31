@@ -178,7 +178,7 @@ export function createNgnWalletRouter(ngnWalletService: NgnWalletService): Route
       try {
         const userId = req.user!.id
         const body = req.body as NgnTopupInitiateRequest
-        const idempotencyKeyRaw = req.header('Idempotency-Key')
+        const idempotencyKeyRaw = req.header('x-idempotency-key')
         const idempotencyKey = typeof idempotencyKeyRaw === 'string' && idempotencyKeyRaw.trim() !== '' ? idempotencyKeyRaw.trim() : null
 
         if (idempotencyKey) {

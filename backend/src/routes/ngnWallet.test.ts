@@ -12,14 +12,14 @@ describe('NGN Wallet Routes', () => {
   let token: string
   let userId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     ngnWalletService = new NgnWalletService()
     
     // Seed an authenticated user session for tests
-    const user = userStore.getOrCreateByEmail('test-user@example.com')
+    const user = await userStore.getOrCreateByEmail('test-user@example.com')
     userId = user.id
     token = 'test-session-token'
-    sessionStore.create(user.email, token)
+    await sessionStore.create(user.email, token)
 
     app = express()
     app.use(express.json())
@@ -147,14 +147,14 @@ describe('NGN Wallet Routes', () => {
       const first = await request(app)
         .post('/api/wallet/ngn/topup/initiate')
         .set('Authorization', `Bearer ${token}`)
-        .set('Idempotency-Key', key)
+        .set('x-idempotency-key', key)
         .send({ amountNgn: 1500, rail: 'paystack' })
         .expect(201)
 
       const second = await request(app)
         .post('/api/wallet/ngn/topup/initiate')
         .set('Authorization', `Bearer ${token}`)
-        .set('Idempotency-Key', key)
+        .set('x-idempotency-key', key)
         .send({ amountNgn: 1500, rail: 'paystack' })
         .expect(200)
 

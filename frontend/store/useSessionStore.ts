@@ -43,7 +43,7 @@ const useSessionStore = create<SessionState>()(
           }),
       }),
       {
-        name: "sheltaflex-session-storage",
+        name: "shelterflex-session-storage",
         // sessionStorage clears on tab close — appropriate for session data
         storage: createJSONStorage(() =>
           typeof window !== "undefined" ? sessionStorage : localStorage

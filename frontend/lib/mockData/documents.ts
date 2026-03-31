@@ -25,12 +25,12 @@ export const leaseAgreement = {
       {
         title: "4. RENT PAYMENT",
         content:
-          "The annual rent is ₦2,580,000 (Two Million, Five Hundred Eighty Thousand Naira). Monthly payment through Sheltaflex is ₦215,000 due on the 1st of each month. Payment is non-refundable once processed.",
+          "The annual rent is ₦2,580,000 (Two Million, Five Hundred Eighty Thousand Naira). Monthly payment through Shelterflex is ₦215,000 due on the 1st of each month. Payment is non-refundable once processed.",
       },
       {
         title: "5. SECURITY DEPOSIT",
         content:
-          "A security deposit of ₦516,000 (20% of annual rent) has been paid. This deposit is non-refundable and serves as Sheltaflex's security measure. It is renewed annually to demonstrate tenant commitment.",
+          "A security deposit of ₦516,000 (20% of annual rent) has been paid. This deposit is non-refundable and serves as Shelterflex's security measure. It is renewed annually to demonstrate tenant commitment.",
       },
       {
         title: "6. TENANT OBLIGATIONS",
@@ -140,7 +140,7 @@ export const paymentSchedule = {
       {
         title: "PAYMENT STRUCTURE",
         content:
-          "Annual rent: ₦2,580,000 | Monthly payment: ₦215,000 | Duration: 12 months | Payment method: Sheltaflex platform",
+          "Annual rent: ₦2,580,000 | Monthly payment: ₦215,000 | Duration: 12 months | Payment method: Shelterflex platform",
       },
       {
         title: "PAYMENT SCHEDULE TABLE",
@@ -163,7 +163,7 @@ export const paymentSchedule = {
         title: "PAYMENT TERMS",
         items: [
           "Initial deposit: ₦516,000 (20% of annual rent) - Paid",
-          "Payment method: Sheltaflex platform or wallet top-up",
+          "Payment method: Shelterflex platform or wallet top-up",
           "Late payment: 5% penalty per week after due date",
           "Early settlement: Possible with no extra charges",
           "Wallet balance: Checked first before auto-deduction",

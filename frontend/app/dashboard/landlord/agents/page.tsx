@@ -63,7 +63,7 @@ export default function LandlordAgentsPageDeprecated() {
               <div>
                 <h1 className="text-3xl font-bold mb-2">Agent Management Deprecated</h1>
                 <p className="text-muted-foreground text-lg">
-                  Agent management has been removed from Sheltaflex.
+                  Agent management has been removed from Shelterflex.
                 </p>
               </div>
 

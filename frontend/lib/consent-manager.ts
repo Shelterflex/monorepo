@@ -439,7 +439,7 @@ class ConsentManager {
       ? 'Under GDPR, you have the right to access, rectify, erase, or restrict the processing of your personal data.'
       : 'Under CCPA, you have the right to know what personal information is collected and to request deletion.'
 
-    const contactInfo = 'privacy@sheltaflex.com'
+    const contactInfo = 'privacy@shelterflex.com'
 
     return { rights, description, contactInfo }
   }

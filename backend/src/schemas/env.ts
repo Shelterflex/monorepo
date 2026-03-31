@@ -44,6 +44,8 @@ export const envSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().default('http://localhost:4318/v1/traces'),
   OTEL_SAMPLING_RATIO: z.coerce.number().min(0).max(1).default(1.0),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  // Metrics (Prometheus)
+  PROMETHEUS_PORT: z.coerce.number().default(9464),
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
 }).refine((data) => {
   // Accept either field name; prefer SOROBAN_USDC_TOKEN_ID if provided

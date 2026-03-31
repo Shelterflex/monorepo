@@ -52,7 +52,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { allProperties } from "@/lib/mockData/properties";
 import { AmenitiesLegend } from "@/components/properties/AmenitiesLegend";
-
+import { showSuccessToast, showErrorToast } from "@/lib/toast";
 
 const properties = allProperties;
 
@@ -170,6 +170,16 @@ export default function PropertyDetailClient({
       setReportCategory("");
       setReportDetails("");
     }, 2000);
+  };
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      showSuccessToast("Link copied to clipboard!");
+    } catch (error) {
+      showErrorToast(error, "Failed to copy link. Please try again.");
+    }
   };
 
   return (
@@ -339,7 +349,10 @@ export default function PropertyDetailClient({
                         className={`h-4 w-4 sm:h-5 sm:w-5 ${isFavorite ? "fill-current" : ""}`}
                       />
                     </button>
-                    <button className="flex h-10 w-10 items-center justify-center border-3 border-foreground bg-background shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] sm:h-12 sm:w-12">
+                    <button
+                      onClick={handleShare}
+                      className="flex h-10 w-10 items-center justify-center border-3 border-foreground bg-background shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] sm:h-12 sm:w-12"
+                    >
                       <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
                   </div>
@@ -400,7 +413,10 @@ export default function PropertyDetailClient({
                         aria-label={`${feature} amenity`}
                       >
                         <div className="flex h-8 w-8 items-center justify-center bg-secondary border-2 border-foreground">
-                          <IconComponent className="h-4 w-4" aria-hidden="true" />
+                          <IconComponent
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
                         </div>
                         <span className="font-medium">{feature}</span>
                       </div>
@@ -473,7 +489,7 @@ export default function PropertyDetailClient({
                     <div className="flex items-center gap-2 mb-3">
                       <Calculator className="h-5 w-5 text-primary" />
                       <span className="font-mono font-bold">
-                        Pay with Sheltaflex
+                        Pay with Shelterflex
                       </span>
                     </div>
 
@@ -594,7 +610,8 @@ export default function PropertyDetailClient({
                       >
                         {property.landlord.verified ? (
                           <>
-                            <CheckCircle className="h-3 w-3" /> Verified Landlord
+                            <CheckCircle className="h-3 w-3" /> Verified
+                            Landlord
                           </>
                         ) : (
                           "Verification pending"
@@ -620,12 +637,15 @@ export default function PropertyDetailClient({
                       </span>
                     </p>
                   </div>
-                  <Link href={`/messages?contact=landlord&propertyId=${property.id}`}>
+                  <Link
+                    href={`/messages?contact=landlord&propertyId=${property.id}`}
+                  >
                     <Button
                       variant="outline"
                       className="w-full mt-4 border-3 border-foreground bg-transparent py-5 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                     >
-                      <MessageSquare className="mr-2 h-5 w-5" /> Contact Landlord
+                      <MessageSquare className="mr-2 h-5 w-5" /> Contact
+                      Landlord
                     </Button>
                   </Link>
                 </div>

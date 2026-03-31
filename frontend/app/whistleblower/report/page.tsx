@@ -240,7 +240,7 @@ export default function ReportApartmentPage() {
                 </h2>
                 <p className="text-muted-foreground mb-6">
                   Your listing has been posted. Once a tenant rents through
-                  Sheltaflex, you'll earn ₦10-20k!
+                  Shelterflex, you'll earn ₦10-20k!
                 </p>
 
                 <div className="border-3 border-foreground bg-muted p-4 mb-6 space-y-3 text-left">
