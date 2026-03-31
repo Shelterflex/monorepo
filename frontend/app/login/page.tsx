@@ -44,7 +44,7 @@ function LoginForm() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <Link href="/" className="inline-block font-mono text-3xl font-black">
-            SHELTA<span className="text-primary">FLEX</span>
+            SHELTER<span className="text-primary">FLEX</span>
           </Link>
           <p className="mt-2 text-muted-foreground">
             Choose your sign-in method

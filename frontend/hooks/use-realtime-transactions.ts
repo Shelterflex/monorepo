@@ -18,6 +18,7 @@ export interface UseRealtimeTransactionsOptions {
 }
 
 export function useRealtimeTransactions(options: UseRealtimeTransactionsOptions = {}) {
+  const { transactionIds, onStatusChange, onError } = options
   const [transactions, setTransactions] = useState<Map<string, RealtimeTransaction>>(new Map())
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
 
@@ -68,38 +69,38 @@ export function useRealtimeTransactions(options: UseRealtimeTransactionsOptions 
       }, 0)
 
       // Call the callback if provided
-      options.onStatusChange?.(transactionData)
+      onStatusChange?.(transactionData)
       
       return () => clearTimeout(timer)
     }
-  }, [lastMessage])
+  }, [lastMessage, onStatusChange])
 
   // Subscribe to specific transactions
   useEffect(() => {
-    if (!isConnected || !options.transactionIds?.length) return
+    if (!isConnected || !transactionIds?.length) return
 
     // Subscribe to transaction updates
     const timer = setTimeout(() => {
       send({
         type: 'subscribe',
         payload: {
-          transactions: options.transactionIds
+          transactions: transactionIds
         }
       })
     }, 0)
     
     return () => clearTimeout(timer)
-  }, [isConnected, options.transactionIds, send])
+  }, [isConnected, transactionIds, send])
 
   // Handle errors
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
-        options.onError?.(error)
+        onError?.(error)
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [error])
+  }, [error, onError])
 
   const getTransaction = (id: string): RealtimeTransaction | undefined => {
     return transactions.get(id)

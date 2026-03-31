@@ -42,7 +42,7 @@ export default function HomePage() {
               </h1>
 
               <p className="text-base sm:text-lg md:text-xl max-w-lg leading-relaxed text-muted-foreground">
-                Stop stressing about annual rent payments. Sheltaflex helps you
+                Stop stressing about annual rent payments. Shelterflex helps you
                 split your rent into affordable monthly installments.
               </p>
 
@@ -200,7 +200,7 @@ export default function HomePage() {
           <div className="grid gap-12 lg:grid-cols-2 items-center">
             <div>
               <span className="mb-4 inline-block border-3 border-foreground bg-secondary px-4 py-2 font-mono text-sm font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-                WHY SHELTAFLEX
+                WHY SHELTERFLEX
               </span>
               <h2 className="mb-6 font-mono text-3xl font-black md:text-5xl text-balance">
                 Renting Made <span className="text-primary">Stress-Free</span>

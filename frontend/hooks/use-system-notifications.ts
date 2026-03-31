@@ -21,6 +21,7 @@ export interface UseSystemNotificationsOptions {
 }
 
 export function useSystemNotifications(options: UseSystemNotificationsOptions = {}) {
+  const { showToast, onError } = options
   const [notifications, setNotifications] = useState<SystemNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
 
@@ -60,7 +61,7 @@ export function useSystemNotifications(options: UseSystemNotificationsOptions = 
       }, 0)
 
       // Show toast notification if enabled
-      if (options.showToast !== false) {
+      if (showToast !== false) {
         toast({
           title: notification.title,
           description: notification.message,
@@ -70,7 +71,7 @@ export function useSystemNotifications(options: UseSystemNotificationsOptions = 
       
       return () => clearTimeout(timer)
     }
-  }, [lastMessage, options.showToast])
+  }, [lastMessage, showToast])
 
   // Subscribe to system notifications
   useEffect(() => {
@@ -93,11 +94,11 @@ export function useSystemNotifications(options: UseSystemNotificationsOptions = 
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
-        options.onError?.(error)
+        onError?.(error)
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [error])
+  }, [error, onError])
 
   const markAsRead = (notificationId: string) => {
     setNotifications(prev => 

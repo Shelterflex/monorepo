@@ -22,7 +22,7 @@ export default function AgentDashboardDeprecated() {
               <div>
                 <h1 className="text-3xl font-bold mb-2">Agent Role Deprecated</h1>
                 <p className="text-muted-foreground text-lg">
-                  The agent role has been removed from Sheltaflex.
+                  The agent role has been removed from Shelterflex.
                 </p>
               </div>
 

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// Note: '.js' extension is required for ESM resolution in this project (type: "module").
+// This matches the import style used in all other backend test files.
 import { SecretRotationService } from './secretRotationService.js';
 
 // Mock the logger

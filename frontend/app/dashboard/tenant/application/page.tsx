@@ -204,10 +204,10 @@ export default function TenantApplicationPage() {
                   <strong>1. Rent Payment:</strong> You agree to pay the monthly installment on or before the due date. Late payments may result in additional fees.
                 </p>
                 <p>
-                  <strong>2. Property Terms:</strong> The lease agreement with the landlord remains between you and the landlord. Sheltaflex is financing only.
+                  <strong>2. Property Terms:</strong> The lease agreement with the landlord remains between you and the landlord. Shelterflex is financing only.
                 </p>
                 <p>
-                  <strong>3. Deposit:</strong> Your deposit serves as a security measure for Sheltaflex. It will NOT be refunded to you. The deposit is renewed annually to demonstrate your commitment to retaining the property. Minimum deposit is 20% of the yearly rent.
+                  <strong>3. Deposit:</strong> Your deposit serves as a security measure for Shelterflex. It will NOT be refunded to you. The deposit is renewed annually to demonstrate your commitment to retaining the property. Minimum deposit is 20% of the yearly rent.
                 </p>
                 <p>
                   <strong>4. Default:</strong> Failure to pay may result in legal action and affect your credit record.

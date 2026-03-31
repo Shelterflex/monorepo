@@ -43,7 +43,7 @@ export default function LandlordsPage() {
                 <span className="text-primary">Upfront.</span>
               </h1>
               <p className="text-lg text-muted-foreground md:text-xl max-w-lg leading-relaxed">
-                Stop waiting for monthly payments. Partner with Sheltaflex and
+                Stop waiting for monthly payments. Partner with Shelterflex and
                 receive your annual rent within 48 hours of tenant move-in.
               </p>
               <div className="flex flex-wrap gap-4">
@@ -298,7 +298,7 @@ export default function LandlordsPage() {
                   <Input
                     id="partner-email"
                     type="email"
-                    placeholder="you@email.com"
+                    placeholder="you@shelterflex.com"
                     className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   />
                 </div>

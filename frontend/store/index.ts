@@ -5,7 +5,7 @@ export const isBrowser = typeof window !== "undefined";
 
 // Common persistence configuration
 export const defaultPersistConfig = (name: string) => ({
-  name: `sheltaflex-${name}-storage`,
+  name: `shelterflex-${name}-storage`,
   getStorage: () => localStorage,
   version: 1,
 });

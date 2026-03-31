@@ -40,7 +40,7 @@ const useAuthStore = create<AuthState>()(
         },
       }),
       {
-        name: "sheltaflex-auth-storage",
+        name: "shelterflex-auth-storage",
         storage: createJSONStorage(() => localStorage),
         version: 1,
       }

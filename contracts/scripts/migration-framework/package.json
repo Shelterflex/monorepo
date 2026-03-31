@@ -4,7 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "tsx test-cli.ts test",
+    "benchmark": "tsx test-cli.ts benchmark",
+    "validate": "tsx test-cli.ts validate",
+    "rollback-test": "tsx test-cli.ts rollback-test",
+    "backup": "tsx test-cli.ts backup",
+    "restore": "tsx test-cli.ts restore",
+    "build": "tsc",
+    "dev": "tsx cli.ts"
   },
   "keywords": [],
   "author": "",

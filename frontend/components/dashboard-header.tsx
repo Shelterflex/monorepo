@@ -16,7 +16,7 @@ export function DashboardHeader() {
           <div className="flex h-10 w-10 items-center justify-center border-3 border-foreground bg-primary shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
             <Building2 className="h-6 w-6" />
           </div>
-          <span className="font-mono text-xl font-black">SHELTAFLEX</span>
+          <span className="font-mono text-xl font-black">SHELTERFLEX</span>
         </Link>
 
         {/* Desktop Navigation */}

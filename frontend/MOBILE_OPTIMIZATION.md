@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implemented comprehensive mobile optimizations for responsive design, touch-friendly interactions, and performance improvements across the Sheltaflex application.
+Implemented comprehensive mobile optimizations for responsive design, touch-friendly interactions, and performance improvements across the Shelterflex application.
 
 ## Key Improvements
 

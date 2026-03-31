@@ -35,7 +35,7 @@ const team = [
 ]
 
 const milestones = [
-  { year: "2021", title: "Founded", desc: "Sheltaflex was born from a simple idea: make renting easier." },
+  { year: "2021", title: "Founded", desc: "Shelterflex was born from a simple idea: make renting easier." },
   { year: "2022", title: "First 1,000 Tenants", desc: "Helped our first thousand Nigerians access housing." },
   { year: "2023", title: "Series A Funding", desc: "Raised $5M to expand across Nigeria." },
   { year: "2024", title: "10,000+ Tenants", desc: "Reached a major milestone in impact." },
@@ -75,7 +75,7 @@ export default function AboutPage() {
                   They realized millions of Nigerians face the same challenge every year. The traditional rental system was broken - landlords wanted their money upfront, but tenants could not always provide it.
                 </p>
                 <p>
-                  Sheltaflex was born to bridge this gap. We pay landlords upfront while allowing tenants to spread their payments over months. It is a win-win that is transforming how Nigerians rent homes.
+                  Shelterflex was born to bridge this gap. We pay landlords upfront while allowing tenants to spread their payments over months. It is a win-win that is transforming how Nigerians rent homes.
                 </p>
               </div>
             </div>
@@ -170,7 +170,7 @@ export default function AboutPage() {
             <span className="mb-4 inline-block border-3 border-foreground bg-accent px-4 py-2 font-mono text-sm font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
               OUR TEAM
             </span>
-            <h2 className="font-mono text-3xl font-black md:text-4xl">Meet the People Behind Sheltaflex</h2>
+            <h2 className="font-mono text-3xl font-black md:text-4xl">Meet the People Behind Shelterflex</h2>
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 max-w-4xl mx-auto">
@@ -196,7 +196,7 @@ export default function AboutPage() {
       <section className="bg-primary py-16 md:py-24">
         <div className="container mx-auto px-4 text-center">
           <h2 className="mb-6 font-mono text-3xl font-black text-primary-foreground md:text-4xl text-balance">
-            Ready to Join the Sheltaflex Family?
+            Ready to Join the Shelterflex Family?
           </h2>
           <p className="mb-8 text-lg text-primary-foreground/80 max-w-2xl mx-auto">
             Whether you are a tenant looking for flexible payments or a landlord wanting guaranteed income, we have got you covered.

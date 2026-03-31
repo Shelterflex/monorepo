@@ -52,7 +52,7 @@ const usePreferencesStore = create<PreferencesState>()(
         reset: () => set({ ...defaults, lastSyncedAt: null, isDirty: false }),
       }),
       {
-        name: "sheltaflex-preferences-storage",
+        name: "shelterflex-preferences-storage",
         storage: createJSONStorage(() => localStorage),
         version: 1,
         // Persist user-facing preferences while leaving sync metadata internal.

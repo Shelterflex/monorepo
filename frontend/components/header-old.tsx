@@ -32,7 +32,7 @@ export function Header() {
               <Home className="h-5 w-5 text-foreground" />
             </div>
             <span className="font-mono text-xl font-black tracking-tight">
-              SHELTA<span className="text-primary">FLEX</span>
+              SHELTER<span className="text-primary">FLEX</span>
             </span>
           </Link>
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This comprehensive analytics system provides privacy-focused user behavior tracking, funnel analysis, performance monitoring, and consent management for the Sheltaflex platform.
+This comprehensive analytics system provides privacy-focused user behavior tracking, funnel analysis, performance monitoring, and consent management for the Shelterflex platform.
 
 ## Features
 

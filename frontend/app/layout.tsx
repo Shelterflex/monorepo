@@ -7,10 +7,11 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { NetworkStatusBanner } from '@/components/network-status-banner'
 import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import { WebVitalsReporter } from '@/components/web-vitals-reporter'
+import { PerformanceMonitor } from '@/components/PerformanceMonitor'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Sheltaflex - Rent Now, Pay Later',
+  title: 'Shelterflex - Rent Now, Pay Later',
   description: 'The smarter way to pay your rent. Split your rent payments into affordable monthly installments.',
   icons: {
     icon: '/icon.svg',
@@ -25,11 +26,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
         <ErrorBoundary>
           <ServiceWorkerRegister />
           <WebVitalsReporter />
+          <PerformanceMonitor />
           <NetworkStatusBanner />
           <Header />
           {children}

@@ -1,6 +1,6 @@
 const VERSION = 'v1'
-const STATIC_CACHE = `sheltaflex-static-${VERSION}`
-const DATA_CACHE = `sheltaflex-data-${VERSION}`
+const STATIC_CACHE = `shelterflex-static-${VERSION}`
+const DATA_CACHE = `shelterflex-data-${VERSION}`
 const OFFLINE_URL = '/offline.html'
 const STATIC_ASSETS = ['/', '/offline.html', '/icon.svg']
 

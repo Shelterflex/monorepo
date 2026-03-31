@@ -76,7 +76,7 @@ export async function apiFetch<T>(
 
   const token =
     typeof window !== "undefined"
-      ? localStorage.getItem("sheltaflex_token")
+      ? localStorage.getItem("shelterflex_token")
       : null;
 
   const headers: HeadersInit = {

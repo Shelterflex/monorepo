@@ -343,7 +343,7 @@ export default function PropertiesPage() {
                         <span className="font-bold text-primary">
                           {formatPrice(Math.round(property.price / 12))}/mo
                         </span>{" "}
-                        with Sheltaflex
+                        with Shelterflex
                       </p>
                     </div>
                   </div>

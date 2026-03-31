@@ -152,8 +152,8 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-bold">Email</h3>
-                      <p className="text-sm text-muted-foreground">support@sheltaflex.com</p>
-                      <p className="text-sm text-muted-foreground">info@sheltaflex.com</p>
+                      <p className="text-sm text-muted-foreground">support@shelterflex.com</p>
+                      <p className="text-sm text-muted-foreground">info@shelterflex.com</p>
                     </div>
                   </div>
 

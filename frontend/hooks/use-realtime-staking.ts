@@ -26,6 +26,7 @@ export interface UseRealtimeStakingOptions {
 }
 
 export function useRealtimeStaking(options: UseRealtimeStakingOptions = {}) {
+  const { positionIds, onRewardUpdate, onPositionUpdate, onError } = options
   const [positions, setPositions] = useState<Map<string, StakingPosition>>(new Map())
   const [rewards, setRewards] = useState<Map<string, StakingRewardUpdate>>(new Map())
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
@@ -77,7 +78,7 @@ export function useRealtimeStaking(options: UseRealtimeStakingOptions = {}) {
           })
         }, 0)
 
-        options.onRewardUpdate?.(rewardData)
+        onRewardUpdate?.(rewardData)
         return () => clearTimeout(timer)
       }
 
@@ -103,38 +104,38 @@ export function useRealtimeStaking(options: UseRealtimeStakingOptions = {}) {
           })
         }, 0)
 
-        options.onPositionUpdate?.(positionData)
+        onPositionUpdate?.(positionData)
         return () => clearTimeout(timer)
       }
     }
-  }, [lastMessage])
+  }, [lastMessage, onRewardUpdate, onPositionUpdate])
 
   // Subscribe to specific positions
   useEffect(() => {
-    if (!isConnected || !options.positionIds?.length) return
+    if (!isConnected || !positionIds?.length) return
 
     const timer = setTimeout(() => {
       // Subscribe to staking updates
       send({
         type: 'subscribe',
         payload: {
-          staking: options.positionIds
+          staking: positionIds
         }
       })
     }, 0)
     
     return () => clearTimeout(timer)
-  }, [isConnected, options.positionIds, send])
+  }, [isConnected, positionIds, send])
 
   // Handle errors
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
-        options.onError?.(error)
+        onError?.(error)
       }, 0)
       return () => clearTimeout(timer)
     }
-  }, [error])
+  }, [error, onError])
 
   const getPosition = (positionId: string): StakingPosition | undefined => {
     return positions.get(positionId)

@@ -48,12 +48,12 @@ export const landlordTestimonials = [
     name: "Chief Adebayo",
     role: "Property Owner, Lagos",
     quote:
-      "Sheltaflex has transformed how I manage my rental properties. I get my money upfront and never have to chase tenants for rent again.",
+      "Shelterflex has transformed how I manage my rental properties. I get my money upfront and never have to chase tenants for rent again.",
   },
   {
     name: "Mrs. Okonkwo",
     role: "Estate Manager, Abuja",
     quote:
-      "We have partnered with Sheltaflex for our 50-unit estate and have seen occupancy rates increase significantly.",
+      "We have partnered with Shelterflex for our 50-unit estate and have seen occupancy rates increase significantly.",
   },
 ];

@@ -1,4 +1,4 @@
-const TOKEN_KEY = "sheltaflex_token";
+const TOKEN_KEY = "shelterflex_token";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
