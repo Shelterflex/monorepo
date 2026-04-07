@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { RefreshCw, AlertCircle, ExternalLink, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ interface WithdrawalHistoryProps {
   className?: string;
 }
 
-export function WithdrawalHistory({ className }: WithdrawalHistoryProps) {
+export function WithdrawalHistory({ className }: Readonly<WithdrawalHistoryProps>) {
   const [withdrawalState, setWithdrawalState] = useState<LoadState<WithdrawalResponse[]>>({
     type: "loading",
   });

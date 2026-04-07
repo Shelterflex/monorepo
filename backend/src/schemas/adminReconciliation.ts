@@ -69,7 +69,7 @@ export const conversionsResponseSchema = z.object({
 })
 
 export const outboxQuerySchema = paginationQuerySchema.extend({
-  status: z.enum(['failed', 'pending']).optional(),
+  status: z.enum(['pending', 'sent', 'failed', 'dead']).optional(),
 })
 
 export const outboxItemSchema = z.object({

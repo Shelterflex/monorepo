@@ -12,7 +12,11 @@ import { FormField } from "@/components/ui/FormField";
 import { Form } from "@/components/ui/form";
 import { signupSchema, type SignupFormValues } from "@/lib/formSchemas";
 
+import { useRouter } from "next/navigation";
+import { requestOtp } from "@/lib/authApi";
+
 export default function SignupPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [userType, setUserType] = useState<"tenant" | "landlord">("tenant");
 
@@ -26,6 +30,7 @@ export default function SignupPage() {
     },
   });
 
+<<<<<<< comprehensive_form_validation_and_user_feedback
   const {
     handleSubmit,
     register,
@@ -34,6 +39,22 @@ export default function SignupPage() {
   } = form;
 
   const passwordValue = watch("password");
+=======
+  const handleSubmit: React.ComponentProps<'form'>['onSubmit'] = async (e) => {
+    e.preventDefault();
+    
+    try {
+      // Request OTP for the email - this will create the user when verified
+      await requestOtp(formData.email);
+      
+      // Redirect to OTP verification page with the email
+      router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
+    } catch (error) {
+      console.error("Failed to request OTP:", error);
+      // You could add error handling here (show toast, etc.)
+    }
+  };
+>>>>>>> main
 
   const onSubmit = async (values: SignupFormValues) => {
     // Handle signup

@@ -6,8 +6,10 @@ export default function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
   // Content Security Policy
+  const backendUrl = "http://localhost:4000"; // Hardcoded for local development
   const cspHeader = [
     "default-src 'self'",
+    `connect-src 'self' ${backendUrl} https://horizon.stellar.org https://horizon-testnet.stellar.org`,
     "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://vercel.live",

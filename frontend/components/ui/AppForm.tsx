@@ -23,7 +23,7 @@ export function AppForm<T extends FieldValues>({
   children,
   className,
   "aria-label": ariaLabel,
-}: AppFormProps<T>) {
+}: Readonly<AppFormProps<T>>) {
   return (
     <FormProvider {...form}>
       <form

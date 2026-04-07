@@ -12,6 +12,16 @@ import { getPool } from '../db.js'
 // ---------------------------------------------------------------------------
 // Shared interface so both implementations are interchangeable
 // ---------------------------------------------------------------------------
+export interface OutboxHealthSummary {
+  pending: number
+  sent: number
+  failed: number
+  dead: number
+  total: number
+  oldestPending: string | null
+  oldestFailed: string | null
+}
+
 export interface IOutboxStore {
   create(input: CreateOutboxItemInput): Promise<OutboxItem>
   getById(id: string): Promise<OutboxItem | null>
@@ -25,6 +35,7 @@ export interface IOutboxStore {
   markDead(id: string, reason: string): Promise<OutboxItem | null>
   listByDealId(dealId: string, txType?: TxType): Promise<OutboxItem[]>
   listAll(limit?: number): Promise<OutboxItem[]>
+  getHealthSummary(): Promise<OutboxHealthSummary>
   clear(): Promise<void>
 }
 
@@ -146,6 +157,30 @@ class InMemoryOutboxStore implements IOutboxStore {
     return [...this.items.values()]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit)
+  }
+
+  async getHealthSummary(): Promise<OutboxHealthSummary> {
+    const all = [...this.items.values()]
+    const counts = { pending: 0, sent: 0, failed: 0, dead: 0 }
+    let oldestPending: Date | null = null
+    let oldestFailed: Date | null = null
+
+    for (const item of all) {
+      if (item.status in counts) counts[item.status as keyof typeof counts]++
+      if (item.status === OutboxStatus.PENDING && (!oldestPending || item.createdAt < oldestPending)) {
+        oldestPending = item.createdAt
+      }
+      if (item.status === OutboxStatus.FAILED && (!oldestFailed || item.createdAt < oldestFailed)) {
+        oldestFailed = item.createdAt
+      }
+    }
+
+    return {
+      ...counts,
+      total: all.length,
+      oldestPending: oldestPending?.toISOString() ?? null,
+      oldestFailed: oldestFailed?.toISOString() ?? null,
+    }
   }
 
   async clear() {
@@ -280,6 +315,31 @@ export class PostgresOutboxStore implements IOutboxStore {
       [limit],
     )
     return rows.map(mapRow)
+  }
+
+  async getHealthSummary(): Promise<OutboxHealthSummary> {
+    const pool = await this.pool()
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+        COUNT(*) FILTER (WHERE status = 'sent')    AS sent,
+        COUNT(*) FILTER (WHERE status = 'failed')  AS failed,
+        COUNT(*) FILTER (WHERE status = 'dead')    AS dead,
+        COUNT(*)                                    AS total,
+        MIN(created_at) FILTER (WHERE status = 'pending') AS oldest_pending,
+        MIN(created_at) FILTER (WHERE status = 'failed')  AS oldest_failed
+      FROM outbox_items
+    `)
+    const row = rows[0]
+    return {
+      pending: Number(row.pending),
+      sent: Number(row.sent),
+      failed: Number(row.failed),
+      dead: Number(row.dead),
+      total: Number(row.total),
+      oldestPending: row.oldest_pending ? new Date(row.oldest_pending).toISOString() : null,
+      oldestFailed: row.oldest_failed ? new Date(row.oldest_failed).toISOString() : null,
+    }
   }
 
   async clear(): Promise<void> {

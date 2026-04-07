@@ -183,3 +183,70 @@ describe('tx_id computation', () => {
     expect(txId1).not.toBe(txId2)
   })
 })
+
+describe('Outbox Health Summary', () => {
+  beforeEach(async () => {
+    await outboxStore.clear()
+  })
+
+  it('returns zero counts when outbox is empty', async () => {
+    const summary = await outboxStore.getHealthSummary()
+    expect(summary).toEqual({
+      pending: 0,
+      sent: 0,
+      failed: 0,
+      dead: 0,
+      total: 0,
+      oldestPending: null,
+      oldestFailed: null,
+    })
+  })
+
+  it('correctly counts items by status', async () => {
+    const item1 = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'health',
+      ref: 'h-1',
+      payload: { dealId: 'd1' },
+    })
+    const item2 = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'health',
+      ref: 'h-2',
+      payload: { dealId: 'd2' },
+    })
+    await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'health',
+      ref: 'h-3',
+      payload: { dealId: 'd3' },
+    })
+
+    // Mark item1 as sent, item2 as failed
+    await outboxStore.updateStatus(item1.id, OutboxStatus.SENT)
+    await outboxStore.updateStatus(item2.id, OutboxStatus.FAILED, { error: 'timeout' })
+
+    const summary = await outboxStore.getHealthSummary()
+    expect(summary.pending).toBe(1)
+    expect(summary.sent).toBe(1)
+    expect(summary.failed).toBe(1)
+    expect(summary.dead).toBe(0)
+    expect(summary.total).toBe(3)
+    expect(summary.oldestPending).toBeDefined()
+    expect(summary.oldestFailed).toBeDefined()
+  })
+
+  it('tracks dead-lettered items', async () => {
+    const item = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'health',
+      ref: 'h-dead',
+      payload: { dealId: 'dx' },
+    })
+    await outboxStore.markDead(item.id, 'Exhausted retries')
+
+    const summary = await outboxStore.getHealthSummary()
+    expect(summary.dead).toBe(1)
+    expect(summary.pending).toBe(0)
+  })
+})

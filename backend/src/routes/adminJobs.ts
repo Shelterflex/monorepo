@@ -48,7 +48,7 @@ export function createAdminJobsRouter() {
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         requireAdmin(req)
-        const { status, limit, offset } = req.query as z.infer<typeof listJobsQuerySchema>
+        const { status, limit, offset } = req.query as unknown as z.infer<typeof listJobsQuerySchema>
         const jobs = await getJobStore().listAll({ status, limit, offset })
         res.json({ jobs })
       } catch (err) {

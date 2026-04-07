@@ -152,7 +152,7 @@ export function sanitizeRequest(
       // Sanitize query parameters
       if (req.query && typeof req.query === 'object') {
         const originalQuery = JSON.stringify(req.query)
-        req.query = sanitizeObject(req.query, options)
+        req.query = sanitizeObject(req.query, options) as typeof req.query
         const sanitizedQuery = JSON.stringify(req.query)
 
         if (originalQuery !== sanitizedQuery) {
@@ -167,7 +167,7 @@ export function sanitizeRequest(
       // Sanitize URL parameters
       if (req.params && typeof req.params === 'object') {
         const originalParams = JSON.stringify(req.params)
-        req.params = sanitizeObject(req.params, options)
+        req.params = sanitizeObject(req.params, options) as typeof req.params
         const sanitizedParams = JSON.stringify(req.params)
 
         if (originalParams !== sanitizedParams) {

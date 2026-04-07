@@ -18,8 +18,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell
@@ -96,14 +94,14 @@ export default function AnalyticsDashboard() {
   }
 
   // Event analytics
-  const getEventStats = () => {
+  const getEventStats = (): Array<{name: string, count: number}> => {
     const eventCounts = data.events.reduce((acc, event) => {
       acc[event.event] = (acc[event.event] || 0) + 1
       return acc
     }, {} as Record<string, number>)
 
     return Object.entries(eventCounts)
-      .map(([name, count]) => ({ name, count }))
+      .map(([name, count]) => ({ name, count: Number(count) }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10)
   }
@@ -138,6 +136,16 @@ export default function AnalyticsDashboard() {
       { category: 'Functional', granted: data.consent.functional },
       { category: 'Marketing', granted: data.consent.marketing }
     ]
+  }
+
+  const getProgressColorClass = (value: number, threshold: number): string => {
+    if (value <= threshold) {
+      return 'bg-green-100'
+    } else if (value <= threshold * 1.5) {
+      return 'bg-yellow-100'
+    } else {
+      return 'bg-red-100'
+    }
   }
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
@@ -268,7 +276,7 @@ export default function AnalyticsDashboard() {
                         dataKey="granted"
                       >
                         {getConsentStats().map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Cell key={`cell-${entry.category}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
                       <Tooltip />
@@ -287,8 +295,8 @@ export default function AnalyticsDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {getEventStats().map((event, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                  {getEventStats().map((event) => (
+                    <div key={event.name} className="flex items-center justify-between p-3 border rounded-lg">
                       <div>
                         <h4 className="font-medium">{event.name}</h4>
                         <p className="text-sm text-gray-600">{event.count} occurrences</p>
@@ -303,8 +311,8 @@ export default function AnalyticsDashboard() {
 
           <TabsContent value="funnels" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {getFunnelStats().map((funnel, index) => (
-                <Card key={index}>
+              {getFunnelStats().map((funnel) => (
+                <Card key={funnel.name}>
                   <CardHeader>
                     <CardTitle>{funnel.name}</CardTitle>
                     <CardDescription>User conversion funnel</CardDescription>
@@ -335,8 +343,8 @@ export default function AnalyticsDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {getPerformanceStats().map((metric, index) => (
-                    <div key={index} className="space-y-2">
+                  {getPerformanceStats().map((metric) => (
+                    <div key={metric.name} className="space-y-2">
                       <div className="flex justify-between">
                         <span className="font-medium">{metric.name}</span>
                         <span className="text-sm">
@@ -345,13 +353,7 @@ export default function AnalyticsDashboard() {
                       </div>
                       <Progress 
                         value={Math.min((metric.value! / metric.threshold) * 100, 100)} 
-                        className={`h-2 ${
-                          metric.value! <= metric.threshold 
-                            ? 'bg-green-100' 
-                            : metric.value! <= metric.threshold * 1.5 
-                            ? 'bg-yellow-100' 
-                            : 'bg-red-100'
-                        }`} 
+                        className={`h-2 ${getProgressColorClass(metric.value, metric.threshold)}`}
                       />
                     </div>
                   ))}
@@ -369,7 +371,7 @@ export default function AnalyticsDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   {getConsentStats().map((stat, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div key={stat.category} className="flex items-center justify-between p-3 border rounded-lg">
                       <div>
                         <h4 className="font-medium">{stat.category}</h4>
                         <p className="text-sm text-gray-600">

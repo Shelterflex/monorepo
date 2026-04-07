@@ -235,6 +235,35 @@ export function createAdminRouter(
   );
 
   /**
+   * GET /api/admin/outbox/health
+   *
+   * Returns a summary of outbox health: counts by status, oldest pending/failed items.
+   * Useful for monitoring dashboards and alerting on stuck or dead-lettered events.
+   */
+  router.get(
+    "/outbox/health",
+    requireAdminSecret,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const summary = await outboxStore.getHealthSummary();
+
+        logger.info("Outbox health summary retrieved", {
+          ...summary,
+          requestId: req.requestId,
+        });
+
+        res.json({
+          status:
+            summary.dead > 0 || summary.failed > 10 ? "degraded" : "healthy",
+          summary,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
    * GET /api/admin/outbox
    *
    * List outbox items, optionally filtered by status

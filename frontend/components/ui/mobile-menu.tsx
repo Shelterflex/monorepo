@@ -12,7 +12,7 @@ interface MobileMenuProps {
   pathname: string
 }
 
-export function MobileMenu({ navLinks, pathname }: MobileMenuProps) {
+export function MobileMenu({ navLinks, pathname }: Readonly<MobileMenuProps>) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -20,7 +20,7 @@ export function MobileMenu({ navLinks, pathname }: MobileMenuProps) {
       {/* Mobile Menu Button */}
       <button
         type="button"
-        className="md:hidden p-3 border-3 border-foreground shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] bg-background min-h-[44px] min-w-[44px]"
+        className="md:hidden p-3 border-3 border-foreground shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] bg-background min-h-11 min-w-11"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-controls="mobile-menu"
@@ -31,20 +31,24 @@ export function MobileMenu({ navLinks, pathname }: MobileMenuProps) {
 
       {/* Mobile Menu Overlay */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 z-50 md:hidden"
-          onClick={() => setIsOpen(false)}
-        >
+        <div className="fixed inset-0 z-50 md:hidden">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/50" />
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setIsOpen(false)}
+          />
           
           {/* Menu Panel */}
-          <div className="absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-card border-l-3 border-foreground shadow-xl">
+          <div
+            className="absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-card border-l-3 border-foreground shadow-xl"
+          >
             <div className="flex h-16 items-center justify-between border-b-3 border-foreground px-4">
               <span className="font-mono text-lg font-bold">Menu</span>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-2 border-2 border-foreground min-h-[44px] min-w-[44px]"
+                className="p-2 border-2 border-foreground min-h-11 min-w-11"
                 aria-label="Close menu"
               >
                 <X className="h-5 w-5" />
@@ -58,7 +62,7 @@ export function MobileMenu({ navLinks, pathname }: MobileMenuProps) {
                     key={link.href}
                     href={link.href}
                     className={cn(
-                      "block py-3 px-4 text-lg font-medium transition-colors hover:text-primary min-h-[44px] flex items-center border-2 border-transparent",
+                      "py-3 px-4 text-lg font-medium transition-colors hover:text-primary min-h-11 flex items-center border-2 border-transparent",
                       pathname === link.href 
                         ? "text-primary border-primary bg-primary/10" 
                         : "text-foreground hover:border-foreground/20"
@@ -75,13 +79,13 @@ export function MobileMenu({ navLinks, pathname }: MobileMenuProps) {
                 <Link href="/login" onClick={() => setIsOpen(false)}>
                   <Button
                     variant="outline"
-                    className="w-full border-3 border-foreground font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all bg-background text-foreground min-h-[48px]"
+                    className="w-full border-3 border-foreground font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all bg-background text-foreground min-h-12"
                   >
                     Log In
                   </Button>
                 </Link>
                 <Link href="/signup" onClick={() => setIsOpen(false)}>
-                  <Button className="w-full border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all text-foreground min-h-[48px]">
+                  <Button className="w-full border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all text-foreground min-h-12">
                     Get Started
                   </Button>
                 </Link>

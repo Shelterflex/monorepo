@@ -67,7 +67,7 @@ NETWORK_PASSPHRASE=""
 
 case "$NETWORK" in
   local)
-    RPC_URL="http://localhost:8000/soroban/rpc"
+    RPC_URL="http://localhost:8000/rpc"
     NETWORK_PASSPHRASE="Standalone Network ; February 2017"
     ;;
   testnet)

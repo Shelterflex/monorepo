@@ -174,6 +174,18 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "StateSchemaVersion"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Token"
                             }
                           ]
@@ -374,5 +386,32 @@
       ]
     ]
   },
-  "events": []
+  "events": [
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "access_control"
+              },
+              {
+                "symbol": "unauthorized"
+              },
+              {
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+              }
+            ],
+            "data": {
+              "symbol": "set_lock_period"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    }
+  ]
 }

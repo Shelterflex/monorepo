@@ -16,6 +16,74 @@ describe('OutboxWorker retry/backoff', () => {
     await outboxStore.clear()
   })
 
+  it('processes pending items on first pass', async () => {
+    const item = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'manual',
+      ref: 'pending-first-1',
+      payload: {
+        dealId: 'deal-pending',
+        amountUsdc: '100.000000',
+        tokenAddress: '0x0000000000000000000000000000000000000000',
+        txType: TxType.RECEIPT,
+      },
+    })
+
+    const sender = { send: vi.fn().mockResolvedValue(true) } as any
+    const worker = new OutboxWorker(sender)
+
+    await worker.process()
+
+    expect(sender.send).toHaveBeenCalledTimes(1)
+    expect(sender.send).toHaveBeenCalledWith(expect.objectContaining({ id: item.id }))
+  })
+
+  it('processes multiple pending items in creation order', async () => {
+    const item1 = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'manual',
+      ref: 'pending-order-1',
+      payload: { dealId: 'deal-1', amountUsdc: '10', tokenAddress: '0x00', txType: TxType.RECEIPT },
+    })
+    const item2 = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'manual',
+      ref: 'pending-order-2',
+      payload: { dealId: 'deal-2', amountUsdc: '20', tokenAddress: '0x00', txType: TxType.RECEIPT },
+    })
+
+    const sentIds: string[] = []
+    const sender = {
+      send: vi.fn().mockImplementation((item: any) => {
+        sentIds.push(item.id)
+        return Promise.resolve(true)
+      }),
+    } as any
+    const worker = new OutboxWorker(sender)
+
+    await worker.process()
+
+    expect(sender.send).toHaveBeenCalledTimes(2)
+    expect(sentIds).toEqual([item1.id, item2.id])
+  })
+
+  it('does not re-process sent items', async () => {
+    const item = await outboxStore.create({
+      txType: TxType.RECEIPT,
+      source: 'manual',
+      ref: 'already-sent-1',
+      payload: { dealId: 'deal-1', amountUsdc: '10', tokenAddress: '0x00', txType: TxType.RECEIPT },
+    })
+    await outboxStore.updateStatus(item.id, OutboxStatus.SENT)
+
+    const sender = { send: vi.fn().mockResolvedValue(true) } as any
+    const worker = new OutboxWorker(sender)
+
+    await worker.process()
+
+    expect(sender.send).not.toHaveBeenCalled()
+  })
+
   it('retries transient failures after backoff time is reached', async () => {
     const item = await outboxStore.create({
       txType: TxType.RECEIPT,

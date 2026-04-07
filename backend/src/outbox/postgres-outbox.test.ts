@@ -136,6 +136,49 @@ describe('PostgresOutboxStore', () => {
     expect(sql).toContain('ORDER BY created_at DESC LIMIT')
     expect(params).toContain(50)
   })
+
+  it('getHealthSummary: returns aggregated counts', async () => {
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        pending: '3',
+        sent: '10',
+        failed: '2',
+        dead: '1',
+        total: '16',
+        oldest_pending: '2026-01-01T00:00:00.000Z',
+        oldest_failed: '2026-01-02T00:00:00.000Z',
+      }],
+    })
+
+    const summary = await repo.getHealthSummary()
+    expect(summary).toEqual({
+      pending: 3,
+      sent: 10,
+      failed: 2,
+      dead: 1,
+      total: 16,
+      oldestPending: '2026-01-01T00:00:00.000Z',
+      oldestFailed: '2026-01-02T00:00:00.000Z',
+    })
+  })
+
+  it('getHealthSummary: returns null dates when no pending/failed', async () => {
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        pending: '0',
+        sent: '5',
+        failed: '0',
+        dead: '0',
+        total: '5',
+        oldest_pending: null,
+        oldest_failed: null,
+      }],
+    })
+
+    const summary = await repo.getHealthSummary()
+    expect(summary.oldestPending).toBeNull()
+    expect(summary.oldestFailed).toBeNull()
+  })
 })
 
 describe('outboxStore proxy + initOutboxStore', () => {
@@ -158,6 +201,7 @@ describe('outboxStore proxy + initOutboxStore', () => {
       getById: vi.fn(), getByExternalRef: vi.fn(),
       listByStatus: vi.fn(), updateStatus: vi.fn(),
       listByDealId: vi.fn(), listAll: vi.fn(), clear: vi.fn(),
+      markDead: vi.fn(), getHealthSummary: vi.fn(),
     }
     initOutboxStore(fakeStore as never)
 

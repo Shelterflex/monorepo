@@ -123,7 +123,8 @@ export function decrypt(envelope: EncryptedKeyEnvelope, masterKey: string): Buff
     const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
     return decrypted
   } catch (error) {
-    throw new Error('Decryption failed: authentication tag verification failed')
+    const cause = error instanceof Error ? error : undefined
+    throw new Error('Decryption failed: authentication tag verification failed', { cause })
   }
 }
 
@@ -163,7 +164,7 @@ export function getActiveMasterKey(env: {
   CUSTODIAL_WALLET_MASTER_KEY_V2?: string
   CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION?: string | number
 }): string {
-  const activeVersion = parseInt(String(env.CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION ?? '1'), 10)
+  const activeVersion = Number.parseInt(String(env.CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION ?? '1'), 10)
   
   const keyVar = activeVersion === 2 
     ? 'CUSTODIAL_WALLET_MASTER_KEY_V2' 

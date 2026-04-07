@@ -55,7 +55,7 @@ export function NgnStakingFlow({
   initialQuote,
   onComplete,
   onCancel,
-}: NgnStakingFlowProps) {
+}: Readonly<NgnStakingFlowProps>) {
   // Initialize state
   const [state, setState] = useState<NgnStakingFlowState>({
     stage: 'quote_display',

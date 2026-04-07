@@ -97,6 +97,18 @@
                         "val": {
                           "bool": true
                         }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "StateSchemaVersion"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1
+                        }
                       }
                     ]
                   }

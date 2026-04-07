@@ -9,6 +9,8 @@ use soroban_sdk::{
 };
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
+pub mod access_control;
+pub mod validation;
 
 #[contracttype]
 #[derive(Clone)]
@@ -41,6 +43,7 @@ pub enum ContractError {
     Paused = 3,
     InvalidAmount = 4,
     InsufficientBalance = 5,
+    EmptyString = 10,
     // Cross-contract communication errors (#390)
     /// Reentrancy detected
     ReentrancyDetected = 6,
@@ -104,15 +107,6 @@ fn put_deal_balance(env: &Env, deal_id: &String, amount: i128) {
     env.storage()
         .persistent()
         .set(&DataKey::DealBalance(deal_id.clone()), &amount);
-}
-
-fn require_admin_or_operator(env: &Env, caller: &Address) -> Result<(), ContractError> {
-    let admin = get_admin(env);
-    let operator = get_operator(env);
-    if caller != &admin && caller != &operator {
-        return Err(ContractError::NotAuthorized);
-    }
-    Ok(())
 }
 
 /// Reentrancy guard (#390)
@@ -204,9 +198,8 @@ impl DealEscrow {
         amount: i128,
     ) -> Result<(), ContractError> {
         require_not_paused(&env)?;
-        if amount <= 0 {
-            return Err(ContractError::InvalidAmount);
-        }
+        validation::require_valid_amount(amount)?;
+        validation::require_non_empty_string(&env, &deal_id)?;
         from.require_auth();
         let token_addr = get_token(&env);
         let token_client = TokenClient::new(&env, &token_addr);
@@ -239,8 +232,13 @@ impl DealEscrow {
         external_ref: String,
     ) -> Result<i128, ContractError> {
         require_not_paused(&env)?;
-        caller.require_auth();
-        require_admin_or_operator(&env, &caller)?;
+        validation::require_non_empty_string(&env, &deal_id)?;
+        validation::require_non_empty_string(&env, &external_ref)?;
+        let admin = get_admin(&env);
+        let operator = get_operator(&env);
+        access_control::require_admin_or_operator_permission(
+            &env, &admin, &operator, &caller, "release",
+        )?;
 
         // #386: per-key persistent storage
         let cur = get_deal_balance(&env, &deal_id);
@@ -277,13 +275,12 @@ impl DealEscrow {
 #[contractimpl]
 impl Pausable for DealEscrow {
     fn pause(env: Env, _admin: Address) -> Result<(), PausableError> {
-        _admin.require_auth();
         let stored: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
             .expect("admin not set");
-        if _admin != stored {
+        if access_control::require_admin_permission(&env, &stored, &_admin, "pause").is_err() {
             return Err(PausableError::NotAuthorized);
         }
         env.storage().instance().set(&DataKey::Paused, &true);
@@ -295,13 +292,12 @@ impl Pausable for DealEscrow {
     }
 
     fn unpause(env: Env, _admin: Address) -> Result<(), PausableError> {
-        _admin.require_auth();
         let stored: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
             .expect("admin not set");
-        if _admin != stored {
+        if access_control::require_admin_permission(&env, &stored, &_admin, "unpause").is_err() {
             return Err(PausableError::NotAuthorized);
         }
         env.storage().instance().set(&DataKey::Paused, &false);
@@ -324,10 +320,8 @@ impl Pausable for DealEscrow {
 #[contractimpl]
 impl DealEscrow {
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
-        admin.require_auth();
-        if admin != get_admin(&env) {
-            return Err(ContractError::NotAuthorized);
-        }
+        let current_admin = get_admin(&env);
+        access_control::require_admin_permission(&env, &current_admin, &admin, "set_guardian")?;
         env.storage().instance().set(&DataKey::Guardian, &guardian);
         env.events().publish(
             (
@@ -344,10 +338,13 @@ impl DealEscrow {
         admin: Address,
         delay_seconds: u64,
     ) -> Result<(), ContractError> {
-        admin.require_auth();
-        if admin != get_admin(&env) {
-            return Err(ContractError::NotAuthorized);
-        }
+        let current_admin = get_admin(&env);
+        access_control::require_admin_permission(
+            &env,
+            &current_admin,
+            &admin,
+            "set_upgrade_delay",
+        )?;
         env.storage()
             .instance()
             .set(&DataKey::UpgradeDelay, &delay_seconds);
@@ -366,10 +363,8 @@ impl DealEscrow {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
-        admin.require_auth();
-        if admin != get_admin(&env) {
-            return Err(ContractError::NotAuthorized);
-        }
+        let current_admin = get_admin(&env);
+        access_control::require_admin_permission(&env, &current_admin, &admin, "propose_upgrade")?;
         if env.storage().instance().has(&DataKey::PendingUpgradeHash) {
             return Err(ContractError::UpgradeAlreadyPending);
         }
@@ -395,10 +390,8 @@ impl DealEscrow {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
-        admin.require_auth();
-        if admin != get_admin(&env) {
-            return Err(ContractError::NotAuthorized);
-        }
+        let current_admin = get_admin(&env);
+        access_control::require_admin_permission(&env, &current_admin, &admin, "execute_upgrade")?;
         let pending: BytesN<32> = env
             .storage()
             .instance()
@@ -447,10 +440,13 @@ impl DealEscrow {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
-        admin.require_auth();
-        if admin != get_admin(&env) {
-            return Err(ContractError::NotAuthorized);
-        }
+        let current_admin = get_admin(&env);
+        access_control::require_admin_permission(
+            &env,
+            &current_admin,
+            &admin,
+            "emergency_upgrade",
+        )?;
         if let Some(guardian) = env
             .storage()
             .instance()
@@ -474,10 +470,8 @@ impl DealEscrow {
     }
 
     pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
-        admin.require_auth();
-        if admin != get_admin(&env) {
-            return Err(ContractError::NotAuthorized);
-        }
+        let current_admin = get_admin(&env);
+        access_control::require_admin_permission(&env, &current_admin, &admin, "cancel_upgrade")?;
         let hash: BytesN<32> = env
             .storage()
             .instance()

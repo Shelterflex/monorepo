@@ -49,15 +49,16 @@ export interface WalletVerifyResponse {
   };
 }
 
+// Cache bust: 2026-04-02-10-31
 export async function requestOtp(email: string): Promise<LoginResponse> {
-  return apiPost<LoginResponse>("/auth/request-otp", { email });
+  return apiPost<LoginResponse>("/api/auth/request-otp", { email });
 }
 
 export async function verifyOtp(
   email: string,
   otp: string
 ): Promise<VerifyOtpResponse> {
-  const res = await apiPost<VerifyOtpResponse>("/auth/verify-otp", {
+  const res = await apiPost<VerifyOtpResponse>("/api/auth/verify-otp", {
     email,
     otp,
   });
@@ -66,14 +67,14 @@ export async function verifyOtp(
 }
 
 export async function requestWalletChallenge(address: string): Promise<WalletChallengeResponse> {
-  return apiPost<WalletChallengeResponse>("/auth/wallet/challenge", { address });
+  return apiPost<WalletChallengeResponse>("/api/auth/wallet/challenge", { address });
 }
 
 export async function verifyWalletSignature(
   address: string,
   signedChallengeXdr: string
 ): Promise<WalletVerifyResponse> {
-  const res = await apiPost<WalletVerifyResponse>("/auth/wallet/verify", {
+  const res = await apiPost<WalletVerifyResponse>("/api/auth/wallet/verify", {
     address,
     signedChallengeXdr,
   });

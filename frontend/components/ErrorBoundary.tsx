@@ -35,20 +35,20 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error, eventId: null }
   }
 
-  async componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('ErrorBoundary caught an error:', error, errorInfo)
     }
 
-    const eventId = await reportClientError({
+    reportClientError({
       error,
-      componentStack: errorInfo.componentStack,
+      componentStack: errorInfo.componentStack || undefined,
       level: this.props.level ?? 'page',
+    }).then(eventId => {
+      if (eventId) {
+        this.setState({ eventId })
+      }
     })
-
-    if (eventId) {
-      this.setState({ eventId })
-    }
   }
 
   handleReset = () => {
@@ -70,7 +70,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div
         className={`flex items-center justify-center p-4 ${
-          isSection ? 'min-h-[16rem]' : 'min-h-screen'
+          isSection ? 'min-h-64' : 'min-h-screen'
         }`}
       >
         <Card className="w-full max-w-md">
@@ -103,11 +103,11 @@ export class ErrorBoundary extends Component<Props, State> {
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Try again
               </Button>
-              {!isSection ? (
-                <Button onClick={() => window.location.reload()} variant="outline">
+              {isSection ? null : (
+                <Button onClick={() => globalThis.location.reload()} variant="outline">
                   Reload page
                 </Button>
-              ) : null}
+              )}
             </div>
           </CardContent>
         </Card>

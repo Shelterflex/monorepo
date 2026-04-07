@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 export default function GlobalError({
   error,
   reset,
-}: {
+}: Readonly<{
   error: Error & { digest?: string }
   reset: () => void
-}) {
+}>) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">

@@ -10,7 +10,7 @@
  * - Request correlation IDs
  */
 
-import { ApiError, apiFetch } from "./api";
+import { apiFetch } from "./api";
 import { retryWithBackoff, type RetryOptions } from "./retryLogic";
 
 export { ApiError, isAccountFrozenError, ACCOUNT_FROZEN_MESSAGE } from "./api";

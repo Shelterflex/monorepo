@@ -9,6 +9,43 @@ import {
 } from "react-hook-form";
 import { cn } from "@/lib/utils";
 
+ function getErrorMessage(error: unknown): string {
+   const rawMessage = (error as { message?: unknown } | null | undefined)?.message;
+
+   if (typeof rawMessage === "string") return rawMessage;
+   if (rawMessage == null) return "Invalid value";
+
+   if (typeof rawMessage === "number" || typeof rawMessage === "boolean") {
+     return String(rawMessage);
+   }
+
+   if (Array.isArray(rawMessage)) {
+     const firstString = rawMessage.find((v) => typeof v === "string");
+     if (typeof firstString === "string") return firstString;
+
+     try {
+       const json = JSON.stringify(rawMessage);
+       return json ?? "Invalid value";
+     } catch {
+       return "Invalid value";
+     }
+   }
+
+   if (typeof rawMessage === "object") {
+     const nested = (rawMessage as { message?: unknown } | null)?.message;
+     if (typeof nested === "string") return nested;
+
+     try {
+       const json = JSON.stringify(rawMessage);
+       return json ?? "Invalid value";
+     } catch {
+       return "Invalid value";
+     }
+   }
+
+   return "Invalid value";
+ }
+
 interface FormFieldProps<T extends FieldValues> {
   name: Path<T>;
   label: string;
@@ -36,7 +73,7 @@ export function FormField<T extends FieldValues>({
   disabled,
   className,
   children,
-}: FormFieldProps<T>) {
+}: Readonly<FormFieldProps<T>>) {
   const {
     register,
     formState: { errors },
@@ -96,7 +133,7 @@ export function FormField<T extends FieldValues>({
           role="alert"
           className="text-xs font-medium text-destructive"
         >
-          {String(error.message ?? "Invalid value")}
+          {getErrorMessage(error)}
         </p>
       )}
     </div>

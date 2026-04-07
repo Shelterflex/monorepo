@@ -306,6 +306,96 @@ export default function StakingPage() {
 
   const deficit = ngnBalance ? Math.max(0, -ngnBalance.totalNgn) : 0;
 
+  let ngnBalanceTabContent: React.ReactNode;
+  if (isFrozen) {
+    ngnBalanceTabContent = (
+      <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4">
+        <p className="font-semibold text-destructive">{ACCOUNT_FROZEN_MESSAGE}</p>
+        <p className="mt-1 text-sm text-destructive">
+          Top up NGN wallet to repay deficit
+        </p>
+        <Button asChild className="mt-3 border-2 border-foreground bg-primary font-bold">
+          <Link href="/wallet">Go to wallet</Link>
+        </Button>
+      </div>
+    );
+  } else if (isLoadingBalance) {
+    ngnBalanceTabContent = (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  } else if (ngnBalance) {
+    ngnBalanceTabContent = (
+      <>
+        <div className="rounded-md border-2 border-foreground/20 bg-muted p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Available NGN Balance</span>
+            <span className="font-mono font-bold">{formatNgn(ngnBalance.availableNgn)}</span>
+          </div>
+          {ngnBalance.heldNgn > 0 && (
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-sm text-muted-foreground">Held (Pending)</span>
+              <span className="font-mono text-sm">{formatNgn(ngnBalance.heldNgn)}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="stake-ngn-amount">Amount (NGN)</Label>
+          <Input
+            id="stake-ngn-amount"
+            type="number"
+            placeholder="Enter amount in NGN"
+            value={stakeAmount}
+            onChange={handleStakeInput}
+            min={100}
+            max={ngnBalance.availableNgn}
+            className="border-2 border-foreground"
+            disabled={isStaking}
+          />
+          <p className="text-xs text-muted-foreground">
+            Min: ₦100 · Max: {formatNgn(ngnBalance.availableNgn)}
+          </p>
+        </div>
+
+        {status && (
+          <div
+            className={`flex items-start gap-2 rounded-md border p-3 text-sm ${status.includes("Failed") || status.includes("Insufficient")
+              ? "border-destructive/20 bg-destructive/10 text-destructive"
+              : "border-blue-200 bg-blue-50 text-blue-800"
+              }`}
+          >
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{status}</span>
+          </div>
+        )}
+
+        <Button
+          onClick={handleStake}
+          disabled={isStaking || !stakeAmount || Number(stakeAmount) <= 0}
+          className="w-full border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-50"
+        >
+          {isStaking ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            "Stake from NGN Balance"
+          )}
+        </Button>
+      </>
+    );
+  } else {
+    ngnBalanceTabContent = (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+        <p className="text-sm text-muted-foreground">Failed to load NGN balance</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 relative ">
       <div className="mb-6">
@@ -446,84 +536,7 @@ export default function StakingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isFrozen ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4">
-                  <p className="font-semibold text-destructive">{ACCOUNT_FROZEN_MESSAGE}</p>
-                  <p className="mt-1 text-sm text-destructive">
-                    Top up NGN wallet to repay deficit
-                  </p>
-                  <Button asChild className="mt-3 border-2 border-foreground bg-primary font-bold">
-                    <Link href="/wallet">Go to wallet</Link>
-                  </Button>
-                </div>
-              ) : isLoadingBalance ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              ) : ngnBalance ? (
-                <>
-                  <div className="rounded-md border-2 border-foreground/20 bg-muted p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Available NGN Balance</span>
-                      <span className="font-mono font-bold">{formatNgn(ngnBalance.availableNgn)}</span>
-                    </div>
-                    {ngnBalance.heldNgn > 0 && (
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-sm text-muted-foreground">Held (Pending)</span>
-                        <span className="font-mono text-sm">{formatNgn(ngnBalance.heldNgn)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="stake-ngn-amount">Amount (NGN)</Label>
-                    <Input
-                      id="stake-ngn-amount"
-                      type="number"
-                      placeholder="Enter amount in NGN"
-                      value={stakeAmount}
-                      onChange={handleStakeInput}
-                      min={100}
-                      max={ngnBalance.availableNgn}
-                      className="border-2 border-foreground"
-                      disabled={isStaking}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Min: ₦100 · Max: {formatNgn(ngnBalance.availableNgn)}
-                    </p>
-                  </div>
-
-                  {status && (
-                    <div className={`flex items-start gap-2 rounded-md border p-3 text-sm ${status.includes("Failed") || status.includes("Insufficient")
-                      ? "border-destructive/20 bg-destructive/10 text-destructive"
-                      : "border-blue-200 bg-blue-50 text-blue-800"
-                      }`}>
-                      <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                      <span>{status}</span>
-                    </div>
-                  )}
-
-                  <Button
-                    onClick={handleStake}
-                    disabled={isStaking || !stakeAmount || Number(stakeAmount) <= 0}
-                    className="w-full border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-50"
-                  >
-                    {isStaking ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      "Stake from NGN Balance"
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">Failed to load NGN balance</p>
-                </div>
-              )}
+              {ngnBalanceTabContent}
             </CardContent>
           </Card>
         </TabsContent>

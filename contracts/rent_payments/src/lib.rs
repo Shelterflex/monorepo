@@ -65,6 +65,7 @@ pub enum ContractError {
     AlreadyInitialized = 1,
     InvalidAmount = 2,
     InvalidLimit = 3,
+    Paused = 4,
 }
 
 #[contract]
@@ -90,10 +91,11 @@ fn require_admin(env: &Env) -> Result<(), ContractError> {
     Ok(())
 }
 
-fn require_not_paused(env: &Env) {
+fn require_not_paused(env: &Env) -> Result<(), ContractError> {
     if is_paused(env) {
-        panic!("contract is paused");
+        return Err(ContractError::Paused);
     }
+    Ok(())
 }
 
 fn get_receipts(env: &Env, deal_id: DealId) -> Vec<Receipt> {
@@ -206,7 +208,7 @@ impl RentPayments {
         payer: Address,
     ) -> Result<Receipt, ContractError> {
         let _ = require_admin(&env)?;
-        require_not_paused(&env);
+        require_not_paused(&env)?;
 
         if amount <= 0 {
             return Err(ContractError::InvalidAmount);
@@ -1091,7 +1093,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "contract is paused")]
     fn test_pause() {
         let env = Env::default();
         let (admin, client, contract_id) = setup(&env);
@@ -1111,7 +1112,7 @@ mod test {
 
         assert!(client.is_paused());
 
-        // Try to create a receipt while paused (should panic)
+        // Try to create a receipt while paused
         env.mock_auths(&[MockAuth {
             address: &admin,
             invoke: &MockAuthInvoke {
@@ -1121,7 +1122,12 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        client.create_receipt(&1u64, &1000, &payer);
+
+        let err = client
+            .try_create_receipt(&1u64, &1000i128, &payer)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::Paused);
     }
 
     // ============================================================================

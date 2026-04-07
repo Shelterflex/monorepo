@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { z } from 'zod'
 
 const sorobanNetworkEnum = z.enum(['local', 'testnet', 'mainnet'])

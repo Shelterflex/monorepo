@@ -9,6 +9,7 @@ members = [
   "mvp_staking_pool",
   "whistleblower_rewards",
   "soroban_pausable",
+  "soroban_access_control",
   "deal_escrow",
   "contract_access",
   "timelock",

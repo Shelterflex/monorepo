@@ -52,7 +52,7 @@ export function ErrorDisplay({
   error,
   onRetry,
   onContactSupport,
-}: ErrorDisplayProps) {
+}: Readonly<ErrorDisplayProps>) {
   const displayMessage = error.message || getErrorMessage(error.type, error.transactionId);
   const showRetryButton = error.canRetry && onRetry;
   const showSupportButton = onContactSupport;

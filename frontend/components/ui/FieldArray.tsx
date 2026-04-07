@@ -32,7 +32,7 @@ export function FieldArrayField<T extends FieldValues>({
   addLabel = "Add item",
   maxItems,
   className,
-}: FieldArrayProps<T>) {
+}: Readonly<FieldArrayProps<T>>) {
   const { control } = useFormContext<T>();
   const { fields, append, remove } = useFieldArray({ control, name });
 
@@ -43,9 +43,13 @@ export function FieldArrayField<T extends FieldValues>({
       <legend className="text-sm font-medium text-foreground">{label}</legend>
 
       {fields.map((field, index) => (
-        <div key={field.id} role="group" aria-label={`${label} item ${index + 1}`}>
+        <fieldset
+          key={field.id}
+          className="border-0 p-0 m-0 min-w-0"
+        >
+          <legend className="sr-only">{`${label} item ${index + 1}`}</legend>
           {renderItem(index, () => remove(index))}
-        </div>
+        </fieldset>
       ))}
 
       {canAdd && (

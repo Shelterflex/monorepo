@@ -7,7 +7,7 @@
 //!
 //! ## Roles
 //! | Role     | Typical capabilities                                       |
-//! |----------|------------------------------------------------------------|
+//! |----------|---------------------------------------------------------------|
 //! | Admin    | Full access, role management, pause/unpause                |
 //! | Operator | Execute business operations (transfer, stake, …)          |
 //! | User     | Self-service operations (own balance, own stake, …)       |
@@ -17,6 +17,15 @@
 //! Critical operations (role assignment / revocation, contract upgrade) are
 //! guarded by `require_multisig`: both the *current admin* and a *second
 //! approver* stored under `DataKey::SecondApprover` must authorise the call.
+//!
+//! ## Delegation
+//! An address may delegate a specific permission to another address via
+//! `delegate_permission`.  The delegated permission does **not** grant the
+//! delegatee a role — it only allows them to pass `require_permission` checks
+//! for that one permission.  Delegations can be revoked at any time by the
+//! original admin.
+//!
+//! ## Closes: #383
 
 #![no_std]
 
@@ -75,6 +84,10 @@ pub enum Permission {
     // ── Audit / read ──────────────────────────────────────────────────
     ReadBalance = 12,
     ReadAuditLog = 13,
+
+    // ── Delegation ────────────────────────────────────────────────────
+    /// Delegate a permission to another address
+    DelegatePermission = 14,
 }
 
 /// Storage keys for the access-control module.
@@ -89,6 +102,8 @@ pub enum DataKey {
     Roles,
     /// pending multi-sig proposals: (proposer, Permission) → bool
     Proposals,
+    /// delegation map: delegatee Address → delegated Permission (as u32)
+    Delegations,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,6 +124,8 @@ pub enum AccessError {
     CannotRevokeLastAdmin = 4,
     /// Second approver not configured for multi-sig operations
     NoSecondApprover = 5,
+    /// No delegation found to revoke
+    NoDelegationFound = 6,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,6 +179,7 @@ fn permission_matrix(role: Role) -> &'static [Permission] {
             Permission::SetLockPeriod,
             Permission::ReadBalance,
             Permission::ReadAuditLog,
+            Permission::DelegatePermission,
         ],
         Role::Operator => &[
             Permission::CreditFunds,
@@ -183,6 +201,16 @@ fn permission_matrix(role: Role) -> &'static [Permission] {
 
 fn role_has_permission(role: Role, perm: Permission) -> bool {
     permission_matrix(role).contains(&perm)
+}
+
+/// Check if an address has a delegated permission.
+fn has_delegation(env: &Env, delegatee: &Address, perm: Permission) -> bool {
+    let delegations: Map<Address, u32> = env
+        .storage()
+        .instance()
+        .get(&DataKey::Delegations)
+        .unwrap_or_else(|| Map::new(env));
+    delegations.get(delegatee.clone()) == Some(perm as u32)
 }
 
 /// Emit an audit event for every permission change.
@@ -365,9 +393,73 @@ impl AccessControl {
         Ok(())
     }
 
+    // ── Delegation ───────────────────────────────────────────────────────────
+
+    /// Delegate a specific `permission` to `delegatee`.  Only admin can do
+    /// this.  Delegation is stored separately from roles and grants only the
+    /// specified permission (not a full role).
+    pub fn delegate_permission(
+        env: Env,
+        admin: Address,
+        delegatee: Address,
+        permission: Permission,
+    ) -> Result<(), AccessError> {
+        admin.require_auth();
+        let current_admin = get_admin(&env);
+        if admin != current_admin {
+            return Err(AccessError::Unauthorized);
+        }
+
+        let mut delegations: Map<Address, u32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Delegations)
+            .unwrap_or_else(|| Map::new(&env));
+
+        delegations.set(delegatee.clone(), permission as u32);
+        env.storage()
+            .instance()
+            .set(&DataKey::Delegations, &delegations);
+
+        emit_audit(&env, "delegate_perm", &delegatee, permission as u32);
+        Ok(())
+    }
+
+    /// Revoke a previously granted delegation from `delegatee`.
+    pub fn revoke_delegation(
+        env: Env,
+        admin: Address,
+        delegatee: Address,
+    ) -> Result<(), AccessError> {
+        admin.require_auth();
+        let current_admin = get_admin(&env);
+        if admin != current_admin {
+            return Err(AccessError::Unauthorized);
+        }
+
+        let mut delegations: Map<Address, u32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Delegations)
+            .unwrap_or_else(|| Map::new(&env));
+
+        if delegations.get(delegatee.clone()).is_none() {
+            return Err(AccessError::NoDelegationFound);
+        }
+
+        delegations.remove(delegatee.clone());
+        env.storage()
+            .instance()
+            .set(&DataKey::Delegations, &delegations);
+
+        emit_audit(&env, "revoke_delegation", &delegatee, 0);
+        Ok(())
+    }
+
     // ── Permission check ─────────────────────────────────────────────────────
 
-    /// Returns `Ok(())` if `caller` holds a role that includes `permission`,
+    /// Returns `Ok(())` if `caller` holds a role that includes `permission`
+    /// OR has been explicitly delegated that permission,
     /// otherwise `Err(AccessError::Unauthorized)`.
     ///
     /// Call this from any contract function that needs access control:
@@ -399,14 +491,46 @@ impl AccessControl {
         roles_map(&env).get(addr)
     }
 
-    /// Returns `true` if `addr` has `permission`.
+    /// Returns `true` if `addr` has `permission` (via role or delegation).
     pub fn has_permission(env: Env, addr: Address, permission: Permission) -> bool {
         let roles = roles_map(&env);
-        if let Some(role) = roles.get(addr) {
-            role_has_permission(role, permission)
-        } else {
-            false
+        if let Some(role) = roles.get(addr.clone()) {
+            if role_has_permission(role, permission) {
+                return true;
+            }
         }
+        has_delegation(&env, &addr, permission)
+    }
+
+    /// Returns the delegated permission for `addr`, if any.
+    pub fn get_delegation(env: Env, addr: Address) -> Option<Permission> {
+        let delegations: Map<Address, u32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Delegations)
+            .unwrap_or_else(|| Map::new(&env));
+
+        let perm_u32 = delegations.get(addr)?;
+
+        let perm = match perm_u32 {
+            0 => Permission::Initialize,
+            1 => Permission::PauseContract,
+            2 => Permission::UpgradeContract,
+            3 => Permission::AssignRole,
+            4 => Permission::RevokeRole,
+            5 => Permission::TransferAdmin,
+            6 => Permission::CreditFunds,
+            7 => Permission::DebitFunds,
+            8 => Permission::TransferFunds,
+            9 => Permission::Stake,
+            10 => Permission::Unstake,
+            11 => Permission::SetLockPeriod,
+            12 => Permission::ReadBalance,
+            13 => Permission::ReadAuditLog,
+            _ => Permission::DelegatePermission,
+        };
+
+        Some(perm)
     }
 
     /// Returns all addresses with assigned roles as (Address, Role) pairs.
@@ -671,5 +795,119 @@ mod tests {
         let (addr, role) = roles.get(0).unwrap();
         assert_eq!(addr, admin);
         assert_eq!(role, Role::Admin);
+    }
+
+    // ── delegation ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn delegate_permission_grants_access() {
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+        let delegatee = Address::generate(&env);
+
+        // Delegate CreditFunds to delegatee
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (admin.clone(), delegatee.clone(), Permission::CreditFunds).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_delegate_permission(&admin, &delegatee, &Permission::CreditFunds)
+            .unwrap()
+            .unwrap();
+
+        // delegatee has no role
+        assert_eq!(client.get_role(&delegatee), None);
+        // but has the delegated permission
+        assert!(client.has_permission(&delegatee, &Permission::CreditFunds));
+        // and not others
+        assert!(!client.has_permission(&delegatee, &Permission::Stake));
+        // get_delegation returns the right permission
+        assert_eq!(
+            client.get_delegation(&delegatee),
+            Some(Permission::CreditFunds)
+        );
+    }
+
+    #[test]
+    fn revoke_delegation_removes_access() {
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+        let delegatee = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (admin.clone(), delegatee.clone(), Permission::ReadBalance).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_delegate_permission(&admin, &delegatee, &Permission::ReadBalance)
+            .unwrap()
+            .unwrap();
+        assert!(client.has_permission(&delegatee, &Permission::ReadBalance));
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "revoke_delegation",
+                args: (admin.clone(), delegatee.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_revoke_delegation(&admin, &delegatee)
+            .unwrap()
+            .unwrap();
+
+        assert!(!client.has_permission(&delegatee, &Permission::ReadBalance));
+        assert_eq!(client.get_delegation(&delegatee), None);
+    }
+
+    #[test]
+    fn revoke_delegation_fails_if_none_exists() {
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+        let nobody = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "revoke_delegation",
+                args: (admin.clone(), nobody.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_revoke_delegation(&admin, &nobody);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::NoDelegationFound);
+    }
+
+    #[test]
+    fn non_admin_cannot_delegate() {
+        let env = Env::default();
+        let (contract_id, _admin, _approver, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        let target = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &stranger,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (stranger.clone(), target.clone(), Permission::ReadBalance).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_delegate_permission(&stranger, &target, &Permission::ReadBalance);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
     }
 }

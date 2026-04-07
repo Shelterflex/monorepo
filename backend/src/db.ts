@@ -243,7 +243,7 @@ function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
       
       // Track metrics (lazy import to avoid circular dependencies)
       if (process.env.NODE_ENV !== 'test') {
-        import('../utils/metrics.js').then(({ recordDbQuery }) => {
+        import('./utils/metrics.js').then(({ recordDbQuery }) => {
           const operation = text.trim().split(' ')[0].toUpperCase()
           recordDbQuery(operation, durationMs, true, isSlow)
         }).catch(() => {
@@ -268,7 +268,7 @@ function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
       
       // Track error metrics
       if (process.env.NODE_ENV !== 'test') {
-        import('../utils/metrics.js').then(({ recordDbQuery }) => {
+        import('./utils/metrics.js').then(({ recordDbQuery }) => {
           const operation = text.trim().split(' ')[0].toUpperCase()
           recordDbQuery(operation, durationMs, false, isSlow)
         }).catch(() => {

@@ -1,11 +1,15 @@
 import { Redis } from 'ioredis'
+import { EventEmitter } from 'node:events'
 import { env } from '../schemas/env.js'
 
 let redis: Redis | null = null
 
 // Simple mock for environments without Redis (e.g. CI/Tests)
-class MockRedis {
-    private storage = new Map<string, string>()
+class MockRedis extends EventEmitter {
+    private readonly storage = new Map<string, string>()
+    constructor() {
+        super()
+    }
     async get(key: string) { return this.storage.get(key) || null }
     async set(key: string, value: string, mode?: string, duration?: number) {
         this.storage.set(key, value)
@@ -14,10 +18,9 @@ class MockRedis {
     async del(key: string) { return this.storage.delete(key) ? 1 : 0 }
     async quit() { return 'OK' }
     async keys(pattern: string) {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$')
+        const regex = new RegExp('^' + pattern.replaceAll('*', '.*') + '$')
         return Array.from(this.storage.keys()).filter(k => regex.test(k))
     }
-    on() { } // Noop for events
 }
 
 export function getRedisClient(): Redis {

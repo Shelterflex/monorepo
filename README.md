@@ -16,7 +16,7 @@ This repository is organized as **three independent projects**:
 
 New contributors can run **just one** component without setting up the others.
 
-### Option A: Frontend Only
+## Option A: Frontend Only
 
 **Prerequisites:** Node.js 20+
 

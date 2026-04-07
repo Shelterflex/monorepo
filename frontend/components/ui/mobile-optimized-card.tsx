@@ -16,7 +16,7 @@ export function MobileOptimizedCard({
   title,
   className,
   ...props 
-}: MobileOptimizedCardProps) {
+}: Readonly<MobileOptimizedCardProps>) {
   const { isMobile } = useMobileOptimized()
 
   return (

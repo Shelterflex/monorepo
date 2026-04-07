@@ -40,7 +40,7 @@ export function ExampleStakingQueued() {
 // Example 4: Confirmed (with maturity date)
 export function ExampleConfirmedWithMaturity() {
   const position: StakingPosition = {
-    amount: 1000.50,
+    amount: 1000.5,
     startDate: "2024-01-15T10:30:00Z",
     expectedYield: 12.5,
     maturityDate: "2025-01-15T10:30:00Z",
@@ -101,12 +101,7 @@ export function IntegrationExample() {
   const stakingPosition: StakingPosition | undefined = undefined;
 
   // Only render StatusTracker when in appropriate stages
-  if (
-    flowStage === "deposit_pending" ||
-    flowStage === "conversion_pending" ||
-    flowStage === "staking_queued" ||
-    flowStage === "confirmed"
-  ) {
+  if (flowStage === "status_tracking") {
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Transaction Status</h2>

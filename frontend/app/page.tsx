@@ -48,7 +48,7 @@ export default function HomePage() {
 
               <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                 <Link href="/properties">
-                  <Button className="border-3 border-foreground bg-primary px-6 py-4 sm:px-8 sm:py-6 text-base sm:text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] min-h-[48px] w-full sm:w-auto">
+                  <Button className="border-3 border-foreground bg-primary px-6 py-4 sm:px-8 sm:py-6 text-base sm:text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] min-h-12 w-full sm:w-auto">
                     Find a Home
                     <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
@@ -56,7 +56,7 @@ export default function HomePage() {
                 <Link href="/calculator">
                   <Button
                     variant="outline"
-                    className="border-3 border-foreground bg-background px-6 py-4 sm:px-8 sm:py-6 text-base sm:text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] min-h-[48px] w-full sm:w-auto"
+                    className="border-3 border-foreground bg-background px-6 py-4 sm:px-8 sm:py-6 text-base sm:text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] min-h-12 w-full sm:w-auto"
                   >
                     Calculate Payments
                   </Button>

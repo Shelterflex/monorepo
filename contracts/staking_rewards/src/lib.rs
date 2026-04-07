@@ -28,6 +28,7 @@ pub enum ContractError {
     AlreadyInitialized = 1,
     NotAuthorized = 2,
     Paused = 3,
+    InvalidAmount = 7,
     // Upgrade governance errors (#392)
     UpgradeAlreadyPending = 4,
     NoUpgradePending = 5,
@@ -200,6 +201,10 @@ impl StakingRewards {
         Self::require_not_paused(&env)?;
         user.require_auth();
 
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+
         let mut user_stake = Self::get_user_stake(&env, &user);
         let reward_index = Self::get_reward_index(&env);
 
@@ -227,6 +232,10 @@ impl StakingRewards {
     pub fn unstake(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
         Self::require_not_paused(&env)?;
         user.require_auth();
+
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
 
         let mut user_stake = Self::get_user_stake(&env, &user);
 
@@ -258,6 +267,10 @@ impl StakingRewards {
         Self::require_not_paused(&env)?;
         Self::require_operator(&env)?;
 
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+
         let total = Self::get_total_staked(&env);
         if total == 0 {
             return Ok(());
@@ -281,6 +294,10 @@ impl StakingRewards {
     pub fn distribute_rewards(env: Env, amount: i128) -> Result<(), ContractError> {
         Self::require_not_paused(&env)?;
         Self::require_admin(&env)?;
+
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
 
         let total = Self::get_total_staked(&env);
         if total == 0 {

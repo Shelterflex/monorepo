@@ -5,12 +5,11 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 
-function ItemGroup({ className, ...props }: React.ComponentProps<'div'>) {
+function ItemGroup({ className, ...props }: React.ComponentProps<'ul'>) {
   return (
-    <div
-      role="list"
+    <ul
       data-slot="item-group"
-      className={cn('group/item-group flex flex-col', className)}
+      className={cn('group/item-group flex flex-col list-none p-0 m-0', className)}
       {...props}
     />
   )
@@ -21,12 +20,14 @@ function ItemSeparator({
   ...props
 }: React.ComponentProps<typeof Separator>) {
   return (
-    <Separator
-      data-slot="item-separator"
-      orientation="horizontal"
-      className={cn('my-0', className)}
-      {...props}
-    />
+    <li className="list-none">
+      <Separator
+        data-slot="item-separator"
+        orientation="horizontal"
+        className={cn('my-0', className)}
+        {...props}
+      />
+    </li>
   )
 }
 
@@ -61,13 +62,15 @@ function Item({
   VariantProps<typeof itemVariants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : 'div'
   return (
-    <Comp
-      data-slot="item"
-      data-variant={variant}
-      data-size={size}
-      className={cn(itemVariants({ variant, size, className }))}
-      {...props}
-    />
+    <li className="list-none">
+      <Comp
+        data-slot="item"
+        data-variant={variant}
+        data-size={size}
+        className={cn(itemVariants({ variant, size, className }))}
+        {...props}
+      />
+    </li>
   )
 }
 

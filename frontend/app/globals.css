@@ -93,8 +93,8 @@
 }
 
 @theme inline {
-  --font-sans: 'DM Sans', 'DM Shelterflex Fallback', sans-serif;
-  --font-mono: 'Space Grotesk', 'Space Grotesk Fallback', sans-serif;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -139,6 +139,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
     /* Prevent zoom on input focus in iOS */
     -webkit-text-size-adjust: 100%;
     /* Prevent pull-to-refresh in Chrome */

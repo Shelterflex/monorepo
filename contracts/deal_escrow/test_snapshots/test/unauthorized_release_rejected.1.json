@@ -786,5 +786,32 @@
       ]
     ]
   },
-  "events": []
+  "events": [
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "access_control"
+              },
+              {
+                "symbol": "unauthorized"
+              },
+              {
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+              }
+            ],
+            "data": {
+              "symbol": "release"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    }
+  ]
 }

@@ -14,16 +14,12 @@ type State =
   | { type: "success"; data: HealthResponse };
 
 export default function BackendHealth() {
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "Not configured";
-  const [state, setState] = useState<State>(() => {
-    if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
-      return { type: "error", message: "NEXT_PUBLIC_BACKEND_URL environment variable is not configured" };
-    }
-    return { type: "loading" };
-  });
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+  const [state, setState] = useState<State>({ type: "loading" });
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
+    const url = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+    if (!url) {
       return;
     }
 
