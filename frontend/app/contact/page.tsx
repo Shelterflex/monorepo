@@ -6,26 +6,34 @@ import { ArrowLeft, Send, Mail, Phone, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
+import { useAppForm } from '@/hooks/useAppForm'
+import { FormField } from '@/components/ui/FormField'
+import { Form } from '@/components/ui/form'
+import { contactSchema, type ContactFormValues } from '@/lib/formSchemas'
 
 export default function ContactPage() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    subject: '',
-    message: '',
-  })
   const [submitted, setSubmitted] = useState(false)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+  const form = useAppForm<ContactFormValues>({
+    schema: contactSchema,
+    defaultValues: {
+      name: '',
+      email: '',
+      phone: '',
+      subject: '',
+      message: '',
+    },
+  })
 
-  const handleSubmit: React.ComponentProps<'form'>['onSubmit'] = (e) => {
-    e.preventDefault()
+  const {
+    handleSubmit,
+    register,
+    reset,
+  } = form
+
+  const onSubmit = async () => {
     setSubmitted(true)
-    setFormData({ name: '', email: '', phone: '', subject: '', message: '' })
+    reset()
     setTimeout(() => setSubmitted(false), 5000)
   }
 
@@ -59,75 +67,57 @@ export default function ContactPage() {
                   </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-                  <div>
-                    <label htmlFor="contact-name" className="mb-2 block text-sm font-bold">Name</label>
-                    <Input
-                      id="contact-name"
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      placeholder="Your name"
-                      required
-                      className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-                    />
-                  </div>
+                <Form {...form}>
+                  <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 md:space-y-6" noValidate>
+                    <FormField name="name" label="Name">
+                      <Input
+                        id="contact-name"
+                        type="text"
+                        placeholder="Your name"
+                        className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                        {...register("name")}
+                      />
+                    </FormField>
 
-                  <div>
-                    <label htmlFor="contact-email" className="mb-2 block text-sm font-bold">Email</label>
-                    <Input
-                      id="contact-email"
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      placeholder="your@email.com"
-                      required
-                      className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-                    />
-                  </div>
+                    <FormField name="email" label="Email">
+                      <Input
+                        id="contact-email"
+                        type="email"
+                        placeholder="your@email.com"
+                        className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                        {...register("email")}
+                      />
+                    </FormField>
 
-                  <div>
-                    <label htmlFor="contact-phone" className="mb-2 block text-sm font-bold">Phone (Optional)</label>
-                    <Input
-                      id="contact-phone"
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="+234 (0) 123 456 7890"
-                      className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-                    />
-                  </div>
+                    <FormField name="phone" label="Phone (Optional)">
+                      <Input
+                        id="contact-phone"
+                        type="tel"
+                        placeholder="+234 (0) 123 456 7890"
+                        className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                        {...register("phone")}
+                      />
+                    </FormField>
 
-                  <div>
-                    <label htmlFor="contact-subject" className="mb-2 block text-sm font-bold">Subject</label>
-                    <Input
-                      id="contact-subject"
-                      type="text"
-                      name="subject"
-                      value={formData.subject}
-                      onChange={handleChange}
-                      placeholder="What is this about?"
-                      required
-                      className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-                    />
-                  </div>
+                    <FormField name="subject" label="Subject">
+                      <Input
+                        id="contact-subject"
+                        type="text"
+                        placeholder="What is this about?"
+                        className="border-3 border-foreground py-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                        {...register("subject")}
+                      />
+                    </FormField>
 
-                  <div>
-                    <label htmlFor="contact-message" className="mb-2 block text-sm font-bold">Message</label>
+                  <FormField name="message" label="Message">
                     <textarea
                       id="contact-message"
-                      name="message"
-                      value={formData.message}
-                      onChange={handleChange}
                       placeholder="Tell us more..."
-                      required
                       rows={5}
                       className="w-full border-3 border-foreground p-3 font-mono text-sm shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                      {...register("message")}
                     />
-                  </div>
+                  </FormField>
 
                   <Button
                     type="submit"
@@ -137,6 +127,7 @@ export default function ContactPage() {
                     Send Message
                   </Button>
                 </form>
+              </Form>
               </Card>
             </div>
 

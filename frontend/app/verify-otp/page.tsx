@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { verifyOtp } from "@/lib/authApi";
 import { handleAuthRedirect } from "@/lib/auth";
+import { useAppForm } from "@/hooks/useAppForm";
+import { FormField } from "@/components/ui/FormField";
+import { Form } from "@/components/ui/form";
+import { otpSchema, type OtpFormValues } from "@/lib/formSchemas";
 
 function VerifyOtpForm() {
   const router = useRouter();
@@ -15,23 +19,28 @@ function VerifyOtpForm() {
   const email = searchParams.get("email") ?? "";
   const returnTo = searchParams.get("returnTo");
 
-  const [otp, setOtp] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
-    e.preventDefault();
+  const form = useAppForm<OtpFormValues>({
+    schema: otpSchema,
+    defaultValues: { otp: "" },
+  });
+
+  const {
+    handleSubmit,
+    register,
+    formState: { isSubmitting },
+  } = form;
+
+  const onSubmit = async (values: OtpFormValues) => {
     setError(null);
-    setLoading(true);
 
     try {
-      const res = await verifyOtp(email, otp);
-      
-      // Use handleAuthRedirect to handle returnTo or default to role-based dashboard
+      const res = await verifyOtp(email, values.otp);
+
       if (returnTo) {
         handleAuthRedirect(returnTo);
       } else {
-        // Fallback to role-based dashboard routing
         const roleRoutes: Record<string, string> = {
           tenant: "/dashboard/tenant",
           landlord: "/dashboard/landlord",
@@ -41,8 +50,6 @@ function VerifyOtpForm() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid OTP");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -67,41 +74,35 @@ function VerifyOtpForm() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label
-                htmlFor="otp"
-                className="mb-2 block font-mono text-sm font-bold"
-              >
-                One-Time Password
-              </label>
-              <Input
-                id="otp"
-                type="text"
-                inputMode="numeric"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="123456"
-                className="border-3 border-foreground py-6 text-center text-2xl tracking-[0.5em] shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-                required
-                disabled={loading}
-                maxLength={6}
-              />
-            </div>
+          <Form {...form}>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+              <FormField name="otp" label="One-Time Password">
+                <Input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="123456"
+                  className="border-3 border-foreground py-6 text-center text-2xl tracking-[0.5em] shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                  disabled={isSubmitting}
+                  maxLength={6}
+                  {...register("otp")}
+                />
+              </FormField>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-60"
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                <ArrowRight className="ml-2 h-5 w-5" />
-              )}
-              {loading ? "Verifying..." : "Verify & Sign In"}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-60"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                )}
+                {isSubmitting ? "Verifying..." : "Verify & Sign In"}
+              </Button>
+            </form>
+          </Form>
 
           <div className="mt-6 text-center">
             <p className="text-muted-foreground text-sm">

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAppForm } from "@/hooks/useAppForm";
+import { FormField } from "@/components/ui/FormField";
+import { Form } from "@/components/ui/form";
+import { partnerSchema, type PartnerFormValues } from "@/lib/formSchemas";
 import {
   landlordBenefits,
   landlordStats,
@@ -28,6 +32,32 @@ const iconMap: Record<string, ReactNode> = {
 };
 
 export default function LandlordsPage() {
+  const [submitted, setSubmitted] = useState(false);
+
+  const form = useAppForm<PartnerFormValues>({
+    schema: partnerSchema,
+    defaultValues: {
+      fullName: "",
+      phone: "",
+      email: "",
+      propertyCount: 1,
+      propertyLocations: "",
+    },
+  });
+
+  const {
+    handleSubmit,
+    register,
+    reset,
+    formState: { isSubmitting },
+  } = form;
+
+  const onSubmit = async () => {
+    setSubmitted(true);
+    reset();
+    setTimeout(() => setSubmitted(false), 5000);
+  };
+
   return (
     <main className="min-h-screen bg-background">
       {/* Hero Section */}
@@ -267,72 +297,80 @@ export default function LandlordsPage() {
               </p>
             </div>
 
-            <form className="border-3 border-foreground bg-background p-8 shadow-[8px_8px_0px_0px_rgba(26,26,26,1)]">
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <p className="mb-2 block font-mono text-sm font-bold">
-                    Full Name
-                  </p>
-                  <Input
-                    id="partner-full-name"
-                    type="text"
-                    placeholder="Enter your name"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 block font-mono text-sm font-bold">
-                    Phone Number
-                  </p>
-                  <Input
-                    id="partner-phone-number"
-                    type="tel"
-                    placeholder="08X XXX XXXX"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 block font-mono text-sm font-bold">
-                    Email Address
-                  </p>
-                  <Input
-                    id="partner-email"
-                    type="email"
-                    placeholder="you@shelterflex.com"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 block font-mono text-sm font-bold">
-                    Number of Properties
-                  </p>
-                  <Input
-                    id="partner-property-count"
-                    type="number"
-                    placeholder="e.g. 5"
-                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                  />
-                </div>
-              </div>
-              <div className="mt-6">
-                <p className="mb-2 block font-mono text-sm font-bold">
-                  Property Location(s)
-                </p>
-                <Input
-                  id="partner-property-locations"
-                  type="text"
-                  placeholder="e.g. Lekki, Lagos"
-                  className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="mt-8 w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+            <Form {...form}>
+              <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="border-3 border-foreground bg-background p-8 shadow-[8px_8px_0px_0px_rgba(26,26,26,1)]"
+                noValidate
               >
-                Submit Application
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </form>
+                {submitted && (
+                  <div className="mb-6 rounded-lg border-2 border-secondary bg-secondary/10 p-4 text-sm text-secondary">
+                    Thank you for applying. Our landlord success team will contact you within 24 hours.
+                  </div>
+                )}
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <FormField name="fullName" label="Full Name">
+                    <Input
+                      id="partner-full-name"
+                      type="text"
+                      placeholder="Enter your name"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      {...register("fullName")}
+                    />
+                  </FormField>
+
+                  <FormField name="phone" label="Phone Number">
+                    <Input
+                      id="partner-phone-number"
+                      type="tel"
+                      placeholder="08X XXX XXXX"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      {...register("phone")}
+                    />
+                  </FormField>
+
+                  <FormField name="email" label="Email Address">
+                    <Input
+                      id="partner-email"
+                      type="email"
+                      placeholder="you@email.com"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      {...register("email")}
+                    />
+                  </FormField>
+
+                  <FormField name="propertyCount" label="Number of Properties">
+                    <Input
+                      id="partner-property-count"
+                      type="number"
+                      placeholder="e.g. 5"
+                      className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      {...register("propertyCount")}
+                    />
+                  </FormField>
+                </div>
+
+                <FormField name="propertyLocations" label="Property Location(s)">
+                  <Input
+                    id="partner-property-locations"
+                    type="text"
+                    placeholder="e.g. Lekki, Lagos"
+                    className="border-3 border-foreground py-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                    {...register("propertyLocations")}
+                  />
+                </FormField>
+
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="mt-8 w-full border-3 border-foreground bg-primary px-8 py-6 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] disabled:opacity-60"
+                >
+                  Submit Application
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </form>
+            </Form>
           </div>
         </div>
       </section>
