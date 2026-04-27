@@ -5,6 +5,39 @@
 
 import { apiGet, apiPost } from "./apiClient";
 
+// ── Tenant Onboarding Types ────────────────────────────────────────────────
+
+export interface TenantOnboardingData {
+  identity: {
+    fullName: string;
+    occupation: string;
+    email: string;
+    phone: string;
+    address: string;
+  };
+  kyc: {
+    documentType: string;
+    documentUrl?: string;
+    status: "pending" | "verified" | "rejected";
+  };
+  wallet: {
+    address: string;
+    connected: boolean;
+  };
+  notifications: {
+    paymentReminders: boolean;
+    paymentConfirmations: boolean;
+    leaseUpdates: boolean;
+    messages: boolean;
+  };
+  currentStep: number;
+}
+
+export interface OnboardingResponse {
+  success: boolean;
+  data: TenantOnboardingData;
+}
+
 // ── Tenant Application Types ────────────────────────────────────────────────
 
 export interface TenantApplication {
@@ -248,4 +281,22 @@ export async function initiateWalletTopUp(
     "/api/tenant/payments/wallet/topup",
     data,
   );
+}
+
+// ── Onboarding API Functions ───────────────────────────────────────────────
+
+export async function getOnboardingProgress(): Promise<OnboardingResponse> {
+  return apiGet<OnboardingResponse>("/api/tenant/onboarding");
+}
+
+export async function saveOnboardingProgress(
+  data: Partial<TenantOnboardingData>,
+): Promise<OnboardingResponse> {
+  return apiPost<OnboardingResponse>("/api/tenant/onboarding/save", data);
+}
+
+export async function submitOnboarding(
+  data: TenantOnboardingData,
+): Promise<OnboardingResponse> {
+  return apiPost<OnboardingResponse>("/api/tenant/onboarding/submit", data);
 }
