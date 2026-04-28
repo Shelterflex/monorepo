@@ -3,15 +3,10 @@
 import { useState } from "react"
 import Link from "next/link"
 import {
-  Home,
-  Building2,
-  CreditCard,
-  MessageSquare,
-  Settings,
   User,
   Bell,
   Shield,
-  FileText,
+  CreditCard,
   Mail,
   Phone,
   MapPin,
@@ -26,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { DashboardHeader } from "@/components/dashboard-header"
+import { TenantSidebar } from "@/components/tenant/TenantSidebar"
 
 export default function TenantSettingsPage() {
   const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "security" | "payment">("profile")
@@ -41,65 +37,7 @@ export default function TenantSettingsPage() {
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
-
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r-3 border-foreground bg-card pt-20">
-        <div className="flex h-full flex-col px-4 py-6">
-          <div className="mb-8 border-3 border-foreground bg-secondary p-4 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-            <p className="text-sm font-medium text-foreground">Logged in as</p>
-            <p className="text-lg font-bold text-foreground">Ngozi Adekunle</p>
-            <p className="text-sm text-muted-foreground">Tenant</p>
-          </div>
-
-          <nav className="flex-1 space-y-2">
-            <Link
-              href="/dashboard/tenant"
-              className="flex items-center gap-3 border-3 border-foreground bg-card p-3 font-bold transition-all hover:bg-muted hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-            >
-              <Home className="h-5 w-5" />
-              Dashboard
-            </Link>
-            <Link
-              href="/dashboard/tenant/payments"
-              className="flex items-center gap-3 border-3 border-foreground bg-card p-3 font-bold transition-all hover:bg-muted hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-            >
-              <CreditCard className="h-5 w-5" />
-              Payments
-            </Link>
-            <Link
-              href="/dashboard/tenant/lease"
-              className="flex items-center gap-3 border-3 border-foreground bg-card p-3 font-bold transition-all hover:bg-muted hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-            >
-              <FileText className="h-5 w-5" />
-              My Lease
-            </Link>
-            <Link
-              href="/properties"
-              className="flex items-center gap-3 border-3 border-foreground bg-card p-3 font-bold transition-all hover:bg-muted hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-            >
-              <Building2 className="h-5 w-5" />
-              Browse Properties
-            </Link>
-            <Link
-              href="/messages"
-              className="flex items-center gap-3 border-3 border-foreground bg-card p-3 font-bold transition-all hover:bg-muted hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-            >
-              <MessageSquare className="h-5 w-5" />
-              Messages
-              <span className="ml-auto flex h-6 w-6 items-center justify-center border-2 border-foreground bg-destructive text-xs font-bold text-destructive-foreground">
-                2
-              </span>
-            </Link>
-            <Link
-              href="/dashboard/tenant/settings"
-              className="flex items-center gap-3 border-3 border-foreground bg-primary p-3 font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-            >
-              <Settings className="h-5 w-5" />
-              Settings
-            </Link>
-          </nav>
-        </div>
-      </aside>
+      <TenantSidebar />
 
       {/* Main Content */}
       <main className="ml-64 min-h-screen pt-20">

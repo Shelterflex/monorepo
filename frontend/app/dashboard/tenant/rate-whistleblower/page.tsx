@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { tenantWhistleblowersToRate as whistleblowers } from "@/lib/mockData";
 
+import { DashboardHeader } from "@/components/dashboard-header";
+import { TenantSidebar } from "@/components/tenant/TenantSidebar";
+import { tenantWhistleblowersToRate as whistleblowers } from "@/lib/mockData";
+
 export default function RateWhistleblowerPage() {
   const [step, setStep] = useState<"select" | "rate" | "confirmation">(
     "select",
@@ -30,15 +34,18 @@ export default function RateWhistleblowerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pt-20">
-      <div className="container mx-auto px-4 py-8">
-        <Link
-          href="/dashboard/tenant"
-          className="inline-flex items-center gap-2 mb-8 text-sm font-bold border-b-2 border-foreground hover:text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
-        </Link>
+    <div className="min-h-screen bg-background">
+      <DashboardHeader />
+      <TenantSidebar />
+      <main className="lg:ml-64 min-h-screen pt-20">
+        <div className="container mx-auto px-4 py-8">
+          <Link
+            href="/dashboard/tenant"
+            className="inline-flex items-center gap-2 mb-8 text-sm font-bold border-b-2 border-foreground hover:text-primary"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
 
         <div className="max-w-2xl mx-auto">
           {/* Step 1: Select Whistleblower */}
@@ -281,6 +288,7 @@ export default function RateWhistleblowerPage() {
           )}
         </div>
       </div>
+      </main>
     </div>
   );
 }
