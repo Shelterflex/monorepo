@@ -175,7 +175,6 @@ export default function TenantPaymentsPage() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
       <TenantSidebar />
->
 
       {/* Main Content */}
       <main className="ml-64 min-h-screen pt-20">

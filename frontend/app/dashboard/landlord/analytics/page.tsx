@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   BarChart3, 
   Calendar as CalendarIcon, 
@@ -46,24 +46,20 @@ export default function LandlordAnalyticsPage() {
     to: new Date(),
   });
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, [selectedProperty, dateRange]);
-
-  const fetchInitialData = async () => {
+  const fetchInitialData = useCallback(async () => {
     try {
       const props = await landlordApi.getProperties();
       setProperties(props);
     } catch (err) {
       console.error("Failed to fetch properties", err);
     }
-  };
+  }, []);
 
-  const fetchAnalytics = async () => {
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -82,7 +78,11 @@ export default function LandlordAnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedProperty, dateRange]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const mockAnalytics = () => {
     setAnalytics({

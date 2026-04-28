@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, Upload, CheckCircle, Loader2, X, AlertCircle  } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -72,7 +73,7 @@ export default function ReportApartmentPage() {
         URL.revokeObjectURL(photo.url);
       });
     };
-  }, []);
+  }, [formData.photos]);
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -286,12 +287,13 @@ export default function ReportApartmentPage() {
                         {formData.photos.map((photo) => (
                           <div
                             key={photo.id}
-                            className="relative group border-3 border-foreground overflow-hidden"
+                            className="relative group border-3 border-foreground overflow-hidden h-24"
                           >
-                            <img
+                            <Image
                               src={photo.url}
                               alt="Preview"
-                              className="w-full h-24 object-cover"
+                              fill
+                              className="object-cover"
                             />
                             <button
                               type="button"
