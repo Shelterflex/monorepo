@@ -39,15 +39,28 @@ import { WithdrawalHistory } from "@/components/wallet/WithdrawalHistory";
 import {
   getNgnBalance,
   getNgnLedger,
+  getMultiCurrencyBalance,
+  getConversionQuote,
   type NgnBalanceResponse,
   type WalletLedgerEntry,
   type WalletLedgerType,
+  type Currency,
+  type CurrencyBalance,
+  type ConversionQuoteRequest,
+  type ConversionQuoteResponse,
 } from "@/lib/walletApi";
 import { useRiskState } from "@/hooks/useRiskState";
 import FrozenAccountBanner from "@/components/FrozenAccountBanner";
 
 // Constants
 const PAGE_SIZE = 10;
+
+// Currency configuration
+const CURRENCIES: { code: Currency; name: string; symbol: string; color: string }[] = [
+  { code: "NGN", name: "Nigerian Naira", symbol: "₦", color: "text-green-600" },
+  { code: "USDC", name: "USD Coin", symbol: "$", color: "text-blue-600" },
+  { code: "REWARDS", name: "Rewards", symbol: "★", color: "text-purple-600" },
+] as const;
 
 // Transaction type filter configuration
 const FILTER_GROUPS = [
@@ -77,6 +90,13 @@ const FILTER_GROUPS = [
     types: ["reward"],
   },
 ] as const;
+
+// Currency filter configuration
+const CURRENCY_FILTERS = CURRENCIES.map((c) => ({
+  id: c.code,
+  label: c.name,
+  symbol: c.symbol,
+}));
 
 type FilterGroupId = (typeof FILTER_GROUPS)[number]["id"];
 
@@ -152,6 +172,11 @@ function WalletPageContent() {
     return filterParam ? filterParam.split(",").filter(Boolean) : [];
   }, [searchParams]);
 
+  const activeCurrencyFilter = useMemo(() => {
+    const currencyParam = searchParams.get("currency");
+    return currencyParam as Currency | null;
+  }, [searchParams]);
+
   const setFilters = useCallback(
     (filters: string[]) => {
       const params = new URLSearchParams(searchParams);
@@ -165,8 +190,24 @@ function WalletPageContent() {
     [searchParams, pathname, router]
   );
 
+  const setCurrencyFilter = useCallback(
+    (currency: Currency | null) => {
+      const params = new URLSearchParams(searchParams);
+      if (currency) {
+        params.set("currency", currency);
+      } else {
+        params.delete("currency");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, pathname, router]
+  );
+
   // State
   const [balanceState, setBalanceState] = useState<LoadState<NgnBalanceResponse>>({
+    type: "loading",
+  });
+  const [multiCurrencyBalanceState, setMultiCurrencyBalanceState] = useState<LoadState<CurrencyBalance[]>>({
     type: "loading",
   });
   const [ledgerState, setLedgerState] = useState<LoadState<LedgerData>>({
@@ -174,6 +215,12 @@ function WalletPageContent() {
   });
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
   const [withdrawalModalOpen, setWithdrawalModalOpen] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>("NGN");
+  const [conversionAmount, setConversionAmount] = useState("");
+  const [conversionQuote, setConversionQuote] = useState<LoadState<ConversionQuoteResponse>>({
+    type: "loading",
+  });
+  const [showConversionPreview, setShowConversionPreview] = useState(false);
 
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -236,8 +283,9 @@ function WalletPageContent() {
 
     async function fetchData() {
       try {
-        const [balance, ledger] = await Promise.all([
+        const [balance, multiCurrencyBalance, ledger] = await Promise.all([
           getNgnBalance(),
+          getMultiCurrencyBalance(),
           getNgnLedger({
             limit: PAGE_SIZE,
             type: selectedTypes.length > 0 ? selectedTypes : undefined,
@@ -246,6 +294,7 @@ function WalletPageContent() {
 
         if (!cancelled) {
           setBalanceState({ type: "success", data: balance });
+          setMultiCurrencyBalanceState({ type: "success", data: multiCurrencyBalance.balances });
           setLedgerState({
             type: "success",
             data: {
@@ -260,6 +309,7 @@ function WalletPageContent() {
           handleError(err, "Failed to load wallet data");
           const message = err instanceof Error ? err.message : "Something went wrong";
           setBalanceState({ type: "error", message });
+          setMultiCurrencyBalanceState({ type: "error", message });
           setLedgerState({ type: "error", message });
         }
       }
@@ -272,7 +322,47 @@ function WalletPageContent() {
     };
 
 
-  }, [selectedTypes]);
+  }, [selectedTypes, activeCurrencyFilter, reloadNonce]);
+
+  // Conversion quote fetch
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchQuote() {
+      const amount = parseFloat(conversionAmount);
+      if (!amount || amount <= 0) {
+        setConversionQuote({ type: "loading" });
+        setShowConversionPreview(false);
+        return;
+      }
+
+      setConversionQuote({ type: "loading" });
+      try {
+        const quote = await getConversionQuote({
+          fromCurrency: selectedCurrency,
+          toCurrency: selectedCurrency === "NGN" ? "USDC" : "NGN",
+          amount,
+        });
+
+        if (!cancelled) {
+          setConversionQuote({ type: "success", data: quote });
+          setShowConversionPreview(true);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : "Failed to get quote";
+          setConversionQuote({ type: "error", message });
+          setShowConversionPreview(false);
+        }
+      }
+    }
+
+    const debounceTimer = setTimeout(fetchQuote, 500);
+    return () => {
+      clearTimeout(debounceTimer);
+      cancelled = true;
+    };
+  }, [conversionAmount, selectedCurrency]);
 
   // Load more entries
   const loadMore = useCallback(async () => {
@@ -436,75 +526,139 @@ function WalletPageContent() {
         )}
 
         <section className="grid gap-4 md:grid-cols-3">
-          <Card className="border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-            <CardHeader className="pb-2">
-              <CardDescription>Available</CardDescription>
-              <CardTitle className="font-mono text-2xl">
-                {balanceState.type === "loading" && (
-                  <Skeleton className="h-8 w-40" />
-                )}
-                {balanceState.type === "error" && "—"}
-                {balanceState.type === "success" &&
-                  formatNgn(balanceState.data.availableNgn)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-xs text-muted-foreground">Spendable funds</p>
-            </CardContent>
-          </Card>
+          {CURRENCIES.map((currency) => {
+            const currencyBalance = multiCurrencyBalanceState.type === "success"
+              ? multiCurrencyBalanceState.data.find((b) => b.currency === currency.code)
+              : null;
 
-          <Card className="border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-2">
-                <CardDescription>Held</CardDescription>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Held funds info"
-                      className="flex h-8 w-8 items-center justify-center border-2 border-foreground bg-muted text-foreground"
-                    >
-                      <Info className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent sideOffset={6}>
-                    Funds reserved for staking/withdrawals
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <CardTitle className="font-mono text-2xl">
-                {balanceState.type === "loading" && (
-                  <Skeleton className="h-8 w-40" />
-                )}
-                {balanceState.type === "error" && "—"}
-                {balanceState.type === "success" &&
-                  formatNgn(balanceState.data.heldNgn)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-xs text-muted-foreground">Reserved funds</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-3 border-foreground bg-primary/10 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-            <CardHeader className="pb-2">
-              <CardDescription>Total</CardDescription>
-              <CardTitle className="font-mono text-2xl text-primary">
-                {balanceState.type === "loading" && (
-                  <Skeleton className="h-8 w-40" />
-                )}
-                {balanceState.type === "error" && "—"}
-                {balanceState.type === "success" &&
-                  formatNgn(balanceState.data.totalNgn)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-xs text-muted-foreground">
-                Available + held
-              </p>
-            </CardContent>
-          </Card>
+            return (
+              <Card
+                key={currency.code}
+                className={`border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] ${
+                  selectedCurrency === currency.code ? "ring-2 ring-primary" : ""
+                }`}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardDescription className="flex items-center gap-2">
+                      <span className={currency.color}>{currency.symbol}</span>
+                      {currency.name}
+                    </CardDescription>
+                    {currency.code !== "REWARDS" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => setSelectedCurrency(currency.code)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <CardTitle className="font-mono text-2xl">
+                    {multiCurrencyBalanceState.type === "loading" && (
+                      <Skeleton className="h-8 w-32" />
+                    )}
+                    {multiCurrencyBalanceState.type === "error" && "—"}
+                    {multiCurrencyBalanceState.type === "success" && currencyBalance && (
+                      <>
+                        {currency.code === "NGN"
+                          ? formatNgn(currencyBalance.available)
+                          : `${currency.symbol}${currencyBalance.available.toFixed(2)}`}
+                      </>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      {currency.code === "NGN" ? "Spendable funds" : "Available balance"}
+                    </p>
+                    {currencyBalance && currencyBalance.held > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        Held: {currency.code === "NGN" ? formatNgn(currencyBalance.held) : `${currency.symbol}${currencyBalance.held.toFixed(2)}`}
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </section>
+
+        {/* Conversion Preview Section */}
+        {selectedCurrency !== "REWARDS" && (
+          <section className="mt-6">
+            <Card className="border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+              <CardHeader>
+                <CardTitle className="text-lg">Convert {selectedCurrency}</CardTitle>
+                <CardDescription>
+                  {selectedCurrency === "NGN" ? "Convert NGN to USDC" : "Convert USDC to NGN"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium">Amount</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={conversionAmount}
+                        onChange={(e) => setConversionAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full rounded-md border-3 border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                      <span className="absolute right-3 top-2 text-sm text-muted-foreground">
+                        {selectedCurrency}
+                      </span>
+                    </div>
+                  </div>
+
+                  {showConversionPreview && (
+                    <div className="rounded-md border-2 border-muted bg-muted/50 p-4">
+                      {conversionQuote.type === "loading" && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          Getting quote...
+                        </div>
+                      )}
+                      {conversionQuote.type === "error" && (
+                        <div className="flex items-center gap-2 text-sm text-destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          {conversionQuote.message}
+                        </div>
+                      )}
+                      {conversionQuote.type === "success" && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">You will receive</span>
+                            <span className="font-mono font-bold">
+                              {selectedCurrency === "NGN" ? "$" : "₦"}
+                              {conversionQuote.data.estimatedToAmount.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>Rate</span>
+                            <span>1 {selectedCurrency} = {conversionQuote.data.rate.toFixed(4)} {selectedCurrency === "NGN" ? "USDC" : "NGN"}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>Fees</span>
+                            <span>{selectedCurrency === "NGN" ? "₦" : "$"}{conversionQuote.data.fees.toFixed(2)}</span>
+                          </div>
+                          {conversionQuote.data.disclaimer && (
+                            <p className="text-xs text-muted-foreground italic">
+                              {conversionQuote.data.disclaimer}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
         <section className="mt-8">
           {/* Section Header with Filter Toggle (Mobile) */}
@@ -609,39 +763,75 @@ function WalletPageContent() {
           <div
             className={`mb-4 ${showFiltersMobile ? "block" : "hidden"} sm:block`}
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">
-                <Filter className="mr-1 inline h-4 w-4" />
-                Filter by:
-              </span>
-              <ToggleGroup
-                type="multiple"
-                value={activeFilters}
-                onValueChange={setFilters}
-                className="flex flex-wrap gap-2"
-              >
-                {FILTER_GROUPS.map((group) => (
-                  <ToggleGroupItem
-                    key={group.id}
-                    value={group.id}
-                    aria-label={`Filter by ${group.label}`}
-                    className="border-2 border-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                  >
-                    {group.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="h-8 px-2 text-xs"
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">
+                  <Filter className="mr-1 inline h-4 w-4" />
+                  Type:
+                </span>
+                <ToggleGroup
+                  type="multiple"
+                  value={activeFilters}
+                  onValueChange={setFilters}
+                  className="flex flex-wrap gap-2"
                 >
-                  <X className="mr-1 h-3 w-3" />
-                  Clear
-                </Button>
-              )}
+                  {FILTER_GROUPS.map((group) => (
+                    <ToggleGroupItem
+                      key={group.id}
+                      value={group.id}
+                      aria-label={`Filter by ${group.label}`}
+                      className="border-2 border-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {group.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-8 px-2 text-xs"
+                  >
+                    <X className="mr-1 h-3 w-3" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Currency:
+                </span>
+                <ToggleGroup
+                  type="single"
+                  value={activeCurrencyFilter ?? ""}
+                  onValueChange={(value: string) => setCurrencyFilter(value as Currency | null)}
+                  className="flex flex-wrap gap-2"
+                >
+                  {CURRENCY_FILTERS.map((currency) => (
+                    <ToggleGroupItem
+                      key={currency.id}
+                      value={currency.id}
+                      aria-label={`Filter by ${currency.label}`}
+                      className="border-2 border-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {currency.symbol} {currency.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                {activeCurrencyFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrencyFilter(null)}
+                    className="h-8 px-2 text-xs"
+                  >
+                    <X className="mr-1 h-3 w-3" />
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -847,6 +1037,12 @@ function WalletPageContent() {
           <div className="mt-6 rounded-md border-2 border-foreground bg-muted p-4 text-sm">
             <p className="font-bold">Wallet data unavailable</p>
             <p className="mt-1 text-muted-foreground">{balanceState.message}</p>
+          </div>
+        )}
+        {multiCurrencyBalanceState.type === "error" && (
+          <div className="mt-6 rounded-md border-2 border-foreground bg-muted p-4 text-sm">
+            <p className="font-bold">Multi-currency balance unavailable</p>
+            <p className="mt-1 text-muted-foreground">{multiCurrencyBalanceState.message}</p>
           </div>
         )}
       </div>

@@ -89,6 +89,7 @@ export default function NewPropertyPage() {
     yearBuilt: "",
   })
   const [submitting, setSubmitting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // Hidden file input ref for the real file picker
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -138,6 +139,7 @@ export default function NewPropertyPage() {
 
   const handleSubmit = async () => {
     try {
+      setFieldErrors({})
       setSubmitting(true)
       const payload = {
         title: formData.title,
@@ -157,7 +159,26 @@ export default function NewPropertyPage() {
       await landlordApi.createProperty(payload)
       showSuccessToast("Property submitted for review.")
       router.push("/dashboard/landlord")
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.details?.fieldErrors) {
+        const errors: Record<string, string> = {}
+        for (const [key, val] of Object.entries(error.details.fieldErrors)) {
+          if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
+            errors[key] = val[0]
+          }
+        }
+        if (errors.annualRentNgn) { errors.price = errors.annualRentNgn; delete errors.annualRentNgn; }
+        if (errors.bedrooms) { errors.beds = errors.bedrooms; delete errors.bedrooms; }
+        if (errors.bathrooms) { errors.baths = errors.bathrooms; delete errors.bathrooms; }
+        
+        setFieldErrors(errors)
+        
+        const step1Keys = ['title', 'description', 'propertyType', 'location', 'address', 'price', 'beds', 'baths', 'sqm', 'yearBuilt']
+        const hasStep1Error = Object.keys(errors).some(k => step1Keys.includes(k))
+        if (hasStep1Error) {
+          setStep(1)
+        }
+      }
       showErrorToast(error, "Failed to create property. Please check your inputs and try again.")
     } finally {
       setSubmitting(false)
@@ -228,6 +249,7 @@ export default function NewPropertyPage() {
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                 />
+                {fieldErrors.title && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.title}</p>}
               </div>
 
               <div className="grid gap-2">
@@ -242,6 +264,7 @@ export default function NewPropertyPage() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="border-3 border-foreground p-4 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                 />
+                {fieldErrors.description && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.description}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-6">
@@ -266,6 +289,7 @@ export default function NewPropertyPage() {
                       <SelectItem value="studio">Studio</SelectItem>
                     </SelectContent>
                   </Select>
+                  {fieldErrors.propertyType && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.propertyType}</p>}
                 </div>
 
                 <div className="grid gap-2">
@@ -290,6 +314,7 @@ export default function NewPropertyPage() {
                       <SelectItem value="ikeja">Ikeja</SelectItem>
                     </SelectContent>
                   </Select>
+                  {fieldErrors.location && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.location}</p>}
                 </div>
               </div>
 
@@ -304,6 +329,7 @@ export default function NewPropertyPage() {
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                 />
+                {fieldErrors.address && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.address}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-6">
@@ -319,6 +345,7 @@ export default function NewPropertyPage() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   />
+                  {fieldErrors.price && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.price}</p>}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="sqm" className="text-base font-bold">
@@ -332,6 +359,7 @@ export default function NewPropertyPage() {
                     onChange={(e) => setFormData({ ...formData, sqm: e.target.value })}
                     className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   />
+                  {fieldErrors.sqm && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.sqm}</p>}
                 </div>
               </div>
 
@@ -348,6 +376,7 @@ export default function NewPropertyPage() {
                     onChange={(e) => setFormData({ ...formData, beds: e.target.value })}
                     className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   />
+                  {fieldErrors.beds && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.beds}</p>}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="baths" className="text-base font-bold">
@@ -361,6 +390,7 @@ export default function NewPropertyPage() {
                     onChange={(e) => setFormData({ ...formData, baths: e.target.value })}
                     className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   />
+                  {fieldErrors.baths && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.baths}</p>}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="yearBuilt" className="text-base font-bold">
@@ -374,6 +404,7 @@ export default function NewPropertyPage() {
                     onChange={(e) => setFormData({ ...formData, yearBuilt: e.target.value })}
                     className="border-3 border-foreground p-4 text-lg shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
                   />
+                  {fieldErrors.yearBuilt && <p className="text-sm font-medium text-destructive mt-1">{fieldErrors.yearBuilt}</p>}
                 </div>
               </div>
             </div>

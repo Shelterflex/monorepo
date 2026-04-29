@@ -13,7 +13,15 @@ members = [
   "deal_escrow",
   "contract_access",
   "timelock",
+  "vesting_schedule",
 
+  "schema_registry",
+  "allowlist_registry",
+  "bond_collateral",
+  "reentrancy_guard",
+  "epoch_rewards",
+  "slashing_module",
+  "stake_delegation",
 ]
 
 [profile.release-with-logs]

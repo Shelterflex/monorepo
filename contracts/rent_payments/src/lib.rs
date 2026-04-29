@@ -1093,7 +1093,7 @@ mod test {
     }
 
     #[test]
-    fn test_pause() {
+    fn test_pause_returns_explicit_error() {
         let env = Env::default();
         let (admin, client, contract_id) = setup(&env);
         let payer = Address::generate(&env);
@@ -1112,7 +1112,7 @@ mod test {
 
         assert!(client.is_paused());
 
-        // Try to create a receipt while paused
+        // Try to create a receipt while paused (should return explicit paused error)
         env.mock_auths(&[MockAuth {
             address: &admin,
             invoke: &MockAuthInvoke {

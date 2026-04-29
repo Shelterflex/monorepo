@@ -13,6 +13,9 @@ import { Request, Response, NextFunction } from 'express'
 import { logger } from '../utils/logger.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { quotaService } from '../services/QuotaService.js'
+import type { User } from '../repositories/AuthRepository.js'
+import { env } from '../schemas/env.js'
 
 /**
  * Rate limit tracking store (in-memory for single-node deployments).
@@ -70,6 +73,13 @@ const endpointLimits: Map<string, EndpointRateLimitConfig> = new Map([
   ['POST /api/auth/wallet-challenge', { windowMs: 60 * 1000, limit: 20 }],
   ['POST /api/auth/wallet-verify', { windowMs: 60 * 1000, limit: 20 }],
 
+  // Wallet endpoints - strict limits
+  ['/api/wallet', { windowMs: 60 * 1000, limit: 30 }],
+  ['/api/wallet/ngn', { windowMs: 60 * 1000, limit: 30 }],
+
+  // Admin endpoints - very strict limits
+  ['/api/admin', { windowMs: 60 * 1000, limit: 10 }],
+
   // General API endpoints - moderate limits
   ['GET /api', { windowMs: 60 * 1000, limit: 100 }],
   ['POST /api', { windowMs: 60 * 1000, limit: 50 }],
@@ -82,8 +92,23 @@ const endpointLimits: Map<string, EndpointRateLimitConfig> = new Map([
  * Get rate limit configuration for an endpoint.
  */
 function getEndpointConfig(method: string, path: string): EndpointRateLimitConfig | null {
-  const key = `${method} ${path}`
-  return endpointLimits.get(key) || null
+  // 1. Exact match with method
+  const exactKey = `${method} ${path}`
+  if (endpointLimits.has(exactKey)) return endpointLimits.get(exactKey)!
+
+  // 2. Exact match path only (applies to all methods)
+  if (endpointLimits.has(path)) return endpointLimits.get(path)!
+
+  // 3. Prefix match (for wildcard endpoints like /api/admin/*)
+  // Sort keys by length descending to find the most specific match first
+  const sortedKeys = Array.from(endpointLimits.keys()).sort((a, b) => b.length - a.length)
+  for (const key of sortedKeys) {
+    if (path.startsWith(key) && !key.includes(' ')) {
+      return endpointLimits.get(key)!
+    }
+  }
+
+  return null
 }
 
 /**
@@ -128,29 +153,35 @@ export function createComprehensiveRateLimiter(options: {
   defaultLimit?: number
   userLimits?: Map<string, EndpointRateLimitConfig>
 } = {}) {
-  const defaultWindowMs = options.defaultWindowMs || 60 * 1000
-  const defaultLimit = options.defaultLimit || 100
+  const defaultWindowMs = options.defaultWindowMs || env.RATE_LIMIT_WINDOW_MS
+  const defaultLimit = options.defaultLimit || env.RATE_LIMIT_MAX_REQUESTS
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const requestId = (req as any).id || 'unknown'
-    const userId = (req as any).user?.id
+    const user = (req as any).user as User | undefined
+    const userId = user?.id
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown'
     const endpoint = `${req.method} ${req.baseUrl}${req.path}`
 
-    // Skip health checks and public endpoints
+    // Skip health checks and documentation
     if (
       req.path === '/health' ||
+      req.path.startsWith('/health/') ||
       req.path.startsWith('/openapi') ||
+      req.path.startsWith('/docs') ||
       req.path.startsWith('/api/public')
     ) {
       return next()
     }
 
     try {
+      // Get user-specific limits from quota service
+      const userTierLimits = await quotaService.getUserLimits(user)
+
       // Get endpoint-specific configuration or use defaults
       const config = getEndpointConfig(req.method, req.path) || {
         windowMs: defaultWindowMs,
-        limit: defaultLimit,
+        limit: options.defaultLimit || userTierLimits.requestsPerMinute || defaultLimit,
       }
 
       // Combine multiple rate limit checks
@@ -189,11 +220,12 @@ export function createComprehensiveRateLimiter(options: {
       // Set standard rate limit headers
       const usedLimit = userId ? checks[0]?.count || 0 : checks[0]?.count || 0
       const totalLimit = config.limit * (userId ? 2 : 1)
+      const resetTime = Math.min(...checks.map((c) => c.reset))
+      const retryAfter = Math.ceil((resetTime - Date.now()) / 1000)
+
       res.setHeader('X-RateLimit-Limit', totalLimit)
       res.setHeader('X-RateLimit-Remaining', Math.max(0, totalLimit - usedLimit))
-      res.setHeader('X-RateLimit-Reset', Math.ceil(
-        Math.min(...checks.map((c) => c.reset)) / 1000
-      ))
+      res.setHeader('X-RateLimit-Reset', Math.ceil(resetTime / 1000))
 
       if (isRateLimited) {
         logger.warn(`Rate limit exceeded`, {
@@ -203,6 +235,8 @@ export function createComprehensiveRateLimiter(options: {
           clientIp,
           checks,
         })
+
+        res.setHeader('Retry-After', retryAfter)
 
         throw new AppError(
           ErrorCode.TOO_MANY_REQUESTS,
@@ -243,7 +277,8 @@ export function setEndpointRateLimit(
   path: string,
   config: EndpointRateLimitConfig
 ): void {
-  endpointLimits.set(`${method} ${path}`, config)
+  const key = method ? `${method} ${path}` : path
+  endpointLimits.set(key, config)
 }
 
 /**
@@ -287,6 +322,9 @@ export function resetRateLimitStore(): void {
   endpointLimits.set('POST /api/auth/verify-otp', { windowMs: 15 * 60 * 1000, limit: 10 })
   endpointLimits.set('POST /api/auth/wallet-challenge', { windowMs: 60 * 1000, limit: 20 })
   endpointLimits.set('POST /api/auth/wallet-verify', { windowMs: 60 * 1000, limit: 20 })
+  endpointLimits.set('/api/wallet', { windowMs: 60 * 1000, limit: 30 })
+  endpointLimits.set('/api/wallet/ngn', { windowMs: 60 * 1000, limit: 30 })
+  endpointLimits.set('/api/admin', { windowMs: 60 * 1000, limit: 10 })
   endpointLimits.set('GET /api', { windowMs: 60 * 1000, limit: 100 })
   endpointLimits.set('POST /api', { windowMs: 60 * 1000, limit: 50 })
   endpointLimits.set('PUT /api', { windowMs: 60 * 1000, limit: 50 })

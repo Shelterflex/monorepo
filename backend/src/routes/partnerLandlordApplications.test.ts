@@ -3,10 +3,12 @@ import request from "supertest";
 import express from "express";
 import { createPartnerLandlordApplicationsRouter } from "./partnerLandlordApplications.js";
 import { errorHandler } from "../middleware/errorHandler.js";
+import { requestIdMiddleware } from "../middleware/requestId.js";
 import {
   InMemoryPartnerLandlordApplicationStore,
   initPartnerLandlordApplicationStore,
 } from "../models/partnerLandlordApplicationStore.js";
+import { expectRequestId } from "../test-helpers.js";
 
 describe("Partner Landlord Application Routes", () => {
   let app: express.Application;
@@ -18,6 +20,7 @@ describe("Partner Landlord Application Routes", () => {
 
     app = express();
     app.use(express.json());
+    app.use(requestIdMiddleware);
     app.use(
       "/api/landlord/partner-applications",
       createPartnerLandlordApplicationsRouter(),
@@ -57,5 +60,10 @@ describe("Partner Landlord Application Routes", () => {
       .expect(400);
 
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(response.body.error.message).toBe("Invalid request data");
+    expect(response.body.error.details).toBeTruthy();
+    expect(response.body.error.classification).toBe("permanent");
+    expect(response.body.error.retryable).toBe(false);
+    expectRequestId(response);
   });
 });

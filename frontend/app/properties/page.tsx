@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Heart,
   MapPin,
@@ -22,18 +25,74 @@ const locations = propertyFilters.locations;
 const priceRanges = propertyFilters.priceRanges;
 const bedOptions = propertyFilters.bedOptions;
 
-export default function PropertiesPage() {
+function PropertiesContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [favorites, setFavorites] = useState<number[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("All Locations");
-  const [selectedPrice, setSelectedPrice] = useState("Any Price");
-  const [selectedBeds, setSelectedBeds] = useState("Any");
   const [showFilters, setShowFilters] = useState(false);
+
+  const searchQuery = searchParams.get("q") || "";
+  const selectedLocation = searchParams.get("location") || "All Locations";
+  const selectedPrice = searchParams.get("price") || "Any Price";
+  const selectedBeds = searchParams.get("beds") || "Any";
+  const sortBy = searchParams.get("sort") || "newest";
+
+  const updateParams = (params: Record<string, string>) => {
+    const newParams = new URLSearchParams();
+    const currentQ = searchParams.get("q") || "";
+    const currentLocation = searchParams.get("location") || "All Locations";
+    const currentPrice = searchParams.get("price") || "Any Price";
+    const currentBeds = searchParams.get("beds") || "Any";
+    const currentSort = searchParams.get("sort") || "newest";
+
+    const merged = {
+      q: params.q !== undefined ? params.q : currentQ,
+      location: params.location !== undefined ? params.location : currentLocation,
+      price: params.price !== undefined ? params.price : currentPrice,
+      beds: params.beds !== undefined ? params.beds : currentBeds,
+      sort: params.sort !== undefined ? params.sort : currentSort,
+    };
+
+    Object.entries(merged).forEach(([key, value]) => {
+      if (value === "All Locations" || value === "Any Price" || value === "Any" || value === "newest") {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    router.push(`?${newParams.toString()}`);
+  };
 
   const toggleFavorite = (id: number) => {
     setFavorites((prev) =>
       prev.includes(id) ? prev.filter((fid) => fid !== id) : [...prev, id],
     );
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    updateParams({ q: query });
+  };
+
+  const handleLocationChange = (location: string) => {
+    setSelectedLocation(location);
+    updateParams({ location });
+  };
+
+  const handlePriceChange = (price: string) => {
+    setSelectedPrice(price);
+    updateParams({ price });
+  };
+
+  const handleBedsChange = (beds: string) => {
+    setSelectedBeds(beds);
+    updateParams({ beds });
+  };
+
+  const handleSortChange = (sort: string) => {
+    setSortBy(sort);
+    updateParams({ sort });
   };
 
   const formatPrice = (price: number) => {
@@ -44,7 +103,7 @@ export default function PropertiesPage() {
     }).format(price);
   };
 
-  const filteredProperties = properties.filter((property) => {
+  let filteredProperties = properties.filter((property) => {
     const matchesSearch =
       property.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       property.location.toLowerCase().includes(searchQuery.toLowerCase());
@@ -71,6 +130,12 @@ export default function PropertiesPage() {
     return matchesSearch && matchesLocation && matchesPrice && matchesBeds;
   });
 
+  if (sortBy === "price-low") {
+    filteredProperties = [...filteredProperties].sort((a, b) => a.price - b.price);
+  } else if (sortBy === "price-high") {
+    filteredProperties = [...filteredProperties].sort((a, b) => b.price - a.price);
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Hero Header */}
@@ -96,7 +161,7 @@ export default function PropertiesPage() {
                 type="text"
                 placeholder="Search by location or property name..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="border-3 border-foreground bg-background pl-12 py-6 font-medium shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
               />
             </div>
@@ -134,9 +199,10 @@ export default function PropertiesPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setSelectedLocation("All Locations");
-                    setSelectedPrice("Any Price");
-                    setSelectedBeds("Any");
+                    handleLocationChange("All Locations");
+                    handlePriceChange("Any Price");
+                    handleBedsChange("Any");
+                    handleSortChange("newest");
                   }}
                   className="text-sm underline"
                 >
@@ -153,7 +219,7 @@ export default function PropertiesPage() {
                     {locations.map((loc) => (
                       <button
                         key={loc}
-                        onClick={() => setSelectedLocation(loc)}
+                        onClick={() => handleLocationChange(loc)}
                         className={`border-2 border-foreground px-3 py-2 text-sm font-medium transition-all ${
                           selectedLocation === loc
                             ? "bg-foreground text-background"
@@ -174,7 +240,7 @@ export default function PropertiesPage() {
                     {priceRanges.map((range) => (
                       <button
                         key={range}
-                        onClick={() => setSelectedPrice(range)}
+                        onClick={() => handlePriceChange(range)}
                         className={`border-2 border-foreground px-3 py-2 text-sm font-medium transition-all ${
                           selectedPrice === range
                             ? "bg-foreground text-background"
@@ -195,7 +261,7 @@ export default function PropertiesPage() {
                     {bedOptions.map((beds) => (
                       <button
                         key={beds}
-                        onClick={() => setSelectedBeds(beds)}
+                        onClick={() => handleBedsChange(beds)}
                         className={`border-2 border-foreground px-4 py-2 text-sm font-medium transition-all ${
                           selectedBeds === beds
                             ? "bg-foreground text-background"
@@ -203,6 +269,31 @@ export default function PropertiesPage() {
                         }`}
                       >
                         {beds}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 block font-mono text-sm font-bold">
+                    Sort By
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: "newest", label: "Newest" },
+                      { value: "price-low", label: "Price: Low to High" },
+                      { value: "price-high", label: "Price: High to Low" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleSortChange(option.value)}
+                        className={`border-2 border-foreground px-3 py-2 text-sm font-medium transition-all ${
+                          sortBy === option.value
+                            ? "bg-foreground text-background"
+                            : "bg-background hover:bg-muted"
+                        }`}
+                      >
+                        {option.label}
                       </button>
                     ))}
                   </div>
@@ -237,10 +328,10 @@ export default function PropertiesPage() {
               </p>
               <Button
                 onClick={() => {
-                  setSearchQuery("");
-                  setSelectedLocation("All Locations");
-                  setSelectedPrice("Any Price");
-                  setSelectedBeds("Any");
+                  handleSearchChange("");
+                  handleLocationChange("All Locations");
+                  handlePriceChange("Any Price");
+                  handleBedsChange("Any");
                 }}
                 className="mt-6 border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
               >
@@ -354,5 +445,13 @@ export default function PropertiesPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function PropertiesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <PropertiesContent />
+    </Suspense>
   );
 }

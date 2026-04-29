@@ -26,6 +26,7 @@ export default function WhistleblowerSignupPage() {
     instagramProfile: "",
   });
   const [applicationId, setApplicationId] = useState<string | null>(null);
+  const [applicationStatus, setApplicationStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -118,6 +119,7 @@ export default function WhistleblowerSignupPage() {
       });
 
       setApplicationId(response.application.applicationId);
+      setApplicationStatus(response.application.status);
       setCurrentStep("confirmation");
     } catch (error) {
       console.error("Failed to submit application:", error);
@@ -432,18 +434,43 @@ export default function WhistleblowerSignupPage() {
             <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
               <div className="text-center">
                 <div className="flex justify-center mb-4">
-                  <div className="flex h-16 w-16 items-center justify-center border-3 border-foreground bg-secondary">
-                    <CheckCircle className="h-10 w-10" />
-                  </div>
+                  {applicationStatus === 'rejected' ? (
+                    <div className="flex h-16 w-16 items-center justify-center border-3 border-foreground bg-destructive text-destructive-foreground">
+                      <AlertCircle className="h-10 w-10" />
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center border-3 border-foreground bg-secondary">
+                      <CheckCircle className="h-10 w-10" />
+                    </div>
+                  )}
                 </div>
-                <h2 className="text-3xl font-black mb-2">
-                  Application Submitted!
-                </h2>
-                <p className="text-muted-foreground mb-4">
-                  We've received your whistleblower application. Our team will
-                  verify your social media accounts and approve your profile
-                  within 24-48 hours.
-                </p>
+                
+                {applicationStatus === 'approved' && (
+                  <>
+                    <h2 className="text-3xl font-black mb-2">Application Approved!</h2>
+                    <p className="text-muted-foreground mb-4">
+                      Congratulations! Your whistleblower profile has been successfully verified and approved.
+                    </p>
+                  </>
+                )}
+                
+                {applicationStatus === 'rejected' && (
+                  <>
+                    <h2 className="text-3xl font-black mb-2">Application Rejected</h2>
+                    <p className="text-muted-foreground mb-4">
+                      We're sorry, but your whistleblower application could not be approved at this time based on the provided information.
+                    </p>
+                  </>
+                )}
+                
+                {(applicationStatus === 'pending' || !applicationStatus) && (
+                  <>
+                    <h2 className="text-3xl font-black mb-2">Pending Review</h2>
+                    <p className="text-muted-foreground mb-4">
+                      We've received your whistleblower application. Our team is currently verifying your social media accounts and will process your application within 24-48 hours.
+                    </p>
+                  </>
+                )}
                 {applicationId && (
                   <div className="mb-4 p-3 border-2 border-foreground bg-muted inline-block">
                     <p className="text-xs text-muted-foreground">Application ID</p>

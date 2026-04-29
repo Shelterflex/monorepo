@@ -32,6 +32,37 @@ export interface NgnBalanceResponse {
   totalNgn: number;
 }
 
+export type Currency = "NGN" | "USDC" | "REWARDS";
+
+export interface CurrencyBalance {
+  currency: Currency;
+  available: number;
+  held: number;
+  total: number;
+}
+
+export interface MultiCurrencyBalanceResponse {
+  balances: CurrencyBalance[];
+}
+
+export interface ConversionQuoteRequest {
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  amount: number;
+}
+
+export interface ConversionQuoteResponse {
+  quoteId: string;
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  fromAmount: number;
+  estimatedToAmount: number;
+  rate: number;
+  fees: number;
+  expiresAt: string;
+  disclaimer?: string;
+}
+
 export type WalletLedgerType =
   | "top_up"
   | "withdrawal"
@@ -128,4 +159,17 @@ export function getWithdrawalHistory(params?: {
   qs.set("limit", String(limit));
 
   return apiFetch<{ entries: WithdrawalResponse[]; nextCursor?: string | null }>(`/api/wallet/ngn/withdraw/history?${qs.toString()}`);
+}
+
+export function getMultiCurrencyBalance(): Promise<MultiCurrencyBalanceResponse> {
+  return apiFetch<MultiCurrencyBalanceResponse>("/api/wallet/balance");
+}
+
+export function getConversionQuote(request: ConversionQuoteRequest): Promise<ConversionQuoteResponse> {
+  const qs = new URLSearchParams();
+  qs.set("fromCurrency", request.fromCurrency);
+  qs.set("toCurrency", request.toCurrency);
+  qs.set("amount", String(request.amount));
+
+  return apiFetch<ConversionQuoteResponse>(`/api/staking/quote?${qs.toString()}`);
 }

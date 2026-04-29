@@ -5,31 +5,63 @@ import Link from "next/link";
 import { ArrowLeft, Star, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { tenantWhistleblowersToRate as whistleblowers } from "@/lib/mockData";
+import { getRateableWhistleblowers, submitWhistleblowerRating, type RateableWhistleblower } from "@/lib/api/whistleblowerRatingsApi";
+import { useEffect, useCallback } from "react";
+import { showErrorToast } from "@/lib/toast";
 
 import { DashboardHeader } from "@/components/dashboard-header";
 import { TenantSidebar } from "@/components/tenant/TenantSidebar";
 import { tenantWhistleblowersToRate as whistleblowers } from "@/lib/mockData";
 
 export default function RateWhistleblowerPage() {
-  const [step, setStep] = useState<"select" | "rate" | "confirmation">(
-    "select",
+  const [step, setStep] = useState<"select" | "rate" | "confirmation" | "loading">(
+    "loading",
   );
-  const [selectedWhistleblower, setSelectedWhistleblower] = useState<
-    number | null
+  const [selectedWhistleblowerId, setSelectedWhistleblowerId] = useState<
+    string | null
   >(null);
   const [rating, setRating] = useState<number>(0);
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [review, setReview] = useState("");
+  const [rateables, setRateables] = useState<RateableWhistleblower[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const rateableWhistleblowers = whistleblowers.filter((w) => !w.hasRated);
-  const currentWhistleblower = whistleblowers.find(
-    (w) => w.id === selectedWhistleblower,
+  const fetchRateables = useCallback(async () => {
+    try {
+      const data = await getRateableWhistleblowers();
+      setRateables(data);
+      setStep("select");
+    } catch (error) {
+      showErrorToast(error, "Failed to load rateable whistleblowers");
+      setStep("select");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRateables();
+  }, [fetchRateables]);
+
+  const currentWhistleblower = rateables.find(
+    (w) => w.id === selectedWhistleblowerId,
   );
 
-  const handleSubmitRating = () => {
-    if (rating > 0) {
-      setStep("confirmation");
+  const handleSubmitRating = async () => {
+    if (rating > 0 && currentWhistleblower) {
+      try {
+        setIsSubmitting(true);
+        await submitWhistleblowerRating({
+          whistleblowerId: currentWhistleblower.id,
+          dealId: currentWhistleblower.dealId,
+          rating,
+          reviewText: review
+        });
+        setStep("confirmation");
+        fetchRateables(); // refresh for next time
+      } catch (err) {
+        showErrorToast(err, "Failed to submit rating. You might have already rated this deal.");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -48,6 +80,12 @@ export default function RateWhistleblowerPage() {
           </Link>
 
         <div className="max-w-2xl mx-auto">
+          {step === "loading" && (
+            <div className="flex justify-center p-12">
+              <span className="font-bold">Loading rateable whistleblowers...</span>
+            </div>
+          )}
+          
           {/* Step 1: Select Whistleblower */}
           {step === "select" && (
             <>
@@ -62,8 +100,8 @@ export default function RateWhistleblowerPage() {
               </Card>
 
               <div className="space-y-4">
-                {rateableWhistleblowers.length > 0 ? (
-                  rateableWhistleblowers.map((whistleblower) => (
+                {rateables.length > 0 ? (
+                  rateables.map((whistleblower) => (
                     <Card
                       key={whistleblower.id}
                       onClick={() => {

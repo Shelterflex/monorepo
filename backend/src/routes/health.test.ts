@@ -1,11 +1,39 @@
 import { describe, it, expect } from 'vitest'
-import { createHealthRouter } from './health.js'
+import { buildHealthDetailsPayload, createHealthRouter } from './health.js'
 import { CircuitBreakerAdapter } from '../soroban/circuit-breaker-adapter.js'
 import { StubSorobanAdapter } from '../soroban/stub-adapter.js'
 import { getSorobanConfigFromEnv } from '../soroban/client.js'
 import { CircuitBreakerConfig } from '../soroban/circuit-breaker-config.js'
 
 describe('Health Router', () => {
+  describe('buildHealthDetailsPayload', () => {
+    it('serializes diagnostic metadata in a deterministic field order', () => {
+      const firstPayload = buildHealthDetailsPayload({
+        version: '1.2.3',
+        nodeEnv: 'test',
+        uptimeSeconds: 42,
+        dbConnected: true,
+        requestId: 'req-123',
+      })
+      const secondPayload = buildHealthDetailsPayload({
+        version: '1.2.3',
+        nodeEnv: 'test',
+        uptimeSeconds: 42,
+        dbConnected: true,
+        requestId: 'req-123',
+      })
+
+      expect(Object.keys(firstPayload)).toEqual([
+        'version',
+        'nodeEnv',
+        'uptimeSeconds',
+        'dbConnected',
+        'requestId',
+      ])
+      expect(JSON.stringify(firstPayload)).toBe(JSON.stringify(secondPayload))
+    })
+  })
+
   describe('GET /soroban', () => {
     it('should return healthy status when circuit breaker is CLOSED', async () => {
       const config = getSorobanConfigFromEnv(process.env)
@@ -17,7 +45,7 @@ describe('Health Router', () => {
         halfOpenTestRequests: 1,
       }
       const adapter = new CircuitBreakerAdapter(stubAdapter, cbConfig)
-      const router = createHealthRouter(adapter)
+      createHealthRouter(adapter)
 
       // Get the health status
       const metrics = adapter.getHealthStatus()
@@ -48,7 +76,7 @@ describe('Health Router', () => {
     it('should return healthy status when circuit breaker is not enabled', async () => {
       const config = getSorobanConfigFromEnv(process.env)
       const stubAdapter = new StubSorobanAdapter(config)
-      const router = createHealthRouter(stubAdapter)
+      createHealthRouter(stubAdapter)
 
       // Get the health status
       const metrics = stubAdapter.getConfig()

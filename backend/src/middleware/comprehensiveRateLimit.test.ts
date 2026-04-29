@@ -8,6 +8,13 @@ import {
   resetRateLimitStore,
   type EndpointRateLimitConfig,
 } from './comprehensiveRateLimit.js'
+import { quotaService } from '../services/QuotaService.js'
+
+vi.mock('../services/QuotaService.js', () => ({
+  quotaService: {
+    getUserLimits: vi.fn(),
+  },
+}))
 
 describe('Comprehensive Rate Limiting', () => {
   let app: express.Application
@@ -15,6 +22,10 @@ describe('Comprehensive Rate Limiting', () => {
 
   beforeEach(() => {
     resetRateLimitStore()
+    vi.mocked(quotaService.getUserLimits).mockResolvedValue({
+      requestsPerMinute: 5,
+      requestsPerDay: 100,
+    })
     
     app = express()
 
@@ -93,6 +104,18 @@ describe('Comprehensive Rate Limiting', () => {
     expect(parseInt(res.headers['x-ratelimit-remaining'])).toBeLessThanOrEqual(5)
   })
 
+  it('should set Retry-After header when rate limited', async () => {
+    // Exceed the limit
+    for (let i = 0; i < 5; i++) {
+      await agent.get('/api/test')
+    }
+
+    const res = await agent.get('/api/test')
+    expect(res.status).toBe(429)
+    expect(res.headers['retry-after']).toBeDefined()
+    expect(parseInt(res.headers['retry-after'])).toBeGreaterThanOrEqual(0)
+  })
+
   it('should track remaining requests correctly', async () => {
     const responses = []
 
@@ -142,6 +165,68 @@ describe('Comprehensive Rate Limiting', () => {
     // 3rd request should be blocked
     res = await agent.get('/api/strict')
     expect(res.status).toBe(429)
+  })
+
+  it('should support prefix-based rate limits', async () => {
+    // Setup limit for a prefix
+    setEndpointRateLimit('', '/api/admin', {
+      windowMs: 1000,
+      limit: 2,
+    })
+
+    app.get('/api/admin/users', (_req: Request, res: Response) => {
+      res.json({ ok: true })
+    })
+    app.get('/api/admin/settings', (_req: Request, res: Response) => {
+      res.json({ ok: true })
+    })
+
+    // Requests to different sub-routes should share the prefix limit
+    await agent.get('/api/admin/users')
+    await agent.get('/api/admin/settings')
+
+    const res = await agent.get('/api/admin/users')
+    expect(res.status).toBe(429)
+  })
+
+  it('should prioritize method-specific limits over path-only limits', async () => {
+    setEndpointRateLimit('', '/api/mixed', { windowMs: 1000, limit: 10 })
+    setEndpointRateLimit('POST', '/api/mixed', { windowMs: 1000, limit: 2 })
+
+    app.get('/api/mixed', (_req: Request, res: Response) => res.json({ ok: true }))
+    app.post('/api/mixed', (_req: Request, res: Response) => res.json({ ok: true }))
+
+    // GET should use the general limit
+    for (let i = 0; i < 5; i++) {
+      const res = await agent.get('/api/mixed')
+      expect(res.status).toBe(200)
+    }
+
+    // POST should use the specific limit
+    await agent.post('/api/mixed')
+    await agent.post('/api/mixed')
+    const res = await agent.post('/api/mixed')
+    expect(res.status).toBe(429)
+  })
+
+  it('should use quotaService for authenticated users', async () => {
+    vi.mocked(quotaService.getUserLimits).mockResolvedValue({
+      requestsPerMinute: 10,
+      requestsPerDay: 1000,
+    })
+
+    const customApp = express()
+    customApp.use((req, _res, next) => {
+      ;(req as any).user = { id: 'user-123', tier: 'pro' }
+      next()
+    })
+    customApp.use(createComprehensiveRateLimiter())
+    customApp.get('/api/test', (_req, res) => res.json({ ok: true }))
+
+    const customAgent = supertest(customApp)
+    const res = await customAgent.get('/api/test')
+    // totalLimit = config.limit * 2 = 10 * 2 = 20
+    expect(parseInt(res.headers['x-ratelimit-limit'])).toBe(20)
   })
 
   it('should provide rate limit statistics', () => {

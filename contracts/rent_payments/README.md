@@ -144,6 +144,7 @@ Get the total number of receipts for a deal.
 - **Invalid limit**: Returns `ContractError::InvalidLimit` if limit is 0 or > 100
 - **Authentication**: `create_receipt` requires admin authentication
 - **Validation**: `create_receipt` returns `ContractError::InvalidAmount` if amount is not positive
+- **Paused guard**: `create_receipt` returns `ContractError::Paused` when the contract is paused
 
 ## Testing
 

@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { TenantSidebar } from "@/components/tenant/TenantSidebar";
@@ -31,6 +32,7 @@ import {
   tenantSavedProperties as savedProperties,
 } from "@/lib/mockData";
 import { featureFlags } from "@/lib/featureFlags";
+import { getTenantPaymentStatusPresentation } from "@/lib/tenantPaymentStatus";
 
 export default function TenantDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "payments" | "saved">(
@@ -46,42 +48,18 @@ export default function TenantDashboard() {
   };
 
   const getPaymentHistoryPresentation = (payment: PaymentItem) => {
-    const isPaid = payment.status === "paid";
-    const isUpcoming = payment.status === "upcoming";
-
-    let iconContainerClassName = "bg-muted";
-    if (isPaid) {
-      iconContainerClassName = "bg-secondary";
-    } else if (isUpcoming) {
-      iconContainerClassName = "bg-primary";
-    }
+    const statusPresentation = getTenantPaymentStatusPresentation(payment.status);
 
     let detailText = "";
-    if (isPaid) {
+    if (payment.status === "paid") {
       detailText = `Paid on ${payment.paidDate}`;
     } else {
       detailText = `Due ${payment.dueDate}`;
     }
 
-    let statusClassName = "text-muted-foreground";
-    if (isPaid) {
-      statusClassName = "text-secondary";
-    } else if (isUpcoming) {
-      statusClassName = "text-primary";
-    }
-
-    let statusLabel = "Pending";
-    if (isPaid) {
-      statusLabel = "Paid";
-    } else if (isUpcoming) {
-      statusLabel = "Due Soon";
-    }
-
     return {
       detailText,
-      iconContainerClassName,
-      statusClassName,
-      statusLabel,
+      statusPresentation,
     };
   };
 
@@ -307,7 +285,7 @@ export default function TenantDashboard() {
                     <div className="flex items-center gap-4">
                       <div
                         className={`flex h-10 w-10 items-center justify-center border-2 border-foreground ${
-                          presentation.iconContainerClassName
+                          presentation.statusPresentation.iconContainerClassName
                         }`}
                       >
                         {payment.status === "paid" ? (
@@ -327,13 +305,12 @@ export default function TenantDashboard() {
                       <p className="font-mono font-bold">
                         {formatCurrency(payment.amount)}
                       </p>
-                      <span
-                        className={`text-sm font-bold ${
-                          presentation.statusClassName
-                        }`}
+                      <Badge
+                        variant={presentation.statusPresentation.variant}
+                        className={presentation.statusPresentation.className}
                       >
-                        {presentation.statusLabel}
-                      </span>
+                        {presentation.statusPresentation.label}
+                      </Badge>
                     </div>
                   </div>
                     );

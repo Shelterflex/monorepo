@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import request from 'supertest'
 import express, { type Express } from 'express'
 import { createAdminRiskRouter } from './adminRisk.js'
@@ -6,6 +6,7 @@ import { NgnWalletService } from '../services/ngnWalletService.js'
 import { userRiskStateStore } from '../models/userRiskStateStore.js'
 import { sessionStore, userStore } from '../models/authStore.js'
 import { errorHandler } from '../middleware/errorHandler.js'
+import { logger } from '../utils/logger.js'
 
 describe('Admin Risk Routes', () => {
   let app: Express
@@ -13,6 +14,10 @@ describe('Admin Risk Routes', () => {
   let authToken: string
   const testUserId = 'test-user-789'
   const adminUserId = 'admin-user-123'
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
   beforeEach(async () => {
     ngnWalletService = new NgnWalletService()
@@ -31,7 +36,7 @@ describe('Admin Risk Routes', () => {
     app = express()
     app.use(express.json())
     app.use((req: any, _res, next) => {
-      req.requestId = 'test-request-id'
+      req.requestId = req.header('x-request-id') ?? 'test-request-id'
       next()
     })
     app.use('/api/admin/risk', createAdminRiskRouter(ngnWalletService))
@@ -141,6 +146,31 @@ describe('Admin Risk Routes', () => {
           notes: 'Test',
         })
         .expect(400)
+    })
+
+    it('logs the incoming correlation id for validation failures on sensitive routes', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await request(app)
+        .post(`/api/admin/risk/${testUserId}/freeze`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .set('x-request-id', 'trace-sensitive-123')
+        .send({
+          reason: 'INVALID_REASON',
+          notes: 'Test',
+        })
+        .expect(400)
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Request validation failed',
+        expect.objectContaining({
+          requestId: 'trace-sensitive-123',
+          endpoint: `POST /${testUserId}/freeze`,
+          method: 'POST',
+          path: `/${testUserId}/freeze`,
+          target: 'body',
+        }),
+      )
     })
 
     it('should require authentication', async () => {

@@ -16,6 +16,7 @@ import type { Request } from 'express'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { requireValidWebhookSignature } from './webhookSignature.js'
+import { getRotatingAPIKey } from '../services/rotatingSecretProvider.js'
 import type {
   ExecutePayoutInput,
   ExecutePayoutResult,
@@ -31,6 +32,9 @@ const PAYSTACK_BASE_URL = () =>
   process.env.PAYSTACK_BASE_URL ?? 'https://api.paystack.co'
 
 function getSecret(): string {
+  const rotating = getRotatingAPIKey('paystack')
+  if (rotating) return rotating
+
   const s = process.env.PAYSTACK_SECRET
   if (!s) {
     throw new AppError(

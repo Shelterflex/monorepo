@@ -27,6 +27,9 @@ export interface SecretRotationEvent {
   timestamp: Date;
   success: boolean;
   error?: string;
+  actor?: string;
+  scope?: string;
+  transitionWindowMs?: number;
 }
 
 export interface SecretConfig {
@@ -35,6 +38,8 @@ export interface SecretConfig {
   required: boolean;
   validator?: (value: string) => boolean;
   gracePeriodMs?: number; // Time to keep old secret active after rotation
+  rotationIntervalMs?: number; // How often to automatically rotate
+  generator?: () => string; // Function to generate a new secret
 }
 
 /**
@@ -42,6 +47,7 @@ export interface SecretConfig {
  * Manages hot-reloading and rotation of secrets with zero downtime
  */
 export class SecretRotationService extends EventEmitter {
+  private scheduledRotations: Map<string, NodeJS.Timeout> = new Map();
   private secrets: Map<string, SecretVersion[]> = new Map();
   private activeVersions: Map<string, string> = new Map();
   private rotationHistory: SecretRotationEvent[] = [];
@@ -72,6 +78,11 @@ export class SecretRotationService extends EventEmitter {
       logger.info(`Registered secret: ${config.name}`);
     } else if (config.required) {
       logger.warn(`Required secret ${config.name} not found in environment`);
+    }
+
+    // Schedule automated rotation if interval and generator are present
+    if (config.rotationIntervalMs && config.generator) {
+      this.scheduleAutoRotation(config.name);
     }
   }
 
@@ -108,7 +119,7 @@ export class SecretRotationService extends EventEmitter {
   async rotateSecret(
     name: string,
     newValue: string,
-    options: { gracePeriodMs?: number; version?: string } = {}
+    options: { gracePeriodMs?: number; version?: string; actor?: string; scope?: string } = {}
   ): Promise<boolean> {
     const config = this.secretConfigs.get(name);
     if (!config) {
@@ -120,7 +131,8 @@ export class SecretRotationService extends EventEmitter {
     if (config.validator && !config.validator(newValue)) {
       const error = `New secret value for ${name} failed validation`;
       logger.error(error);
-      this.logRotationEvent(name, 'unknown', 'unknown', false, error);
+      logger.error(`ALERT: Secret validation failed for slot ${name}. Halting transition.`);
+      this.logRotationEvent(name, 'unknown', 'unknown', false, error, options.actor, options.scope, config.gracePeriodMs);
       return false;
     }
 
@@ -161,7 +173,7 @@ export class SecretRotationService extends EventEmitter {
       });
 
       logger.info(`Secret rotated successfully: ${name} (${oldVersion} → ${newVersion})`);
-      this.logRotationEvent(name, oldVersion, newVersion, true);
+      this.logRotationEvent(name, oldVersion, newVersion, true, undefined, options.actor, options.scope, gracePeriodMs);
 
       // Schedule cleanup of expired versions
       setTimeout(() => this.cleanupExpiredVersions(name), gracePeriodMs + 1000);
@@ -170,7 +182,8 @@ export class SecretRotationService extends EventEmitter {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to rotate secret ${name}:`, {}, error);
-      this.logRotationEvent(name, oldVersion, newVersion, false, errorMsg);
+      logger.error(`ALERT: Secret rotation failed for slot ${name}. Halting transition.`);
+      this.logRotationEvent(name, oldVersion, newVersion, false, errorMsg, options.actor, options.scope, gracePeriodMs);
       return false;
     }
   }
@@ -243,6 +256,38 @@ export class SecretRotationService extends EventEmitter {
       this.watchInterval = undefined;
       logger.info('Secret watcher stopped');
     }
+    for (const timeout of this.scheduledRotations.values()) {
+      clearTimeout(timeout);
+    }
+    this.scheduledRotations.clear();
+  }
+
+  private scheduleAutoRotation(name: string): void {
+    const config = this.secretConfigs.get(name);
+    if (!config || !config.rotationIntervalMs || !config.generator) return;
+
+    const existing = this.scheduledRotations.get(name);
+    if (existing) clearTimeout(existing);
+
+    const timeout = setTimeout(async () => {
+      try {
+        const newValue = config.generator!();
+        await this.rotateSecret(name, newValue, {
+          actor: 'system',
+          scope: 'auto-rotation',
+          gracePeriodMs: config.gracePeriodMs,
+        });
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logger.error(`Auto-rotation failed for ${name}:`, error);
+        logger.error(`ALERT: Auto-rotation failure for secret slot ${name}`);
+        this.emit('rotationFailure', { secretName: name, error: errorMsg });
+      } finally {
+        this.scheduleAutoRotation(name);
+      }
+    }, config.rotationIntervalMs);
+
+    this.scheduledRotations.set(name, timeout);
   }
 
   /**
@@ -284,7 +329,10 @@ export class SecretRotationService extends EventEmitter {
     oldVersion: string,
     newVersion: string,
     success: boolean,
-    error?: string
+    error?: string,
+    actor: string = 'admin',
+    scope: string = 'global',
+    transitionWindowMs?: number
   ): void {
     const event: SecretRotationEvent = {
       secretName,
@@ -293,6 +341,9 @@ export class SecretRotationService extends EventEmitter {
       timestamp: new Date(),
       success,
       error,
+      actor,
+      scope,
+      transitionWindowMs,
     };
 
     this.rotationHistory.push(event);

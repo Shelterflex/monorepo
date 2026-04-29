@@ -313,20 +313,49 @@ x-request-id: abc-123
 }
 ## Rate limiting
 
-Public endpoints (`GET /health`, `GET /soroban/config`) are rate limited per IP to reduce abuse and protect uptime.
+The backend implements a comprehensive rate limiting system to protect sensitive endpoints and prevent abuse. It supports per-endpoint, per-user (authenticated), and per-IP (unauthenticated) limits.
+
+### Configuration
+
+Rate limits are configured in `src/middleware/comprehensiveRateLimit.ts`. Default limits are:
+
+| Category | Endpoints | Default Limit | Window |
+|----------|-----------|---------------|--------|
+| Auth | `/api/auth/*` | 5-20 reqs | 1-15 min |
+| Wallet | `/api/wallet/*` | 30 reqs | 1 min |
+| Admin | `/api/admin/*` | 10 reqs | 1 min |
+| General | `/api/*` | 50-100 reqs | 1 min |
+
+### Environment Variables
+
+Global defaults can be adjusted via environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RATE_LIMIT_WINDOW_MS` | Time window in milliseconds | `60000` (1 minute) |
-| `RATE_LIMIT_MAX_REQUESTS` | Max requests per IP per window | `100` |
+| `RATE_LIMIT_WINDOW_MS` | Default time window in milliseconds | `60000` (1 minute) |
+| `RATE_LIMIT_MAX_REQUESTS` | Default max requests per IP/user per window | `100` |
 
-When a client exceeds the limit, the server responds with **429 Too Many Requests** and a JSON body in the standard error format:
+### Headers
+
+The server includes standard rate limit headers in all API responses:
+
+- `X-RateLimit-Limit`: The total limit for the current window.
+- `X-RateLimit-Remaining`: Remaining requests in the current window.
+- `X-RateLimit-Reset`: Time when the limit resets (UTC timestamp in seconds).
+- `Retry-After`: (Only on 429) Number of seconds to wait before retrying.
+
+### 429 Too Many Requests
+
+When a limit is exceeded, the server returns a **429** error with a `Retry-After` header:
 
 ```json
 {
-  "error": "Too many requests. Please try again later."
+  "error": {
+    "code": "TOO_MANY_REQUESTS",
+    "message": "Too many requests. Please try again later."
+  }
 }
 ```
 
-Defaults are suitable for local development; set lower limits in production if needed.
+Health checks (`/health`) are exempt from rate limiting.
 

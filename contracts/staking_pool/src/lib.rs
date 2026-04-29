@@ -1509,6 +1509,71 @@ mod test {
     }
 
     #[test]
+    fn admin_can_set_lock_period_at_minimum_zero_seconds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _user, _token_id) = setup_contract(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "set_lock_period",
+                args: (admin.clone(), 0u64).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client.try_set_lock_period(&admin, &0u64).unwrap().unwrap();
+        assert_eq!(client.get_lock_period(), 0u64);
+    }
+
+    #[test]
+    fn admin_can_set_lock_period_at_maximum_31536000_seconds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _user, _token_id) = setup_contract(&env);
+        let max_lock_period = 31_536_000u64;
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "set_lock_period",
+                args: (admin.clone(), max_lock_period).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        client
+            .try_set_lock_period(&admin, &max_lock_period)
+            .unwrap()
+            .unwrap();
+        assert_eq!(client.get_lock_period(), max_lock_period);
+    }
+
+    #[test]
+    fn admin_cannot_set_lock_period_above_maximum_31536000_seconds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _user, _token_id) = setup_contract(&env);
+        let just_above_max_lock_period = 31_536_001u64;
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "set_lock_period",
+                args: (admin.clone(), just_above_max_lock_period).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let err = client
+            .try_set_lock_period(&admin, &just_above_max_lock_period)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidLockPeriod);
+    }
+
+    #[test]
     fn non_admin_cannot_set_lock_period() {
         let env = Env::default();
         let (contract_id, client, _admin, _user, _token_id) = setup_contract(&env);
