@@ -2,13 +2,14 @@
 
 Shelterflex is a **Rent Now, Pay Later (RNPL)** platform that enables tenants to secure rental properties with an initial deposit and pay the remaining balance in monthly installments — while allowing landlords to list properties directly, reducing reliance on traditional agents.
 
-The platform combines three layers:
+The platform combines three layers:  
 
 - **Property Marketplace** — Verified listings tenants can browse, filter, and secure
 - **Financing Engine** — Installment-based rent with tiered interest plans (3, 6, or 12 months)
 - **Risk & Credit Assessment** — Tenant screening via income verification, bank statements, and alternative data
 
 ### Platform Stakeholders
+
 
 | Role | Description |
 |---|---|

@@ -89,6 +89,7 @@ import { createAdminSessionsRouter } from "./routes/adminSessions.js";
 import { durableIdempotencyService } from "./services/durableIdempotencyService.js";
 import { createSupportRouter } from "./routes/support.js";
 import { createPropertyIssueReportsRouter } from "./routes/propertyIssueReports.js";
+import { createPropertyPhotosRouter } from "./routes/propertyPhotos.js";
 import {
   PostgresTenantApplicationStore,
   initTenantApplicationStore,
@@ -109,7 +110,12 @@ import { createPartnerLandlordApplicationsRouter } from "./routes/partnerLandlor
 import { createApartmentReviewsRouter } from "./routes/apartmentReviews.js";
 import { createComplianceReportRouter } from "./routes/complianceReport.js";
 import { createTenantCreditScoringRouter } from "./routes/tenantCreditScoring.js";
+import { createTenantDocumentVaultRouter } from "./routes/tenantDocumentVault.js";
+import { createLandlordPayoutScheduleRouter } from "./routes/landlordPayoutSchedule.js";
 import { createDocsRouter } from "./routes/docs.js";
+import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
+import { createAdminFraudRouter } from "./routes/adminFraud.js";
+import { initializeCacheInvalidationWebhooks } from "./services/cacheInvalidation.js";
 
 export function createApp() {
   const app = express();
@@ -117,6 +123,11 @@ export function createApp() {
   // Initialize secret rotation service
   if (env.NODE_ENV !== "test") {
     initializeAppSecretRotation();
+  }
+
+  // Initialize cache invalidation webhooks
+  if (env.NODE_ENV !== "test") {
+    initializeCacheInvalidationWebhooks();
   }
 
   // Test database
@@ -255,6 +266,11 @@ export function createApp() {
   const jobScheduler = new JobScheduler(
     parseInt(process.env.JOB_SCHEDULER_POLL_MS ?? '5000', 10),
   )
+
+  // Fraud Detection Store — swap to Postgres when DATABASE_URL is set
+  if (process.env.DATABASE_URL) {
+    initFraudStore(new PostgresFraudStore());
+  }
 
   // Register notification job handler
   const notificationService = getNotificationService()
@@ -487,6 +503,7 @@ export function createApp() {
   app.use("/api/admin/sessions", createAdminSessionsRouter());
   app.use("/api/admin/secrets", createSecretRotationRouter());
   app.use("/api/admin/jobs", createAdminJobsRouter());
+  app.use("/api/admin/fraud", createAdminFraudRouter());
   app.use("/api/admin", createAdminAuditRouter());
   app.use("/api/deals", createDealsRouter());
   app.use("/api/whistleblower", createWhistleblowerRouter(earningsService));
@@ -508,6 +525,7 @@ export function createApp() {
   app.use("/api/webhooks", createWebhooksRouter(ngnWalletService));
   app.use("/api/deposits", createDepositsRouter(conversionService));
   app.use("/api/gas-metrics", createGasMetricsRouter());
+  app.use("/api", createPropertyPhotosRouter());
   app.use("/api/landlord/properties", createLandlordPropertiesRouter());
   app.use(
     "/api/landlord/partner-applications",
@@ -525,6 +543,8 @@ export function createApp() {
   app.use("/api/apartment-reviews", createApartmentReviewsRouter());
   app.use("/api/compliance/reports", createComplianceReportRouter());
   app.use("/api/tenant/credit-scoring", createTenantCreditScoringRouter());
+  app.use("/api/tenant/vault", createTenantDocumentVaultRouter());
+  app.use("/api/landlord/payout-schedule", createLandlordPayoutScheduleRouter());
   app.use("/api", migrationGuideRouter);
 
   // Interactive API documentation

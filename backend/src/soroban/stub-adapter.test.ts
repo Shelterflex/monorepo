@@ -1,7 +1,8 @@
-import { describe, test, expect, beforeEach } from 'vitest'
+import { describe, test, expect, beforeEach, vi } from 'vitest'
 import { StubSorobanAdapter } from './stub-adapter.js'
 import { TestSorobanAdapter } from './test-adapter.js'
 import { SorobanConfig } from './client.js'
+import { TxType } from '../outbox/types.js'
 
 describe('StubSorobanAdapter', () => {
     const baseConfig: SorobanConfig = {
@@ -56,11 +57,48 @@ describe('StubSorobanAdapter', () => {
         const adapter = new StubSorobanAdapter(baseConfig)
         await adapter.getReceiptEvents(1000)
         // Internal _ledger is now 1001
-        
+
         adapter._testOnlyReset()
-        
+
         const events = await adapter.getReceiptEvents(null)
         expect(events[0].ledger).toBe(1001) // Starts from 1000 + 1
+    })
+
+    describe('recordReceipt', () => {
+        test('resolves without making network calls', async () => {
+            const adapter = new StubSorobanAdapter(baseConfig)
+            const fetchSpy = vi.spyOn(globalThis, 'fetch' as any)
+
+            await expect(
+                adapter.recordReceipt({
+                    txId: 'deadbeef',
+                    txType: TxType.TENANT_REPAYMENT,
+                    amountUsdc: '100.00',
+                    tokenAddress: 'CDUSDC',
+                    dealId: 'deal-1',
+                })
+            ).resolves.toBeUndefined()
+
+            expect(fetchSpy).not.toHaveBeenCalled()
+            fetchSpy.mockRestore()
+        })
+
+        test('does not require contractId or adminSecret', async () => {
+            const adapter = new StubSorobanAdapter({
+                rpcUrl: 'http://localhost:8000',
+                networkPassphrase: 'Test SDF Network ; September 2015',
+            })
+
+            await expect(
+                adapter.recordReceipt({
+                    txId: 'cafe',
+                    txType: TxType.STAKE,
+                    amountUsdc: '0',
+                    tokenAddress: 'CDUSDC',
+                    dealId: 'staking-transaction',
+                })
+            ).resolves.toBeUndefined()
+        })
     })
 })
 

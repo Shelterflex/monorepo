@@ -16,4 +16,21 @@ export {
 	getRateLimitStats,
 	type EndpointRateLimitConfig,
 } from "./comprehensiveRateLimit.js";
+export {
+	cacheControl,
+	CachePresets,
+	registerEndpointCache,
+	getEndpointCache,
+	getRequestCacheConfig,
+	shouldBypassCache,
+	recordCacheHit,
+	recordCacheMiss,
+	recordCacheInvalidation,
+	type CacheConfig,
+} from "./cacheControl.js";
+export {
+	createAdvancedRateLimiter,
+	RateLimitPresets,
+	type AdvancedRateLimitConfig,
+} from "./advancedRateLimit.js";
 

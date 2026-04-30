@@ -679,8 +679,12 @@ export class RealSorobanAdapter implements SorobanAdapter {
   /**
    * Submit a transaction to the Soroban network.
    * This involves building, signing, and submitting the actual transaction.
+   *
+   * Marked `protected` so that adapter-level tests can subclass and replace
+   * the network-bound transaction submission while still exercising the real
+   * `recordReceipt` argument-mapping and error-handling code paths.
    */
-  private async invokeTransaction(
+  protected async invokeTransaction(
     contractId: string,
     method: string,
     args: xdr.ScVal[],

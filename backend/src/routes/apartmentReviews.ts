@@ -10,8 +10,17 @@ import {
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { logger } from '../utils/logger.js'
+import { cacheControl, CachePresets, registerEndpointCache } from '../middleware/cacheControl.js'
+import { invalidateCacheOnMutation } from '../services/cacheInvalidation.js'
 
 const router = Router()
+
+// Register cache configurations
+registerEndpointCache('/api/apartment-reviews', {
+  ...CachePresets.dynamic,
+  tags: ['reviews'],
+  cacheKey: 'reviews:list',
+})
 
 /**
  * List reviews for an apartment
@@ -19,6 +28,7 @@ const router = Router()
  */
 router.get(
   '/',
+  cacheControl(CachePresets.dynamic),
   async (req, res, next) => {
     try {
       const filters = apartmentReviewFiltersSchema.parse(req.query)
@@ -38,10 +48,11 @@ router.post(
   '/',
   authenticateToken,
   validate(createApartmentReviewSchema, 'body'),
+  cacheControl(CachePresets.noCache),
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
       const { apartmentId, rating, content, verifiedStay } = req.body
-      
+
       // Verify apartment exists
       const apartment = await landlordPropertyStore.getById(apartmentId)
       if (!apartment) {
@@ -55,6 +66,10 @@ router.post(
         content,
         verifiedStay,
       })
+
+      // Invalidate cache for reviews and property
+      invalidateCacheOnMutation('review', review.id, 'create')
+      invalidateCacheOnMutation('property', apartmentId, 'update')
 
       logger.info('Apartment review created', { reviewId: review.id, apartmentId, userId: req.user!.id })
       res.status(201).json(review)

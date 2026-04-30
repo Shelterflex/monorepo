@@ -84,9 +84,17 @@ export class StubSorobanAdapter implements SorobanAdapter {
           return claimable
      }
 
+     /**
+      * Stub recordReceipt: logs the call but performs no on-chain work.
+      *
+      * The real on-chain `record_receipt` invocation lives in
+      * `RealSorobanAdapter.recordReceipt` (real-adapter.ts), which is selected
+      * when SOROBAN_ADAPTER_MODE=real (see `createSorobanAdapter` in index.ts).
+      *
+      * This stub is intentionally inert so local development and unit tests
+      * never make network calls or require admin signing keys.
+      */
      async recordReceipt(params: RecordReceiptParams): Promise<void> {
-          // Stub: log the receipt recording. In production, calls the Soroban contract.
-          // TODO: Replace with: client.invoke('record_receipt', params)
           logger.info('Soroban stub: recordReceipt', {
                txId: params.txId,
                txType: params.txType,

@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   AlertTriangle,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -118,6 +119,14 @@ export default function LandlordDashboard() {
             >
               <Users className="h-5 w-5" />
               My Tenants
+            </Link>
+            <Link
+              href="/dashboard/landlord/payouts"
+              className="flex items-center gap-3 border-3 border-foreground bg-card p-3 font-bold transition-all hover:bg-muted hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <DollarSign className="h-5 w-5" />
+              Payout Schedule
             </Link>
             <Link
               href="/messages"

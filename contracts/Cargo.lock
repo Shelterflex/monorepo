@@ -628,7 +628,7 @@ dependencies = [
 name = "epoch_rewards"
 version = "0.1.0"
 dependencies = [
- "soroban-sdk",
+ "soroban-sdk 22.0.10",
 ]
 
 [[package]]
@@ -1509,7 +1509,7 @@ dependencies = [
 name = "slashing_module"
 version = "0.1.0"
 dependencies = [
- "soroban-sdk",
+ "soroban-sdk 22.0.10",
 ]
 
 [[package]]
@@ -1914,7 +1914,7 @@ dependencies = [
 name = "stake_delegation"
 version = "0.1.0"
 dependencies = [
- "soroban-sdk",
+ "soroban-sdk 22.0.10",
 ]
 
 [[package]]

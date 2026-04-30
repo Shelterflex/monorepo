@@ -24,6 +24,10 @@ export interface ScheduledJob {
   lastError: string | null
   createdAt: Date
   updatedAt: Date
+  // Lease-based deduplication fields
+  leaseHolder: string | null
+  leaseAcquiredAt: Date | null
+  leaseExpiresAt: Date | null
 }
 
 export interface CreateJobInput {
@@ -38,3 +42,24 @@ export interface CreateJobInput {
 }
 
 export type JobHandler = (job: ScheduledJob) => Promise<void>
+
+export enum JobRunStatus {
+  STARTED = 'started',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
+export interface JobRunHistory {
+  id: string
+  jobId: string
+  jobName: string
+  handler: string
+  workerId: string
+  status: JobRunStatus
+  startedAt: Date
+  completedAt: Date | null
+  durationMs: number | null
+  errorMessage: string | null
+  payload: Record<string, unknown>
+  createdAt: Date
+}

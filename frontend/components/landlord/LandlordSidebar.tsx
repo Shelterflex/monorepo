@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Settings,
   BarChart3,
+  DollarSign,
   X,
   Menu,
 } from "lucide-react";
@@ -22,6 +23,7 @@ export function LandlordSidebar() {
     { href: "/dashboard/landlord", label: "Dashboard", icon: Home },
     { href: "/dashboard/landlord/properties", label: "My Properties", icon: Building2 },
     { href: "/dashboard/landlord/tenants", label: "My Tenants", icon: Users },
+    { href: "/dashboard/landlord/payouts", label: "Payout Schedule", icon: DollarSign },
     { href: "/dashboard/landlord/analytics", label: "Analytics", icon: BarChart3 },
     { href: "/messages", label: "Messages", icon: MessageSquare, badge: 3 },
     { href: "/dashboard/landlord/settings", label: "Settings", icon: Settings },
