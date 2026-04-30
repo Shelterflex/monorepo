@@ -169,6 +169,18 @@ export default function PropertyDetailClient({
 
   const property = properties.find((p) => p.id === Number.parseInt(propertyId));
 
+  const nextImage = useCallback(() => {
+    if (!property) return;
+    setActiveImageIndex((prev) => (prev + 1) % property.images.length);
+  }, [property]);
+
+  const prevImage = useCallback(() => {
+    if (!property) return;
+    setActiveImageIndex(
+      (prev) => (prev - 1 + property.images.length) % property.images.length,
+    );
+  }, [property]);
+
   if (!property) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
@@ -204,16 +216,6 @@ export default function PropertyDetailClient({
   const monthlyPayment = Math.round(
     (amountToFinance + inspectionFee) / paymentMonths,
   );
-
-  const nextImage = useCallback(() => {
-    setActiveImageIndex((prev) => (prev + 1) % property.images.length);
-  }, [property.images.length]);
-
-  const prevImage = useCallback(() => {
-    setActiveImageIndex(
-      (prev) => (prev - 1 + property.images.length) % property.images.length,
-    );
-  }, [property.images.length]);
 
   const handleReportSubmit = async () => {
     if (!reportCategory || !reportDetails.trim()) return;

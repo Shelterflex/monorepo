@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
+import NextImage from 'next/image'
 import { Image as ImageIcon, Star, Trash2, GripVertical, X, Upload, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -412,10 +413,11 @@ function PhotoCard({
     >
       {/* Image */}
       <div className="aspect-square relative">
-        <img
+        <NextImage
           src={photo.url}
           alt={photo.fileName || 'Property photo'}
-          className="w-full h-full object-cover"
+          fill
+          className="object-cover"
         />
         
         {/* Featured Badge */}
@@ -530,11 +532,12 @@ function Lightbox({ isOpen, photo, photos, onClose, onNext, onPrev }: LightboxPr
       )}
 
       {/* Image */}
-      <div className="max-w-4xl max-h-[80vh] p-4">
-        <img
+      <div className="relative max-w-4xl max-h-[80vh] p-4 w-full h-[80vh]">
+        <NextImage
           src={photo.url}
           alt={photo.fileName || 'Property photo'}
-          className="max-w-full max-h-full object-contain"
+          fill
+          className="object-contain"
         />
       </div>
 
