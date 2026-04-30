@@ -30,9 +30,7 @@ import {
   houseRules,
 } from "@/lib/mockData/documents";
 
-import { DashboardHeader } from "@/components/dashboard-header";
 import { TenantSidebar } from "@/components/tenant/TenantSidebar";
-import { leaseDetails } from "@/lib/mockData/leaseData";
 
 export default function TenantLeasePage() {
   const [selectedDocument, setSelectedDocument] = useState<
