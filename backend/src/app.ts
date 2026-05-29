@@ -90,6 +90,7 @@ import { durableIdempotencyService } from "./services/durableIdempotencyService.
 import { createSupportRouter } from "./routes/support.js";
 import { createPropertyIssueReportsRouter } from "./routes/propertyIssueReports.js";
 import { createPropertyPhotosRouter } from "./routes/propertyPhotos.js";
+import { createPropertyInspectionsRouter } from "./routes/propertyInspections.js";
 import { createPropertiesRouter } from "./routes/properties.js";
 import { createTenantRatingCardRouter } from "./routes/tenantRatingCard.js";
 import { createQuoteRouter } from "./routes/quote.js";
@@ -530,6 +531,7 @@ export function createApp() {
   app.use("/api/deposits", createDepositsRouter(conversionService));
   app.use("/api/gas-metrics", createGasMetricsRouter());
   app.use("/api", createPropertyPhotosRouter());
+  app.use("/api", createPropertyInspectionsRouter());
   app.use("/api/properties", createPropertiesRouter());
   app.use("/api/landlord/properties", createLandlordPropertiesRouter());
   app.use(

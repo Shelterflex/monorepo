@@ -9,7 +9,7 @@ export interface AuthenticatedRequest extends Request {
     id: string
     email: string
     name: string
-    role: 'tenant' | 'landlord' | 'agent'
+    role: 'tenant' | 'landlord' | 'agent' | 'inspector' | 'admin'
   }
 }
 

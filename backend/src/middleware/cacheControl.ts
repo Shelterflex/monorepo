@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express'
 import { AuthenticatedRequest } from './auth.js'
 import { meter } from '../utils/metrics.js'
 
+type CacheBypassRole = 'tenant' | 'landlord' | 'agent' | 'inspector' | 'admin'
+
 /**
  * Cache configuration for endpoints
  */
@@ -21,7 +23,7 @@ export interface CacheConfig {
   /** Whether to vary cache by user */
   varyByUser?: boolean
   /** Whether to bypass cache for specific user roles */
-  bypassForRoles?: ('tenant' | 'landlord' | 'agent')[]
+  bypassForRoles?: CacheBypassRole[]
 }
 
 /**
@@ -68,7 +70,7 @@ export const CachePresets: Record<string, CacheConfig> = {
     privateTtl: 0,
     shared: false,
     requiresAuth: true,
-    bypassForRoles: ['landlord', 'agent', 'tenant'],
+    bypassForRoles: ['landlord', 'agent', 'tenant', 'inspector'],
   },
 
   // No caching

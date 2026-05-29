@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { getPool } from '../db.js'
 import { userCache } from '../utils/cache.js'
 
-export type UserRole = 'tenant' | 'landlord' | 'agent'
+export type UserRole = 'tenant' | 'landlord' | 'agent' | 'inspector' | 'admin'
 
 export interface User {
   id: string

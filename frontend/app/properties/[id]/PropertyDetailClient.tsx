@@ -33,6 +33,12 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +59,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { allProperties } from "@/lib/mockData/properties";
 import { AmenitiesLegend } from "@/components/properties/AmenitiesLegend";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
-import { apiPost } from "@/lib/api";
+import { apiFetch, apiPost } from "@/lib/api";
 import { VerificationBadge, VerificationStatus } from "@/components/properties/verification-badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ApartmentReviews } from "@/components/properties/ApartmentReviews";
@@ -98,6 +104,11 @@ type PropertyDetailClientProps = {
   propertyId: string;
 };
 
+type InspectionSummary = {
+  approvedAt: string;
+  categories: Record<string, { pass: number; fail: number; na: number }>;
+};
+
 export default function PropertyDetailClient({
   propertyId,
 }: PropertyDetailClientProps) {
@@ -111,6 +122,8 @@ export default function PropertyDetailClient({
   const [reportDetails, setReportDetails] = useState("");
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [inspectionSummary, setInspectionSummary] =
+    useState<InspectionSummary | null>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
   const mainGalleryRef = useRef<HTMLDivElement>(null);
 
@@ -168,6 +181,22 @@ export default function PropertyDetailClient({
   }, [showLightbox]);
 
   const property = properties.find((p) => p.id === Number.parseInt(propertyId));
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ data: InspectionSummary }>(
+      `/api/properties/${propertyId}/inspection-summary`,
+    )
+      .then((response) => {
+        if (!cancelled) setInspectionSummary(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) setInspectionSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyId]);
 
   if (!property) {
     return (
@@ -418,6 +447,12 @@ export default function PropertyDetailClient({
                     </h1>
                     <div className="flex items-center gap-3">
                       <VerificationBadge status={(property as any).verificationStatus || 'PENDING'} />
+                      {inspectionSummary && (
+                        <Badge className="border-2 border-foreground bg-secondary font-bold">
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                          Inspection Verified
+                        </Badge>
+                      )}
                       {(property as any).verificationStatus === 'VERIFIED' && (
                         <span className="text-xs text-muted-foreground font-mono">
                           Verified by <span className="font-bold underline">ShelterFlex Agent #104</span>
@@ -473,6 +508,31 @@ export default function PropertyDetailClient({
                     </span>
                   </div>
                 </div>
+
+                {inspectionSummary && (
+                  <Collapsible className="mt-6 border-3 border-foreground bg-card p-4 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between font-mono text-lg font-black">
+                      Inspection summary
+                      <span className="text-sm font-bold text-muted-foreground">
+                        Approved {new Date(inspectionSummary.approvedAt).toLocaleDateString()}
+                      </span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {Object.entries(inspectionSummary.categories).map(
+                        ([category, counts]) => (
+                          <div key={category} className="border-2 border-foreground p-3">
+                            <p className="mb-2 font-bold capitalize">{category}</p>
+                            <div className="flex gap-2 text-sm font-bold">
+                              <Badge variant="outline">Pass {counts.pass}</Badge>
+                              <Badge variant="outline">Fail {counts.fail}</Badge>
+                              <Badge variant="outline">N/A {counts.na}</Badge>
+                            </div>
+                          </div>
+                        ),
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
               </div>
 
               {/* Description */}

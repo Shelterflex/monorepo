@@ -22,6 +22,7 @@ interface ListingStorePort {
     reviewedBy: string,
     rejectionReason?: string,
   ): Promise<Listing | null>
+  markVerifiedInspection(listingId: string): Promise<Listing | null>
   clear(): Promise<void>
 }
 
@@ -46,6 +47,8 @@ class InMemoryListingStore implements ListingStorePort {
       description: input.description,
       photos: input.photos,
       status: ListingStatus.PENDING_REVIEW,
+      hasVerifiedInspection: false,
+      trustScore: 0,
       createdAt: now,
       updatedAt: now,
     }
@@ -217,6 +220,16 @@ class InMemoryListingStore implements ListingStorePort {
     return listing
   }
 
+  async markVerifiedInspection(listingId: string): Promise<Listing | null> {
+    const listing = this.listings.get(listingId)
+    if (!listing) return null
+    listing.hasVerifiedInspection = true
+    listing.trustScore = Math.max(listing.trustScore ?? 0, 25) + 10
+    listing.updatedAt = new Date()
+    this.listings.set(listingId, listing)
+    return listing
+  }
+
   async clear(): Promise<void> {
     this.listings.clear()
     this.whistleblowerMonthlyReports.clear()
@@ -244,6 +257,8 @@ type ListingRow = {
   deal_id: string | null
   created_at: Date
   updated_at: Date
+  has_verified_inspection?: boolean | null
+  trust_score?: string | number | null
 }
 
 class PostgresListingStore implements ListingStorePort {
@@ -492,6 +507,21 @@ class PostgresListingStore implements ListingStorePort {
     return this.mapRow(rows[0] as ListingRow)
   }
 
+  async markVerifiedInspection(listingId: string): Promise<Listing | null> {
+    const pool = await this.pool()
+    const { rows } = await pool.query(
+      `UPDATE whistleblower_listings
+       SET has_verified_inspection = TRUE,
+           trust_score = GREATEST(COALESCE(trust_score, 0), 25) + 10,
+           updated_at = NOW()
+       WHERE listing_id = $1
+       RETURNING *`,
+      [listingId],
+    )
+    if (rows.length === 0) return null
+    return this.mapRow(rows[0] as ListingRow)
+  }
+
   async clear(): Promise<void> {
     const pool = await this.pool()
     if (process.env.NODE_ENV !== 'test') {
@@ -527,6 +557,8 @@ class PostgresListingStore implements ListingStorePort {
       reviewedAt: row.reviewed_at ? new Date(row.reviewed_at) : undefined,
       rejectionReason: row.rejection_reason ?? undefined,
       dealId: row.deal_id ?? undefined,
+      hasVerifiedInspection: Boolean(row.has_verified_inspection),
+      trustScore: row.trust_score != null ? toNumber(row.trust_score) : 0,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     }
@@ -591,6 +623,11 @@ class HybridListingStore implements ListingStorePort {
   ): Promise<Listing | null> {
     const adapter = await this.adapter()
     return adapter.moderate(listingId, status, reviewedBy, rejectionReason)
+  }
+
+  async markVerifiedInspection(listingId: string): Promise<Listing | null> {
+    const adapter = await this.adapter()
+    return adapter.markVerifiedInspection(listingId)
   }
 
   async clear(): Promise<void> {
