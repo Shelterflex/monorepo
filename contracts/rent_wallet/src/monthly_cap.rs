@@ -63,9 +63,10 @@ pub fn record_monthly_spent(env: &Env, user: &Address, additional: i128) {
         .persistent()
         .get::<_, i128>(&crate::DataKey::MonthlySpent(user.clone(), key))
         .unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MonthlySpent(user.clone(), key), &(current + additional));
+    env.storage().persistent().set(
+        &crate::DataKey::MonthlySpent(user.clone(), key),
+        &(current + additional),
+    );
 }
 
 /// Called from `debit()` before the balance is modified.
@@ -92,7 +93,10 @@ pub fn check_and_record_debit(
 
 pub fn emit_monthly_cap_set(env: &Env, user: Option<Address>, cap: i128) {
     env.events().publish(
-        (Symbol::new(env, "monthly_cap"), Symbol::new(env, "monthly_cap_set")),
+        (
+            Symbol::new(env, "monthly_cap"),
+            Symbol::new(env, "monthly_cap_set"),
+        ),
         (user, cap),
     );
 }

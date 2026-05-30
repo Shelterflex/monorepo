@@ -50,10 +50,15 @@ mod upgrade_governance_tests {
 
         // Leak the Env to give it 'static lifetime so Ctx can own client
         let env: Env = unsafe { std::mem::transmute(env) };
-        let client: WhistleblowerRewardsClient<'static> =
-            unsafe { std::mem::transmute(client) };
+        let client: WhistleblowerRewardsClient<'static> = unsafe { std::mem::transmute(client) };
 
-        Ctx { env, contract_id, client, admin, operator }
+        Ctx {
+            env,
+            contract_id,
+            client,
+            admin,
+            operator,
+        }
     }
 
     // ── Helper: leaks Env to 'static so the struct is self-contained ─────────
@@ -122,10 +127,7 @@ mod upgrade_governance_tests {
     fn proposing_while_upgrade_pending_fails() {
         let (env, _contract_id, client, admin, _operator) = make_env_and_client();
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         let err = client
             .try_propose_upgrade(&admin, &alt_hash(&env))
@@ -149,17 +151,11 @@ mod upgrade_governance_tests {
 
         env.ledger().set_timestamp(1_000);
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         // Advance to just before delay expires
         env.ledger().set_timestamp(1_000 + delay_secs - 1);
-        let err = client
-            .try_execute_upgrade(&admin)
-            .unwrap()
-            .unwrap_err();
+        let err = client.try_execute_upgrade(&admin).unwrap().unwrap_err();
         assert_eq!(err, ContractError::UpgradeDelayNotMet);
     }
 
@@ -174,10 +170,7 @@ mod upgrade_governance_tests {
 
         env.ledger().set_timestamp(1_000);
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         env.ledger().set_timestamp(1_000 + delay_secs);
         // execute_upgrade calls env.deployer().update_current_contract_wasm — this will
@@ -205,10 +198,7 @@ mod upgrade_governance_tests {
         // Default delay is 0 — propose+execute should pass immediately
         env.ledger().set_timestamp(500);
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         // No delay set → execute should NOT return UpgradeDelayNotMet
         let result = client.try_execute_upgrade(&admin);
@@ -225,10 +215,7 @@ mod upgrade_governance_tests {
     fn admin_can_cancel_pending_upgrade() {
         let (env, _contract_id, client, admin, _operator) = make_env_and_client();
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         client
             .try_cancel_upgrade(&admin)
@@ -240,26 +227,17 @@ mod upgrade_governance_tests {
     fn after_cancel_execute_upgrade_fails_with_no_pending() {
         let (env, _contract_id, client, admin, _operator) = make_env_and_client();
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
         client.try_cancel_upgrade(&admin).unwrap().unwrap();
 
-        let err = client
-            .try_execute_upgrade(&admin)
-            .unwrap()
-            .unwrap_err();
+        let err = client.try_execute_upgrade(&admin).unwrap().unwrap_err();
         assert_eq!(err, ContractError::NoUpgradePending);
     }
 
     #[test]
     fn cancel_upgrade_with_no_pending_fails() {
         let (_env, _contract_id, client, admin, _operator) = make_env_and_client();
-        let err = client
-            .try_cancel_upgrade(&admin)
-            .unwrap()
-            .unwrap_err();
+        let err = client.try_cancel_upgrade(&admin).unwrap().unwrap_err();
         assert_eq!(err, ContractError::NoUpgradePending);
     }
 
@@ -271,17 +249,11 @@ mod upgrade_governance_tests {
     fn non_admin_cannot_execute_upgrade() {
         let (env, _contract_id, client, admin, _operator) = make_env_and_client();
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         let rogue = Address::generate(&env);
         env.ledger().set_timestamp(999_999);
-        let err = client
-            .try_execute_upgrade(&rogue)
-            .unwrap()
-            .unwrap_err();
+        let err = client.try_execute_upgrade(&rogue).unwrap().unwrap_err();
         assert_eq!(err, ContractError::NotAuthorized);
     }
 
@@ -289,10 +261,7 @@ mod upgrade_governance_tests {
     fn after_execute_pending_state_is_cleared() {
         let (env, _contract_id, client, admin, _operator) = make_env_and_client();
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         env.ledger().set_timestamp(999_999);
         let result = client.try_execute_upgrade(&admin);
@@ -300,10 +269,7 @@ mod upgrade_governance_tests {
         // should have been cleared. Verify by attempting cancel which requires
         // a pending upgrade to exist.
         if result.is_ok() {
-            let err = client
-                .try_cancel_upgrade(&admin)
-                .unwrap()
-                .unwrap_err();
+            let err = client.try_cancel_upgrade(&admin).unwrap().unwrap_err();
             assert_eq!(err, ContractError::NoUpgradePending);
         }
     }
@@ -315,10 +281,7 @@ mod upgrade_governance_tests {
     #[test]
     fn execute_upgrade_with_no_pending_fails() {
         let (_env, _contract_id, client, admin, _operator) = make_env_and_client();
-        let err = client
-            .try_execute_upgrade(&admin)
-            .unwrap()
-            .unwrap_err();
+        let err = client.try_execute_upgrade(&admin).unwrap().unwrap_err();
         assert_eq!(err, ContractError::NoUpgradePending);
     }
 
@@ -353,17 +316,11 @@ mod upgrade_governance_tests {
         let now: u64 = 10_000;
         env.ledger().set_timestamp(now);
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
 
         // Exactly at the boundary should fail (timestamp < execute_at)
         env.ledger().set_timestamp(now + delay_secs - 1);
-        let err = client
-            .try_execute_upgrade(&admin)
-            .unwrap()
-            .unwrap_err();
+        let err = client.try_execute_upgrade(&admin).unwrap().unwrap_err();
         assert_eq!(err, ContractError::UpgradeDelayNotMet);
 
         // One second later passes the check
@@ -378,10 +335,7 @@ mod upgrade_governance_tests {
     fn propose_after_cancel_succeeds() {
         let (env, _contract_id, client, admin, _operator) = make_env_and_client();
         let hash = zeroed_hash(&env);
-        client
-            .try_propose_upgrade(&admin, &hash)
-            .unwrap()
-            .unwrap();
+        client.try_propose_upgrade(&admin, &hash).unwrap().unwrap();
         client.try_cancel_upgrade(&admin).unwrap().unwrap();
 
         // After cancel a fresh proposal is allowed

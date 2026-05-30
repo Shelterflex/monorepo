@@ -20,15 +20,15 @@ impl GovernanceContract {
         if env.ledger().timestamp() < proposal.deadline {
             panic!("Too early");
         }
-        
+
         if proposal.votes_for < quorum {
             panic!("No quorum");
         }
-        
+
         if proposal.vetoed {
             panic!("Vetoed");
         }
-        
+
         // Execute logic here
     }
 }

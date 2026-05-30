@@ -29,7 +29,9 @@ impl MultisigContract {
         }
 
         approvals.push_back(signer);
-        env.storage().persistent().set(&DataKey::Approvals(op_id), &approvals);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Approvals(op_id), &approvals);
     }
 
     pub fn execute(env: Env, op_id: u64, threshold: u32) {
@@ -42,7 +44,7 @@ impl MultisigContract {
         if approvals.len() < threshold {
             panic!("Not enough approvals");
         }
-        
+
         // Execute logic here
     }
 
@@ -59,7 +61,9 @@ impl MultisigContract {
                 new_approvals.push_back(s);
             }
         }
-        
-        env.storage().persistent().set(&DataKey::Approvals(op_id), &new_approvals);
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Approvals(op_id), &new_approvals);
     }
 }

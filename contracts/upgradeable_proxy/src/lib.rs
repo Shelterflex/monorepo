@@ -22,10 +22,10 @@
 //! - The confirmed hash must match the proposed hash (prevents TOCTOU).
 //! - Admin can be transferred via the same two-step flow.
 
+use soroban_sdk::Address;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, BytesN, Env, Map, String, Symbol,
 };
-use soroban_sdk::Address;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Storage keys
@@ -108,11 +108,7 @@ impl UpgradeableProxy {
 
     /// Initialise the proxy with an admin and a second approver.
     /// Can only be called once.
-    pub fn init(
-        env: Env,
-        admin: Address,
-        second_approver: Address,
-    ) -> Result<(), ProxyError> {
+    pub fn init(env: Env, admin: Address, second_approver: Address) -> Result<(), ProxyError> {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ProxyError::AlreadyInitialized);
         }
@@ -201,10 +197,13 @@ impl UpgradeableProxy {
 
         let old_version = get_version(&env);
         let new_version = old_version + 1;
-        env.storage().instance().set(&DataKey::Version, &new_version);
+        env.storage()
+            .instance()
+            .set(&DataKey::Version, &new_version);
 
         // Swap the WASM — all storage above is preserved.
-        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
+        env.deployer()
+            .update_current_contract_wasm(new_wasm_hash.clone());
 
         env.events().publish(
             (
@@ -244,11 +243,7 @@ impl UpgradeableProxy {
     /// Transfer admin rights. Requires current admin auth; new admin takes
     /// effect immediately (single-step for simplicity — extend to two-step
     /// if desired).
-    pub fn transfer_admin(
-        env: Env,
-        admin: Address,
-        new_admin: Address,
-    ) -> Result<(), ProxyError> {
+    pub fn transfer_admin(env: Env, admin: Address, new_admin: Address) -> Result<(), ProxyError> {
         admin.require_auth();
 
         if admin != get_admin(&env) {

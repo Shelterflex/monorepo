@@ -1,6 +1,8 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
+};
 
 #[contracttype]
 #[derive(Clone)]
@@ -199,12 +201,7 @@ impl RentSchedule {
         );
     }
 
-    pub fn mark_overdue(
-        env: Env,
-        caller: Address,
-        deal_id: String,
-        instalment_number: u32,
-    ) {
+    pub fn mark_overdue(env: Env, caller: Address, deal_id: String, instalment_number: u32) {
         require_not_paused(&env);
         let cfg: Config = env
             .storage()
@@ -243,12 +240,7 @@ impl RentSchedule {
         );
     }
 
-    pub fn waive_instalment(
-        env: Env,
-        caller: Address,
-        deal_id: String,
-        instalment_number: u32,
-    ) {
+    pub fn waive_instalment(env: Env, caller: Address, deal_id: String, instalment_number: u32) {
         let cfg: Config = env
             .storage()
             .instance()

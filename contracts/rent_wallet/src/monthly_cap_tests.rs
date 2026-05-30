@@ -22,9 +22,8 @@ mod monthly_cap_tests {
         env.mock_all_auths();
 
         let contract_id = env.register(RentWallet, ());
-        let client: RentWalletClient<'static> = unsafe {
-            std::mem::transmute(RentWalletClient::new(&env, &contract_id))
-        };
+        let client: RentWalletClient<'static> =
+            unsafe { std::mem::transmute(RentWalletClient::new(&env, &contract_id)) };
 
         let admin = Address::generate(&env);
         let user = Address::generate(&env);
@@ -33,7 +32,10 @@ mod monthly_cap_tests {
         env.ledger().set_timestamp(MONTH_SECS); // put us in month 1
 
         // Fund user
-        client.try_credit(&admin, &user, &10_000i128).unwrap().unwrap();
+        client
+            .try_credit(&admin, &user, &10_000i128)
+            .unwrap()
+            .unwrap();
 
         (env, contract_id, client, admin, user)
     }
@@ -88,7 +90,10 @@ mod monthly_cap_tests {
             .unwrap()
             .unwrap();
 
-        client.try_debit(&admin, &user, &1_000i128).unwrap().unwrap();
+        client
+            .try_debit(&admin, &user, &1_000i128)
+            .unwrap()
+            .unwrap();
         // 1000 spent, 500 remaining
         client.try_debit(&admin, &user, &500i128).unwrap().unwrap();
         // 1500 spent — exactly at cap; next debit must fail
