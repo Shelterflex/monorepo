@@ -8,15 +8,39 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  frontend:
-    name: Frontend (lint, build)
+  test-frontend:
+    name: test-frontend
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        id: cache-pnpm-frontend
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-frontend-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-frontend-${{ runner.os }}-
+
+      - name: Print cache status
+        run: |
+          if [ "${{ steps.cache-pnpm-frontend.outputs.cache-hit }}" = "true" ]; then
+            echo "pnpm cache: HIT (key pnpm-frontend-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }})"
+          else
+            echo "pnpm cache: MISS (key pnpm-frontend-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }})"
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -29,14 +53,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm run lint
+      - name: Test
+        run: pnpm run test --if-present
 
       - name: Build
         run: pnpm run build
 
-  backend:
-    name: Backend (lint, test)
+      - name: Report job duration
+        if: always()
+        run: |
+          END=$(date +%s)
+          DURATION=$((END - JOB_START_EPOCH))
+          echo "### test-frontend: ${DURATION}s" >> "$GITHUB_STEP_SUMMARY"
+
+  test-backend:
+    name: test-backend
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,17 +75,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Cache npm
+        id: cache-npm-backend
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-backend-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            npm-backend-${{ runner.os }}-
+
+      - name: Print cache status
+        run: |
+          if [ "${{ steps.cache-npm-backend.outputs.cache-hit }}" = "true" ]; then
+            echo "npm cache: HIT (key npm-backend-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }})"
+          else
+            echo "npm cache: MISS (key npm-backend-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }})"
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
 
       - name: Unit tests
         run: npm run test:ci --if-present
@@ -62,8 +108,15 @@ jobs:
       - name: Validate OpenAPI spec
         run: npm run openapi:validate
 
-  contracts:
-    name: Contracts (fmt, clippy, test)
+      - name: Report job duration
+        if: always()
+        run: |
+          END=$(date +%s)
+          DURATION=$((END - JOB_START_EPOCH))
+          echo "### test-backend: ${DURATION}s" >> "$GITHUB_STEP_SUMMARY"
+
+  test-contracts:
+    name: test-contracts
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -71,22 +124,251 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust (stable + fmt/clippy)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Cache Cargo registry, git, and target deps
+        id: cache-cargo-contracts
+        uses: actions/cache@v4
         with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target/incremental
+            contracts/target/deps
+          key: cargo-contracts-${{ hashFiles('contracts/Cargo.lock') }}
+          restore-keys: |
+            cargo-contracts-
+
+      - name: Print cache status
+        run: |
+          if [ "${{ steps.cache-cargo-contracts.outputs.cache-hit }}" = "true" ]; then
+            echo "cargo cache: HIT (key cargo-contracts-${{ hashFiles('contracts/Cargo.lock') }})"
+          else
+            echo "cargo cache: MISS (key cargo-contracts-${{ hashFiles('contracts/Cargo.lock') }})"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
           components: rustfmt, clippy
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            contracts -> target
+      - name: Run contract tests
+        run: cargo test --workspace
+
+      - name: Run Clippy (warnings as errors)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features
+      - name: Report job duration
+        if: always()
+        run: |
+          END=$(date +%s)
+          DURATION=$((END - JOB_START_EPOCH))
+          echo "### test-contracts: ${DURATION}s" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Tests
-        run: cargo test --workspace
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.15.5
+
+      - name: Cache pnpm (lint frontend)
+        id: cache-pnpm-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-lint-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-lint-${{ runner.os }}-
+
+      - name: Print frontend cache status
+        run: |
+          if [ "${{ steps.cache-pnpm-lint.outputs.cache-hit }}" = "true" ]; then
+            echo "pnpm cache: HIT"
+          else
+            echo "pnpm cache: MISS"
+          fi
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run lint
+
+      - name: Cache npm (lint backend)
+        id: cache-npm-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-lint-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            npm-lint-${{ runner.os }}-
+
+      - name: Print backend cache status
+        run: |
+          if [ "${{ steps.cache-npm-lint.outputs.cache-hit }}" = "true" ]; then
+            echo "npm cache: HIT"
+          else
+            echo "npm cache: MISS"
+          fi
+
+      - name: Lint backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run lint
+
+      - name: Report job duration
+        if: always()
+        run: |
+          END=$(date +%s)
+          DURATION=$((END - JOB_START_EPOCH))
+          echo "### lint: ${DURATION}s" >> "$GITHUB_STEP_SUMMARY"
+
+  type-check:
+    name: type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.15.5
+
+      - name: Type-check frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc --noEmit
+
+      - name: Type-check backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run typecheck
+
+      - name: Report job duration
+        if: always()
+        run: |
+          END=$(date +%s)
+          DURATION=$((END - JOB_START_EPOCH))
+          echo "### type-check: ${DURATION}s" >> "$GITHUB_STEP_SUMMARY"
+
+  security-scan:
+    name: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record job start
+        run: echo "JOB_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Cache npm (security-scan backend)
+        id: cache-npm-security
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-security-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            npm-security-${{ runner.os }}-
+
+      - name: Print npm cache status
+        run: |
+          if [ "${{ steps.cache-npm-security.outputs.cache-hit }}" = "true" ]; then
+            echo "npm cache: HIT"
+          else
+            echo "npm cache: MISS"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Audit backend dependencies
+        working-directory: backend
+        run: |
+          npm ci
+          npm audit --audit-level=critical
+
+      - name: Report high backend vulnerabilities (informational)
+        working-directory: backend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit contract dependencies
+        working-directory: contracts
+        run: cargo audit
+
+      - name: Report job duration
+        if: always()
+        run: |
+          END=$(date +%s)
+          DURATION=$((END - JOB_START_EPOCH))
+          echo "### security-scan: ${DURATION}s" >> "$GITHUB_STEP_SUMMARY"
+
+  ci-summary:
+    name: ci-summary
+    runs-on: ubuntu-latest
+    needs:
+      - test-frontend
+      - test-backend
+      - test-contracts
+      - lint
+      - type-check
+      - security-scan
+    if: always()
+    steps:
+      - name: CI timing overview
+        run: |
+          echo "## CI job timing" >> "$GITHUB_STEP_SUMMARY"
+          echo "Per-job durations are recorded above by each parallel job." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| test-frontend | ${{ needs.test-frontend.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| test-backend | ${{ needs.test-backend.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| test-contracts | ${{ needs.test-contracts.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| lint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| type-check | ${{ needs.type-check.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| security-scan | ${{ needs.security-scan.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if a required job failed
+        run: |
+          for result in \
+            "${{ needs.test-frontend.result }}" \
+            "${{ needs.test-backend.result }}" \
+            "${{ needs.test-contracts.result }}" \
+            "${{ needs.lint.result }}" \
+            "${{ needs.type-check.result }}" \
+            "${{ needs.security-scan.result }}"; do
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+              echo "A required CI job did not succeed."
+              exit 1
+            fi
+          done
