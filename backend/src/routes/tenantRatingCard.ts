@@ -4,6 +4,7 @@ import { tenantRatingService } from '../services/tenantRatingService.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { auditLog, extractAuditContext } from '../utils/auditLogger.js'
+import { publicTenantRatingRateLimit } from '../middleware/publicRatingRateLimit.js'
 
 const router = Router()
 
@@ -85,7 +86,7 @@ router.post('/ratings/tenant/share-token', authenticateToken, async (req: Authen
   }
 })
 
-router.get('/public/tenant-rating/:token', async (req, res, next) => {
+router.get('/public/tenant-rating/:token', publicTenantRatingRateLimit(), async (req, res, next) => {
   try {
     const { token } = req.params
     const card = await tenantRatingService.getCardByToken(token)
