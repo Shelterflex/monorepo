@@ -1,6 +1,11 @@
 import React from "react";
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
-import { ResponsiveContainer, AreaChart, Area } from "recharts";
+import dynamic from "next/dynamic";
+
+const KPISparkline = dynamic(() => import("./KPISparkline"), {
+  ssr: false,
+  loading: () => null,
+});
 
 export interface KPICardProps {
   title: string;
@@ -97,32 +102,12 @@ export function KPICard({
 
         {/* Mini Sparkline Chart */}
         <div className="absolute right-2 bottom-2 w-28 h-12 opacity-60 group-hover:opacity-90 transition-opacity">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id={`gradient-${title}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor={isPositive ? "#22c55e" : isNegative ? "#ef4444" : "#f59e0b"}
-                    stopOpacity={0.4}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={isPositive ? "#22c55e" : isNegative ? "#ef4444" : "#f59e0b"}
-                    stopOpacity={0}
-                  />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={isPositive ? "#16a34a" : isNegative ? "#dc2626" : "#d97706"}
-                strokeWidth={2.5}
-                fill={`url(#gradient-${title})`}
-                dot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <KPISparkline
+            data={chartData}
+            isPositive={isPositive}
+            isNegative={isNegative}
+            gradientId={`gradient-${title}`}
+          />
         </div>
       </div>
     </div>
