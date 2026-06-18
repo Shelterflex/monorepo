@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CreditScoreGauge } from "@/components/tenant/CreditScoreGauge";
 import { ScoreFactorList } from "@/components/tenant/ScoreFactorList";
-import { ScoreHistoryChart } from "@/components/tenant/ScoreHistoryChart";
 import { ScoreImprovementTips } from "@/components/tenant/ScoreImprovementTips";
 import {
   getMyCreditScore,
@@ -31,6 +30,20 @@ import {
   type ScoreHistoryPoint,
 } from "@/lib/creditScoreApi";
 import { ApiError } from "@/lib/apiClient";
+import dynamic from "next/dynamic";
+
+const ScoreHistoryChart = dynamic(
+  () =>
+    import("@/components/tenant/ScoreHistoryChart").then((m) => ({
+      default: m.ScoreHistoryChart,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 w-full md:h-72 animate-pulse rounded bg-muted" />
+    ),
+  },
+);
 
 interface CreditScoreProfile {
   score: number;
