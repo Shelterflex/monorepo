@@ -8,7 +8,18 @@ import {
   ANNUAL_INTEREST_RATE,
   ESTIMATED_RENTAL_YIELD,
 } from "@/lib/rentToOwnCalc";
-import EquityProgressChart from "./EquityProgressChart";
+import dynamic from "next/dynamic";
+
+const EquityProgressChart = dynamic(() => import("./EquityProgressChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="border-3 border-foreground bg-card p-4 md:p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] animate-pulse">
+      <div className="h-4 w-48 bg-muted rounded mb-1" />
+      <div className="h-3 w-64 bg-muted rounded mb-4" />
+      <div className="h-56 md:h-72 w-full bg-muted rounded" />
+    </div>
+  ),
+});
 import RentToOwnPlanCard from "./RentToOwnPlanCard";
 
 function formatFull(val: number): string {
