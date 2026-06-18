@@ -12,6 +12,7 @@ import {
   Award,
 } from "lucide-react";
 import { KPICard } from "@/components/admin/KPICard";
+import { ChartSkeleton } from "@/components/ui/chart-skeleton";
 import dynamic from "next/dynamic";
 import {
   getAnalyticsOverview,
@@ -29,15 +30,7 @@ const DealFunnelChart = dynamic(
     import("@/components/admin/DealFunnelChart").then((m) => ({
       default: m.DealFunnelChart,
     })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="border-3 border-foreground bg-card p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] animate-pulse flex flex-col justify-between h-[360px]">
-        <div className="h-6 w-48 bg-muted border-2 border-foreground/10 mb-4" />
-        <div className="flex-1 w-full bg-muted border-2 border-foreground/10" />
-      </div>
-    ),
-  },
+  { ssr: false, loading: () => <ChartSkeleton /> },
 );
 
 const RevenueChart = dynamic(
@@ -45,21 +38,7 @@ const RevenueChart = dynamic(
     import("@/components/admin/RevenueChart").then((m) => ({
       default: m.RevenueChart,
     })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="border-3 border-foreground bg-card p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] animate-pulse flex flex-col justify-between h-[360px]">
-        <div className="flex justify-between items-center mb-4">
-          <div className="h-6 w-48 bg-muted border-2 border-foreground/10" />
-          <div className="flex gap-1.5">
-            <div className="h-8 w-12 bg-muted border-2 border-foreground/10" />
-            <div className="h-8 w-12 bg-muted border-2 border-foreground/10" />
-          </div>
-        </div>
-        <div className="flex-1 w-full bg-muted border-2 border-foreground/10" />
-      </div>
-    ),
-  },
+  { ssr: false, loading: () => <ChartSkeleton /> },
 );
 
 export function AdminAnalyticsClient() {

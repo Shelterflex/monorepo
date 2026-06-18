@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChartSkeleton } from "@/components/ui/chart-skeleton";
 import { cn } from "@/lib/utils";
 import { LandlordSidebar } from "@/components/landlord/LandlordSidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
@@ -36,14 +37,7 @@ const LandlordAnalyticsCharts = dynamic(
     loading: () => (
       <div className="grid gap-6 md:grid-cols-2">
         {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="border-3 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-6"
-          >
-            <div className="h-5 w-40 bg-muted animate-pulse rounded mb-2" />
-            <div className="h-4 w-56 bg-muted animate-pulse rounded mb-4" />
-            <div className="h-[300px] w-full bg-muted animate-pulse rounded" />
-          </div>
+          <ChartSkeleton key={i} height="h-[300px]" />
         ))}
       </div>
     ),
