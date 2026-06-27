@@ -27,6 +27,8 @@ const cspDirectives = [
   "upgrade-insecure-requests",
 ].join('; ')
 
+const withNextIntl = createNextIntlPlugin();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
@@ -35,4 +37,4 @@ const nextConfig = {
   ...performanceConfig,
 };
 
-export default withBundleAnalyzer(nextConfig);
+export default withBundleAnalyzer(withNextIntl(nextConfig));

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type LegalSection = {
   title: string;
@@ -14,6 +15,8 @@ type LegalPageProps = {
 };
 
 export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
+  const t = useTranslations("common");
+
   return (
     <main className="min-h-screen bg-background py-12 px-4 pt-32">
       <div className="mx-auto max-w-4xl">
@@ -23,7 +26,7 @@ export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
             className="mb-8 flex items-center gap-2 border-3 border-foreground bg-card px-4 py-3 font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
           >
             <ArrowLeft className="h-5 w-5" />
-            Back to Home
+            {t("backToHome")}
           </button>
         </Link>
 
@@ -33,7 +36,7 @@ export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
           </h1>
           {lastUpdated && (
             <p className="mb-8 text-sm text-muted-foreground">
-              Last updated: {lastUpdated}
+              {t("lastUpdated")}: {lastUpdated}
             </p>
           )}
 

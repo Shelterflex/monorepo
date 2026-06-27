@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { locales, type Locale } from "@/i18n";
+import { locales, type Locale } from "@/i18n/config";
 import usePreferencesStore from "@/store/usePreferencesStore";
 
 const languageNames: Record<Locale, string> = {

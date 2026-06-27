@@ -1,4 +1,4 @@
-import { Locale, rtlLocales } from "@/i18n";
+import { Locale, rtlLocales } from "@/i18n/config";
 
 /**
  * Check if a locale uses RTL (Right-to-Left) text direction

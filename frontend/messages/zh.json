@@ -17,7 +17,9 @@
     "next": "下一步",
     "previous": "上一步",
     "close": "关闭",
-    "confirm": "确认"
+    "confirm": "确认",
+    "backToHome": "返回首页",
+    "lastUpdated": "最后更新"
   },
   "navigation": {
     "home": "首页",
@@ -97,5 +99,122 @@
     "unauthorized": "未授权访问",
     "notFound": "未找到",
     "validationError": "验证错误"
+  },
+  "about": {
+    "badge": "关于我们",
+    "title": "让所有尼日利亚人都能<accessible>负担得起</accessible>住房",
+    "description": "我们的使命是解决尼日利亚最大的挑战之一：年付房租的负担。通过创新的融资解决方案，我们正在帮助数以千计的尼日利亚人找到并负担得起他们梦想的家园。",
+    "story": {
+      "title": "我们的故事",
+      "p1": "在 2021 年，我们的创始人亲身体会到了在拉各斯支付年租金的挣扎。尽管有不错的工作和稳定的收入，但预先支付数百万奈拉几乎是不可能的。",
+      "p2": "他们意识到数以百万计的尼日利亚人每年都面临着同样的挑战。传统的租赁系统已经崩溃——房东希望预先收到租金，但租户并不总是能够提供。",
+      "p3": "Shelterflex 诞生就是为了缩小这一差距。我们预先向房东付款，同时允许租户在数月内分期付款。这是一个双赢的局面，正在改变尼日利亚人的租房方式。",
+      "quote": "“我们相信，无论是否有能力预先付款，每个人都应该有一个可以称之为家的地方。”",
+      "author": "- Adaeze Nwankwo, CEO"
+    },
+    "values": {
+      "badge": "我们的价值观",
+      "title": "我们所代表的价值",
+      "peopleFirst": {
+        "title": "以人为本",
+        "description": "我们 believe 每个人都应该拥有一个家。我们的解决方案旨在让所有尼日利亚人都能获得住房。"
+      },
+      "transparency": {
+        "title": "透明度",
+        "description": "没有隐藏费用，没有意外惊喜。我们相信与客户进行清晰、诚实的沟通。"
+      },
+      "empathy": {
+        "title": "同理心",
+        "description": "我们理解在尼日利亚租房的挑战。我们的团队亲身经历过这些。"
+      },
+      "excellence": {
+        "title": "卓越",
+        "description": "我们致力于为租户和房东提供最好的体验。"
+      }
+    },
+    "journey": {
+      "title": "我们的旅程",
+      "milestones": {
+        "m2021": {
+          "title": "成立",
+          "desc": "Shelterflex 诞生于一个简单的想法：让租房变得更容易。"
+        },
+        "m2022": {
+          "title": "首批 1,000 名租户",
+          "desc": "帮助我们的首批一千名尼日利亚人获得了住房。"
+        },
+        "m2023": {
+          "title": "A轮融资",
+          "desc": "筹集了 500 万美元以在尼日利亚全国扩张。"
+        },
+        "m2024": {
+          "title": "10,000+ 租户",
+          "desc": "在影响力方面达到了一个重要的里程碑。"
+        }
+      }
+    },
+    "team": {
+      "badge": "我们的团队",
+      "title": "认识 Shelterflex 背后的人们",
+      "members": {
+        "adaeze": {
+          "role": "首席执行官兼联合创始人"
+        },
+        "chukwuemeka": {
+          "role": "首席技术官兼联合创始人"
+        },
+        "fatimah": {
+          "role": "运营负责人"
+        },
+        "oluwaseun": {
+          "role": "财务负责人"
+        }
+      }
+    },
+    "cta": {
+      "title": "准备好加入 Shelterflex 大家庭了吗？",
+      "desc": "无论您是寻找灵活付款的租户，还是希望获得保障收入的房东，我们都能满足您的需求。",
+      "getStarted": "开始使用",
+      "browseProperties": "浏览房源"
+    }
+  },
+  "contact": {
+    "title": "取得联系",
+    "subtitle": "有什么问题吗？我们很乐意听到您的声音。",
+    "form": {
+      "title": "给我们发送消息",
+      "success": "✓ 消息发送成功！",
+      "successDesc": "我们会尽快回复您。",
+      "failed": "发送消息失败",
+      "failedGeneric": "发送消息失败。请重试。",
+      "fixErrors": "请修改以下错误并重试。",
+      "name": "姓名",
+      "namePlaceholder": "您的姓名",
+      "email": "电子邮件",
+      "emailPlaceholder": "your@email.com",
+      "phone": "电话（可选）",
+      "phonePlaceholder": "+234 (0) 123 456 7890",
+      "subject": "主题",
+      "subjectPlaceholder": "这是关于什么的？",
+      "message": "内容",
+      "messagePlaceholder": "告诉我们更多...",
+      "sending": "发送中...",
+      "sendMessage": "发送消息"
+    },
+    "info": {
+      "title": "联系信息",
+      "email": "电子邮件",
+      "phone": "电话",
+      "phoneHours": "周一至周五，上午9点至下午6点 WAT",
+      "address": "地址",
+      "addressLine1": "科技街 123 号",
+      "addressLine2": "拉各斯，尼日利亚 101001",
+      "responseTimeTitle": "回复时间",
+      "responseTimeDesc": "我们通常会在工作日的 24 小时内回复。紧急情况请直接致电我们。",
+      "averageResponse": "平均回复时间：2-4 小时",
+      "needHelpTitle": "需要帮助吗？",
+      "needHelpDesc": "查看我们的常见问题解答或知识库，获取常见问题的即时解答。",
+      "viewFaqs": "查看常见问题"
+    }
   }
 }

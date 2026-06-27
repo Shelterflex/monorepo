@@ -11,7 +11,7 @@ import { LocaleDocumentSync } from "@/components/locale-document-sync";
 import { NetworkStatusBanner } from "@/components/network-status-banner";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
-import { locales, type Locale, rtlLocales } from "@/i18n";
+import { locales, type Locale, rtlLocales } from "@/i18n/config";
 import "../globals.css";
 
 export const metadata: Metadata = {

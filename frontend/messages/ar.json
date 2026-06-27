@@ -17,7 +17,9 @@
     "next": "التالي",
     "previous": "السابق",
     "close": "إغلاق",
-    "confirm": "تأكيد"
+    "confirm": "تأكيد",
+    "backToHome": "العودة إلى الصفحة الرئيسية",
+    "lastUpdated": "آخر تحديث"
   },
   "navigation": {
     "home": "الرئيسية",
@@ -97,5 +99,122 @@
     "unauthorized": "وصول غير مصرح به",
     "notFound": "غير موجود",
     "validationError": "خطأ في التحقق"
+  },
+  "about": {
+    "badge": "[AR] ABOUT US",
+    "title": "[AR] Making Housing <accessible>Accessible</accessible> for All Nigerians",
+    "description": "[AR] We are on a mission to solve one of Nigeria's biggest challenges: the burden of annual rent payments. Through innovative financing solutions, we are helping thousands of Nigerians find and afford their dream homes.",
+    "story": {
+      "title": "[AR] Our Story",
+      "p1": "[AR] In 2021, our founders experienced firsthand the struggle of paying annual rent in Lagos. Despite having good jobs and steady income, coming up with millions of naira upfront felt impossible.",
+      "p2": "[AR] They realized millions of Nigerians face the same challenge every year. The traditional rental system was broken - landlords wanted their money upfront, but tenants could not always provide it.",
+      "p3": "[AR] Shelterflex was born to bridge this gap. We pay landlords upfront while allowing tenants to spread their payments over months. It is a win-win that is transforming how Nigerians rent homes.",
+      "quote": "[AR] \"We believe everyone deserves a place to call home, regardless of their ability to pay upfront.\"",
+      "author": "[AR] - Adaeze Nwankwo, CEO"
+    },
+    "values": {
+      "badge": "[AR] OUR VALUES",
+      "title": "[AR] What We Stand For",
+      "peopleFirst": {
+        "title": "[AR] People First",
+        "description": "[AR] We believe everyone deserves a home. Our solutions are designed to make housing accessible to all Nigerians."
+      },
+      "transparency": {
+        "title": "[AR] Transparency",
+        "description": "[AR] No hidden fees, no surprises. We believe in clear, honest communication with our customers."
+      },
+      "empathy": {
+        "title": "[AR] Empathy",
+        "description": "[AR] We understand the challenges of renting in Nigeria. Our team has lived these experiences."
+      },
+      "excellence": {
+        "title": "[AR] Excellence",
+        "description": "[AR] We are committed to providing the best possible experience for both tenants and landlords."
+      }
+    },
+    "journey": {
+      "title": "[AR] Our Journey",
+      "milestones": {
+        "m2021": {
+          "title": "[AR] Founded",
+          "desc": "[AR] Shelterflex was born from a simple idea: make renting easier."
+        },
+        "m2022": {
+          "title": "[AR] First 1,000 Tenants",
+          "desc": "[AR] Helped our first thousand Nigerians access housing."
+        },
+        "m2023": {
+          "title": "[AR] Series A Funding",
+          "desc": "[AR] Raised $5M to expand across Nigeria."
+        },
+        "m2024": {
+          "title": "[AR] 10,000+ Tenants",
+          "desc": "[AR] Reached a major milestone in impact."
+        }
+      }
+    },
+    "team": {
+      "badge": "[AR] OUR TEAM",
+      "title": "[AR] Meet the People Behind Shelterflex",
+      "members": {
+        "adaeze": {
+          "role": "[AR] CEO & Co-Founder"
+        },
+        "chukwuemeka": {
+          "role": "[AR] CTO & Co-Founder"
+        },
+        "fatimah": {
+          "role": "[AR] Head of Operations"
+        },
+        "oluwaseun": {
+          "role": "[AR] Head of Finance"
+        }
+      }
+    },
+    "cta": {
+      "title": "[AR] Ready to Join the Shelterflex Family?",
+      "desc": "[AR] Whether you are a tenant looking for flexible payments or a landlord wanting guaranteed income, we have got you covered.",
+      "getStarted": "[AR] Get Started",
+      "browseProperties": "[AR] Browse Properties"
+    }
+  },
+  "contact": {
+    "title": "[AR] Get in Touch",
+    "subtitle": "[AR] Have questions? We'd love to hear from you.",
+    "form": {
+      "title": "[AR] Send us a Message",
+      "success": "[AR] ✓ Message sent successfully!",
+      "successDesc": "[AR] We'll get back to you as soon as possible.",
+      "failed": "[AR] Failed to Send Message",
+      "failedGeneric": "[AR] Failed to send message. Please try again.",
+      "fixErrors": "[AR] Please fix the errors below and try again.",
+      "name": "[AR] Name",
+      "namePlaceholder": "[AR] Your name",
+      "email": "[AR] Email",
+      "emailPlaceholder": "[AR] your@email.com",
+      "phone": "[AR] Phone (Optional)",
+      "phonePlaceholder": "[AR] +234 (0) 123 456 7890",
+      "subject": "[AR] Subject",
+      "subjectPlaceholder": "[AR] What is this about?",
+      "message": "[AR] Message",
+      "messagePlaceholder": "[AR] Tell us more...",
+      "sending": "[AR] Sending...",
+      "sendMessage": "[AR] Send Message"
+    },
+    "info": {
+      "title": "[AR] Contact Information",
+      "email": "[AR] Email",
+      "phone": "[AR] Phone",
+      "phoneHours": "[AR] Mon - Fri, 9am - 6pm WAT",
+      "address": "[AR] Address",
+      "addressLine1": "[AR] 123 Tech Street",
+      "addressLine2": "[AR] Lagos, Nigeria 101001",
+      "responseTimeTitle": "[AR] Response Time",
+      "responseTimeDesc": "[AR] We typically respond within 24 hours during business days. For urgent matters, please call us directly.",
+      "averageResponse": "[AR] Average response time: 2-4 hours",
+      "needHelpTitle": "[AR] Need Help?",
+      "needHelpDesc": "[AR] Check our FAQ or knowledge base for instant answers to common questions.",
+      "viewFaqs": "[AR] View FAQs"
+    }
   }
 }

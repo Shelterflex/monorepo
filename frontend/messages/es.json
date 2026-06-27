@@ -17,7 +17,9 @@
     "next": "Siguiente",
     "previous": "Anterior",
     "close": "Cerrar",
-    "confirm": "Confirmar"
+    "confirm": "Confirmar",
+    "backToHome": "Volver al inicio",
+    "lastUpdated": "Última actualización"
   },
   "navigation": {
     "home": "Inicio",
@@ -97,5 +99,122 @@
     "unauthorized": "Acceso no autorizado",
     "notFound": "No encontrado",
     "validationError": "Error de validación"
+  },
+  "about": {
+    "badge": "SOBRE NOSOTROS",
+    "title": "Haciendo la vivienda <accessible>accesible</accessible> para todos los nigerianos",
+    "description": "Nuestra misión es resolver uno de los mayores desafíos de Nigeria: la carga de los pagos anuales de alquiler. A través de soluciones de financiación innovadoras, estamos ayudando a miles de nigerianos a encontrar y pagar la casa de sus sueños.",
+    "story": {
+      "title": "Nuestra historia",
+      "p1": "En 2021, nuestros fundadores experimentaron de primera mano la dificultad de pagar el alquiler anual en Lagos. A pesar de tener buenos trabajos e ingresos estables, pagar millones de nairas por adelantado parecía imposible.",
+      "p2": "Se dieron cuenta de que millones de nigerianos enfrentan el mismo desafío cada año. El sistema de alquiler tradicional estaba roto: los propietarios querían su dinero por adelantado, pero los inquilinos no siempre podían proporcionarlo.",
+      "p3": "Shelterflex nació para cerrar esta brecha. Pagamos a los propietarios por adelantado mientras permitimos a los inquilinos distribuir sus pagos a lo largo de los meses. Es una solución beneficiosa para todos que está transformando la forma en que los nigerianos alquilan viviendas.",
+      "quote": "\"Creemos que todos merecen un lugar al que llamar hogar, independientemente de su capacidad de pago por adelantado.\"",
+      "author": "- Adaeze Nwankwo, CEO"
+    },
+    "values": {
+      "badge": "NUESTROS VALORES",
+      "title": "Lo que defendemos",
+      "peopleFirst": {
+        "title": "Las personas primero",
+        "description": "Creemos que todos merecen un hogar. Nuestras soluciones están diseñadas para hacer que la vivienda sea accesible para todos los nigerianos."
+      },
+      "transparency": {
+        "title": "Transparencia",
+        "description": "Sin tarifas ocultas, sin sorpresas. Creemos en una comunicación clara y honesta con nuestros clientes."
+      },
+      "empathy": {
+        "title": "Empatía",
+        "description": "Entendemos los desafíos de alquilar en Nigeria. Nuestro equipo ha vivido estas experiencias."
+      },
+      "excellence": {
+        "title": "Excelencia",
+        "description": "Nos comprometemos a brindar la mejor experiencia posible tanto a inquilinos como a propietarios."
+      }
+    },
+    "journey": {
+      "title": "Nuestro viaje",
+      "milestones": {
+        "m2021": {
+          "title": "Fundada",
+          "desc": "Shelterflex nació de una idea simple: facilitar el alquiler."
+        },
+        "m2022": {
+          "title": "Primeros 1.000 inquilinos",
+          "desc": "Ayudamos a nuestros primeros mil nigerianos a acceder a la vivienda."
+        },
+        "m2023": {
+          "title": "Financiación Serie A",
+          "desc": "Recaudamos $5 millones para expandirnos por Nigeria."
+        },
+        "m2024": {
+          "title": "Más de 10.000 inquilinos",
+          "desc": "Alcanzamos un hito importante en impacto."
+        }
+      }
+    },
+    "team": {
+      "badge": "NUESTRO EQUIPO",
+      "title": "Conozca a las personas detrás de Shelterflex",
+      "members": {
+        "adaeze": {
+          "role": "CEO y cofundadora"
+        },
+        "chukwuemeka": {
+          "role": "CTO y cofundador"
+        },
+        "fatimah": {
+          "role": "Directora de Operaciones"
+        },
+        "oluwaseun": {
+          "role": "Director de Finanzas"
+        }
+      }
+    },
+    "cta": {
+      "title": "¿Listo para unirse a la familia Shelterflex?",
+      "desc": "Tanto si eres un inquilino que busca pagos flexibles como si eres un propietario que desea ingresos garantizados, te tenemos cubierto.",
+      "getStarted": "Comenzar",
+      "browseProperties": "Explorar propiedades"
+    }
+  },
+  "contact": {
+    "title": "Ponerse en contacto",
+    "subtitle": "¿Tiene preguntas? Nos encantaría saber de usted.",
+    "form": {
+      "title": "Envíenos un mensaje",
+      "success": "✓ ¡Mensaje enviado con éxito!",
+      "successDesc": "Nos pondremos en contacto con usted lo antes posible.",
+      "failed": "Error al enviar el mensaje",
+      "failedGeneric": "Error al enviar el mensaje. Inténtelo de nuevo.",
+      "fixErrors": "Por favor corrija los errores a continuación e intente nuevamente.",
+      "name": "Nombre",
+      "namePlaceholder": "Su nombre",
+      "email": "Correo electrónico",
+      "emailPlaceholder": "su@correo.com",
+      "phone": "Teléfono (Opcional)",
+      "phonePlaceholder": "+234 (0) 123 456 7890",
+      "subject": "Asunto",
+      "subjectPlaceholder": "¿De qué se trata esto?",
+      "message": "Mensaje",
+      "messagePlaceholder": "Cuéntenos más...",
+      "sending": "Enviando...",
+      "sendMessage": "Enviar mensaje"
+    },
+    "info": {
+      "title": "Información de contacto",
+      "email": "Correo electrónico",
+      "phone": "Teléfono",
+      "phoneHours": "Lun - Vie, 9am - 6pm WAT",
+      "address": "Dirección",
+      "addressLine1": "Calle Tecnología 123",
+      "addressLine2": "Lagos, Nigeria 101001",
+      "responseTimeTitle": "Tiempo de respuesta",
+      "responseTimeDesc": "Normalmente respondemos dentro de las 24 horas durante los días hábiles. Para asuntos urgentes, llámenos directamente.",
+      "averageResponse": "Tiempo medio de respuesta: 2-4 horas",
+      "needHelpTitle": "¿Necesita ayuda?",
+      "needHelpDesc": "Consulte nuestras preguntas frecuentes o base de conocimientos para obtener respuestas instantáneas a preguntas comunes.",
+      "viewFaqs": "Ver preguntas frecuentes"
+    }
   }
 }
