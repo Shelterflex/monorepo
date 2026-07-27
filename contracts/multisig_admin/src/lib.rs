@@ -488,7 +488,7 @@ mod test {
     #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_propose() {
         let env = Env::default();
-        let (a, b, _c, signers) = setup(&env);
+        let (a, _b, _c, signers) = setup(&env);
         env.mock_all_auths();
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
@@ -525,7 +525,7 @@ mod test {
     #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_execute() {
         let env = Env::default();
-        let (a, b, _c, signers) = setup(&env);
+        let (a, _b, _c, signers) = setup(&env);
         env.mock_all_auths();
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
