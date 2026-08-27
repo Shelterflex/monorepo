@@ -37,6 +37,7 @@ import { useFeatureFlag } from "@/lib/featureFlags";
 import { getTenantPaymentStatusPresentation } from "@/lib/tenantPaymentStatus";
 import { apiFetch } from "@/lib/api";
 import { SectionBoundary } from "@/components/section-boundary";
+import { formatDate, formatMonthYear } from "@/lib/date";
 import {
   getTenantCurrentLease,
   getPaymentSchedule,
@@ -189,9 +190,9 @@ export default function TenantDashboard() {
 
     let detailText = "";
     if ("paidDate" in payment && payment.paidDate) {
-      detailText = `Paid on ${new Date(payment.paidDate).toLocaleDateString()}`;
-    } else if ("dueDate" in payment) {
-      detailText = `Due ${new Date(payment.dueDate).toLocaleDateString()}`;
+      detailText = `Paid on ${formatDate(payment.paidDate)}`;
+    } else if ("dueDate" in payment && payment.dueDate) {
+      detailText = `Due ${formatDate(payment.dueDate)}`;
     }
 
     return {
@@ -218,10 +219,7 @@ export default function TenantDashboard() {
   const allPayments: PaymentItem[] = [
     ...pastPayments.map((p) => ({
       ...p,
-      month: new Date(p.transactionDate).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-      }),
+      month: formatMonthYear(p.transactionDate),
     })),
     ...paymentSchedule,
   ];
@@ -309,7 +307,7 @@ export default function TenantDashboard() {
                   className="font-bold text-foreground"
                 />{" "}
                 is due on{" "}
-                {new Date(currentLease.nextPaymentDate).toLocaleDateString()}
+                {formatDate(currentLease.nextPaymentDate)}
               </p>
             ) : (
               <p className="mt-2 text-sm text-muted-foreground md:text-base lg:text-lg">
@@ -343,18 +341,15 @@ export default function TenantDashboard() {
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-xs text-muted-foreground md:text-sm">
-                      Next Payment
+                      Next Due Date
                     </p>
                     <p className="truncate text-base font-bold md:text-xl">
-                      <MoneyValue
-                        status="ready"
-                        amount={currentLease.monthlyPayment}
-                        format={formatCurrency}
-                      />
+                      {formatDate(currentLease.nextPaymentDate)}
                     </p>
                   </div>
                 </div>
               </Card>
+
               <Card className="border-3 border-foreground p-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] md:p-4">
                 <div className="flex items-center gap-2 md:gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center border-3 border-foreground bg-secondary md:h-12 md:w-12">
@@ -374,6 +369,7 @@ export default function TenantDashboard() {
                   </div>
                 </div>
               </Card>
+
               <Card className="border-3 border-foreground p-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] md:p-4">
                 <div className="flex items-center gap-2 md:gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center border-3 border-foreground bg-accent md:h-12 md:w-12">
@@ -385,14 +381,16 @@ export default function TenantDashboard() {
                     </p>
                     <p className="truncate text-base font-bold md:text-xl">
                       <MoneyValue
-                        status="ready"
+                        status={remainingBalance === null ? "error" : "ready"}
                         amount={remainingBalance}
                         format={formatCurrency}
+                        unavailableLabel="Balance unavailable"
                       />
                     </p>
                   </div>
                 </div>
               </Card>
+
               <Card className="border-3 border-foreground p-3 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] md:p-4">
                 <div className="flex items-center gap-2 md:gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center border-3 border-foreground bg-muted md:h-12 md:w-12">
@@ -403,7 +401,7 @@ export default function TenantDashboard() {
                       Lease Ends
                     </p>
                     <p className="truncate text-base font-bold md:text-xl">
-                      {new Date(currentLease.leaseEnd).toLocaleDateString()}
+                      {formatDate(currentLease.leaseEnd)}
                     </p>
                   </div>
                 </div>

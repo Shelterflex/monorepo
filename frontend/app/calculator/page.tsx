@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { formatMonthYear } from "@/lib/date"
 
 export default function CalculatorPage() {
   return (
@@ -52,10 +53,7 @@ function CalculatorContent() {
   const paymentSchedule = Array.from({ length: duration }, (_, i) => ({
     month: i + 1,
     amount: monthlyPayment,
-    date: new Date(scheduleBaseTime + (i + 1) * 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-NG", {
-      month: "short",
-      year: "numeric",
-    }),
+    date: formatMonthYear(scheduleBaseTime + (i + 1) * 30 * 24 * 60 * 60 * 1000),
   }))
 
   return (

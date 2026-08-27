@@ -113,4 +113,22 @@ export class StubPspProvider implements PaymentProvider {
       status: 'confirmed',
     }
   }
+
+  async resolveBankAccount(
+    accountNumber: string,
+    _bankCode: string,
+  ): Promise<{ accountName: string; accountNumber: string }> {
+    if (!accountNumber || accountNumber.length < 10 || accountNumber === '0000000000') {
+      throw new AppError(
+        ErrorCode.VALIDATION_ERROR,
+        400,
+        'Could not resolve bank account details',
+      )
+    }
+
+    return {
+      accountNumber,
+      accountName: 'TEST VERIFIED ACCOUNT',
+    }
+  }
 }

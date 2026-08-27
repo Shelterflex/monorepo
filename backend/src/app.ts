@@ -162,6 +162,7 @@ import { createKycRouter } from "./routes/kyc.js";
 import { createAdminRolesRouter } from "./routes/adminRoles.js";
 import { createAbuseRouter } from "./routes/abuse.js";
 import { createInspectorJobsRouter, createAdminInspectorJobsRouter } from "./routes/inspectorJobs.js";
+import { createInspectorOnboardingRouter } from "./routes/inspectorOnboarding.js";
 import { createPropertyInspectionsRouter } from "./routes/propertyInspections.js";
 import { createGovernanceRouter } from "./routes/governance.js";
 import { createRentGuaranteeRouter } from "./routes/rentGuarantee.js";
@@ -849,6 +850,7 @@ export function createApp() {
     app.use("/api/reports", createWhistleblowerReportsRouter());
     app.use("/api/tenant/data-export", createTenantDataExportRouter());
     app.use("/api/tenant/erasure", createTenantErasureRouter());
+    app.use("/api/inspector/onboarding", createInspectorOnboardingRouter());
   }
 
   app.use(
@@ -965,6 +967,7 @@ export function createApp() {
   // Inspector job routes — gated by INSPECTOR_DASHBOARD_ENABLED flag
   app.use('/api/v1/inspector', authenticateToken, requireFlag('INSPECTOR_DASHBOARD_ENABLED'), createInspectorJobsRouter(sorobanAdapter))
   app.use('/api/v1/admin/inspector', authenticateToken, requireFlag('INSPECTOR_DASHBOARD_ENABLED'), createAdminInspectorJobsRouter())
+  app.use('/api/v1/inspector/onboarding', createInspectorOnboardingRouter())
 
   // Property inspection routes
   app.use('/api/v1', createPropertyInspectionsRouter())

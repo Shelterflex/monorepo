@@ -301,4 +301,24 @@ export class PaystackProvider implements PaymentProvider {
       providerStatus: transfer.status,
     }
   }
+
+  // ---- Bank account resolution --------------------------------------------
+
+  async resolveBankAccount(
+    accountNumber: string,
+    bankCode: string,
+  ): Promise<{ accountName: string; accountNumber: string }> {
+    const data = await paystackGet<{
+      account_number: string
+      account_name: string
+      bank_id?: number
+    }>(
+      `/bank/resolve?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`,
+    )
+
+    return {
+      accountNumber: data.account_number,
+      accountName: data.account_name,
+    }
+  }
 }

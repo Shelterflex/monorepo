@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MoneyValue } from "@/components/ui/data-state";
 import type { InspectionJob } from "@/lib/propertyInspectionApi";
+import { formatDate } from "@/lib/date";
 
 interface JobCardProps {
   job: InspectionJob;
@@ -93,7 +94,7 @@ export function JobCard({ job, onClaim, isClaiming }: JobCardProps) {
           </div>
           <div className="flex items-center gap-1 text-muted-foreground">
             <Clock className="h-4 w-4" />
-            Due: {job.deadline ? new Date(job.deadline).toLocaleDateString() : 'TBD'}
+            Due: {formatDate(job.deadline, { fallback: "TBD" })}
           </div>
         </div>
 

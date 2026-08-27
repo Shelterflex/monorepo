@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatDateTime } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import BackendHealthCompact from "@/components/BackendHealthCompact";
@@ -203,10 +204,10 @@ function AlertRow({ alert }: { alert: Alert }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground leading-snug">{alert.message}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {new Date(alert.occurredAt).toLocaleString()}
+          {formatDateTime(alert.occurredAt)}
           {alert.resolvedAt && (
             <span className="ml-2 text-green-600">
-              · resolved {new Date(alert.resolvedAt).toLocaleString()}
+              · resolved {formatDateTime(alert.resolvedAt)}
             </span>
           )}
         </p>

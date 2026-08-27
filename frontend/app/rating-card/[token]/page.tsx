@@ -20,6 +20,7 @@ import {
   getSharedRatingCard,
   type PublicRatingCard,
 } from "@/lib/ratingCardApi";
+import { formatDate } from "@/lib/date";
 
 // "success" covers both populated and empty-ratings cases (empty state is rendered inside SuccessPage)
 type PageState =
@@ -152,14 +153,6 @@ function ScoreBar({ label, score }: { label: string; score: number }) {
       </span>
     </div>
   );
-}
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-NG", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function SuccessPage({ card }: { card: PublicRatingCard }) {

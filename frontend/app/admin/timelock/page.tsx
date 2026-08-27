@@ -5,6 +5,7 @@ import { useTimelock, useCountdown } from "@/hooks/useTimelock";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatDateTime } from "@/lib/date";
 
 function TransactionCard({ tx, onExecute, onCancel }: { tx: any, onExecute: any, onCancel: any }) {
   const { timeLeft, formatTime } = useCountdown(tx.eta);
@@ -35,11 +36,11 @@ function TransactionCard({ tx, onExecute, onCancel }: { tx: any, onExecute: any,
           <div className="flex items-center gap-4 pt-2">
             <div className="flex items-center gap-1.5 text-xs font-bold">
               <Clock className="w-4 h-4" />
-              <span>ETA: {new Date(tx.eta * 1000).toLocaleString()}</span>
+              <span>ETA: {formatDateTime(tx.eta * 1000)}</span>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold">
               <History className="w-4 h-4" />
-              <span>Queued: {new Date(tx.createdAt).toLocaleString()}</span>
+              <span>Queued: {formatDateTime(tx.createdAt)}</span>
             </div>
           </div>
         </div>

@@ -38,6 +38,7 @@ import {
   type ScoreHistoryPoint,
 } from "@/lib/creditScoreApi";
 import { ApiError } from "@/lib/apiClient";
+import { formatMonthYear } from "@/lib/date";
 
 interface CreditScoreProfile {
   score: number;
@@ -48,8 +49,7 @@ interface CreditScoreProfile {
 }
 
 function formatHistoryDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  return formatMonthYear(isoDate);
 }
 
 function mapSnapshotToProfile(

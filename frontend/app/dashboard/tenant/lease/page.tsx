@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { formatDate } from "@/lib/date";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { LeaseESignature } from "@/components/properties/LeaseESignature";
 import {
@@ -122,7 +123,7 @@ function DocPreviewModal({ doc, modalRef, onClose }: DocPreviewModalProps) {
           <div className="flex flex-wrap gap-4 text-sm font-bold border-b-2 border-dashed border-foreground pb-4">
             <div>
               <p className="text-xs text-muted-foreground">Date</p>
-              <p>{new Date(doc.date).toLocaleDateString()}</p>
+              <p>{formatDate(doc.date)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Size</p>
@@ -385,9 +386,7 @@ export default function TenantLeasePage() {
                       <span className="text-sm">Start Date</span>
                     </div>
                     <p className="mt-1 font-bold">
-                      {new Date(
-                        leaseDetails.lease.startDate,
-                      ).toLocaleDateString()}
+                      {formatDate(leaseDetails.lease.startDate)}
                     </p>
                   </div>
                   <div className="border-3 border-foreground bg-muted/50 p-4">
@@ -396,9 +395,7 @@ export default function TenantLeasePage() {
                       <span className="text-sm">End Date</span>
                     </div>
                     <p className="mt-1 font-bold">
-                      {new Date(
-                        leaseDetails.lease.endDate,
-                      ).toLocaleDateString()}
+                      {formatDate(leaseDetails.lease.endDate)}
                     </p>
                   </div>
                   <div className="border-3 border-foreground bg-muted/50 p-4">
@@ -621,7 +618,7 @@ export default function TenantLeasePage() {
                         <div className="flex-1">
                           <p className="font-bold">{doc.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(doc.date).toLocaleDateString()} ·{" "}
+                            {formatDate(doc.date)} ·{" "}
                             {doc.size} · {doc.status}
                           </p>
                         </div>

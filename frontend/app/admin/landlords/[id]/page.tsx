@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { apiGet, apiPost } from "@/lib/apiClient"
 import { LandlordVerificationBadge, type LandlordVerificationLevel } from "@/components/LandlordVerificationBadge"
+import { formatDateTime } from "@/lib/date"
 
 const verificationLevels: Array<{ value: LandlordVerificationLevel; label: string }> = [
   { value: "unverified", label: "Unverified" },
@@ -161,7 +162,7 @@ export default function AdminLandlordVerificationPage({ params }: PageProps) {
                   <div className="flex items-center gap-3">
                     <LandlordVerificationBadge level={currentStatus.level} />
                     <span className="text-sm text-muted-foreground">
-                      Last verified: {currentStatus.verifiedAt ? new Date(currentStatus.verifiedAt).toLocaleString() : 'Never'}
+                      Last verified: {currentStatus.verifiedAt ? formatDateTime(currentStatus.verifiedAt) : 'Never'}
                     </span>
                   </div>
                   <div className="rounded-xl border border-foreground/20 bg-muted p-4">

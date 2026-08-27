@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ApplicationStatusBadge } from "./ApplicationStatusBadge";
 import { type LandlordApplicationRecord } from "@/lib/landlordPropertiesApi";
 import { Calendar, Briefcase, DollarSign, Star, Eye } from "lucide-react";
+import { formatDate } from "@/lib/date";
 
 interface ApplicantCardProps {
   applicant: LandlordApplicationRecord;
@@ -34,7 +35,7 @@ export function ApplicantCard({ applicant, onViewDetails }: ApplicantCardProps) 
           <div className="flex flex-wrap gap-4 text-sm">
             <span className="flex items-center gap-1 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              Applied: {new Date(displayDate).toLocaleDateString()}
+              Applied: {formatDate(displayDate)}
             </span>
             {applicant.employmentStatus && (
               <span className="flex items-center gap-1 text-muted-foreground">

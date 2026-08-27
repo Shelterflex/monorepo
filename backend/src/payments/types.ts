@@ -72,4 +72,9 @@ export interface PaymentProvider {
   mapStatus(input: MapStatusInput): InternalPaymentStatus
 
   executePayout?(input: ExecutePayoutInput): Promise<ExecutePayoutResult>
+
+  resolveBankAccount?(accountNumber: string, bankCode: string): Promise<{
+    accountName: string
+    accountNumber: string
+  }>
 }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatDate } from "@/lib/date";
 import {
   Select,
   SelectContent,
@@ -252,7 +253,7 @@ export function ApartmentReviews({ propertyId }: ApartmentReviewsProps) {
                         <div>
                           <p className="font-bold">{safeUserName}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(review.date).toLocaleDateString("en-NG", {
+                            {formatDate(review.date, {
                               dateStyle: "medium",
                             })}
                           </p>

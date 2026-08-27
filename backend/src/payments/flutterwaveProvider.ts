@@ -293,4 +293,24 @@ export class FlutterwaveProvider implements PaymentProvider {
       providerStatus: transfer.status,
     }
   }
+
+  // ---- Bank account resolution --------------------------------------------
+
+  async resolveBankAccount(
+    accountNumber: string,
+    bankCode: string,
+  ): Promise<{ accountName: string; accountNumber: string }> {
+    const data = await flwPost<{
+      account_number: string
+      account_name: string
+    }>('/accounts/resolve', {
+      account_number: accountNumber,
+      account_bank: bankCode,
+    })
+
+    return {
+      accountNumber: data.account_number,
+      accountName: data.account_name,
+    }
+  }
 }

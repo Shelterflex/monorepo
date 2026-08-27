@@ -5,6 +5,7 @@ import { Home, ShieldCheck, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getSharedRatingCard, type PublicRatingCard } from "@/lib/ratingCardApi";
 import { StarRating } from "@/components/tenant/RatingDimension";
+import { formatDate } from "@/lib/date";
 
 export default function SharedRatingCardPage({
   params,
@@ -29,14 +30,6 @@ export default function SharedRatingCardPage({
       })
       .finally(() => setIsLoading(false));
   }, [token]);
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-NG", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
 
   if (isLoading) {
     return (
