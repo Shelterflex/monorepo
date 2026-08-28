@@ -25,7 +25,11 @@ const STATIC_ROUTES: StaticRouteConfig[] = [
   { path: "/properties", changeFrequency: "daily", priority: 0.9 },
   { path: "/landlords", changeFrequency: "weekly", priority: 0.8 },
   { path: "/calculator", changeFrequency: "monthly", priority: 0.8 },
-  { path: "/calculator/rent-to-own", changeFrequency: "monthly", priority: 0.8 },
+  {
+    path: "/calculator/rent-to-own",
+    changeFrequency: "monthly",
+    priority: 0.8,
+  },
   { path: "/about", changeFrequency: "monthly", priority: 0.7 },
   { path: "/contact", changeFrequency: "monthly", priority: 0.7 },
   { path: "/terms-of-service", changeFrequency: "monthly", priority: 0.5 },
@@ -42,16 +46,38 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   let dynamicEntries: MetadataRoute.Sitemap = [];
+
   try {
-    const response = await listPublicListings({ pageSize: 100 });
-    if (response?.data && Array.isArray(response.data)) {
-      dynamicEntries = response.data.map((listing) => ({
-        url: absoluteUrl(`/properties/${listing.listingId}`),
-        lastModified: listing.updatedAt ? new Date(listing.updatedAt) : new Date(),
-        changeFrequency: "daily",
-        priority: 0.7,
-      }));
-    }
+    const firstPage = await listPublicListings({
+      page: 1,
+      pageSize: 100,
+    });
+
+    const remainingPages =
+      firstPage.totalPages > 1
+        ? await Promise.all(
+            Array.from({ length: firstPage.totalPages - 1 }, (_, i) =>
+              listPublicListings({
+                page: i + 2,
+                pageSize: 100,
+              }),
+            ),
+          )
+        : [];
+
+    const listings = [
+      ...firstPage.data,
+      ...remainingPages.flatMap((page) => page.data),
+    ];
+
+    dynamicEntries = listings.map((listing) => ({
+      url: absoluteUrl(`/properties/${listing.listingId}`),
+      lastModified: listing.updatedAt
+        ? new Date(listing.updatedAt)
+        : new Date(),
+      changeFrequency: "daily",
+      priority: 0.7,
+    }));
   } catch {
     // Gracefully degrade if the API is unreachable during build or static generation
     dynamicEntries = [];
