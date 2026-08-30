@@ -21,6 +21,7 @@ import {
   type TenantApplication,
 } from "@/lib/tenantApi";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { startRentalApplication, trackRentalApplicationStep, trackFormSubmission } from "@/lib/analytics-init";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-NG", {
@@ -65,6 +66,8 @@ export default function TenantApplicationPage() {
   const monthlyPayment = totalAmount / duration;
 
   const handleSubmitApplication = async () => {
+    startRentalApplication("anonymous");
+    trackRentalApplicationStep("anonymous", "start_application", { property_id: propertyId });
     if (!hasAgreed) {
       showErrorToast("Please agree to the terms and conditions");
       return;
@@ -84,6 +87,8 @@ export default function TenantApplicationPage() {
         propertyLocation: [property?.city, property?.area].filter(Boolean).join(", "),
       });
 
+      trackFormSubmission("rental_application", { property_id: propertyId });
+      trackRentalApplicationStep("anonymous", "submit_application", { property_id: propertyId, completed: true });
       setSubmittedApplication(response.data);
       setIsConfirmed(true);
       showSuccessToast("Application submitted successfully!");

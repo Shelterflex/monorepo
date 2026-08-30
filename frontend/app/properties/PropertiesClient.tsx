@@ -20,6 +20,7 @@ import {
   type PropertySearchFilters,
   type PropertyListing,
 } from "@/lib/propertiesApi";
+import { trackUserInteraction, startPropertyDiscovery, trackPropertyDiscoveryStep } from "@/lib/analytics-init";
 import {
   parseCompareIds,
   canCompare,
@@ -178,9 +179,14 @@ function PropertiesContent() {
   ]);
 
   useEffect(() => {
-    const debounce = setTimeout(fetchProperties, 300);
+    startPropertyDiscovery("anonymous");
+    const debounce = setTimeout(() => {
+      trackUserInteraction("property_search", { has_query: Boolean(searchQuery.trim()), has_filters: Boolean(city || area || minBedrooms || maxBedrooms || minBathrooms || maxBathrooms || minAnnualRent || maxAnnualRent) });
+      trackPropertyDiscoveryStep("anonymous", "search_properties");
+      void fetchProperties();
+    }, 300);
     return () => clearTimeout(debounce);
-  }, [fetchProperties]);
+  }, [fetchProperties, searchQuery, city, area, minBedrooms, maxBedrooms, minBathrooms, maxBathrooms, minAnnualRent, maxAnnualRent]);
 
   useEffect(() => {
     if (!isAuthenticated) {

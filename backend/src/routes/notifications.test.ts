@@ -5,6 +5,20 @@ import { sessionStore, userStore } from '../models/authStore.js'
 import { _resetNotificationMemory, _getNotificationMemory } from '../services/notificationService.js'
 import { expectErrorShape } from '../test-helpers.js'
 
+const { TEST_ADMIN_SECRET } = vi.hoisted(() => ({
+  TEST_ADMIN_SECRET: 'test-admin-secret-for-notifications',
+}))
+
+// Only override MANUAL_ADMIN_SECRET — everything else in env.js stays real,
+// since this suite boots the full app via createApp().
+vi.mock('../schemas/env.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../schemas/env.js')>()
+  return {
+    ...actual,
+    env: { ...actual.env, MANUAL_ADMIN_SECRET: TEST_ADMIN_SECRET },
+  }
+})
+
 describe('Notifications API', () => {
   let app: any
   let authToken: string
@@ -427,6 +441,7 @@ describe('Notifications API', () => {
     it('should validate required fields', async () => {
       const response = await request(app)
         .post('/api/notifications/test-seed')
+        .set('x-admin-secret', TEST_ADMIN_SECRET)
         .send({
           userId: 'user-id',
           // Missing title and body
@@ -439,6 +454,7 @@ describe('Notifications API', () => {
     it('should validate userId is required', async () => {
       const response = await request(app)
         .post('/api/notifications/test-seed')
+        .set('x-admin-secret', TEST_ADMIN_SECRET)
         .send({
           title: 'Test',
           body: 'Body',
@@ -454,6 +470,7 @@ describe('Notifications API', () => {
 
       const response = await request(app)
         .post('/api/notifications/test-seed')
+        .set('x-admin-secret', TEST_ADMIN_SECRET)
         .send({
           userId: user.id,
           title: 'Test Notification',

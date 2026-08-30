@@ -239,7 +239,7 @@ describe('Admin Audit Logs Routes', () => {
 
       expect(res.status).toBe(403)
       expect(res.body.error.code).toBe('FORBIDDEN')
-      expect(res.body.error.message).toBe('Forbidden')
+      expect(res.body.error.message).toBe('Invalid admin secret')
     })
 
     it('should reject request with invalid admin secret', async () => {

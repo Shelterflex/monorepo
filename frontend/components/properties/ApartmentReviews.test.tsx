@@ -1,19 +1,20 @@
 // ApartmentReviews.test.tsx – component tests for ApartmentReviews
 import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@/components/__tests__/test-utils';
 import { ApartmentReviews } from '@/components/properties/ApartmentReviews';
 import '@testing-library/jest-dom';
 
 // Mock next/navigation hooks
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: jest.fn() }),
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
   usePathname: () => '/property/123',
   useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock the review API
-jest.mock('@/lib/reviewApi', () => ({
-  getApartmentReviews: jest.fn(),
+vi.mock('@/lib/reviewApi', () => ({
+  getApartmentReviews: vi.fn(),
 }));
 
 import { getApartmentReviews } from '@/lib/reviewApi';
@@ -39,10 +40,12 @@ const mockReviews = [
 
 describe('ApartmentReviews component', () => {
   beforeEach(() => {
-    (getApartmentReviews as jest.Mock).mockResolvedValue({
-      reviews: mockReviews,
+    vi.mocked(getApartmentReviews).mockResolvedValue({
+      reviews: mockReviews as any,
       totalPages: 1,
       total: 2,
+      page: 1,
+      pageSize: 10,
       aggregateRating: 4.0,
     });
   });
@@ -63,16 +66,18 @@ describe('ApartmentReviews component', () => {
   });
 
   it('shows error state when API fails', async () => {
-    (getApartmentReviews as jest.Mock).mockRejectedValue(new Error('Network'));
+    vi.mocked(getApartmentReviews).mockRejectedValue(new Error('Network'));
     render(<ApartmentReviews propertyId="prop-123" />);
     await waitFor(() => expect(screen.getByText(/error/i)).toBeInTheDocument());
     const retryBtn = screen.getByRole('button', { name: /try again/i });
     expect(retryBtn).toBeInTheDocument();
     // Mock successful retry
-    (getApartmentReviews as jest.Mock).mockResolvedValue({
-      reviews: mockReviews,
+    vi.mocked(getApartmentReviews).mockResolvedValue({
+      reviews: mockReviews as any,
       totalPages: 1,
       total: 2,
+      page: 1,
+      pageSize: 10,
       aggregateRating: 4.0,
     });
     fireEvent.click(retryBtn);
@@ -80,10 +85,12 @@ describe('ApartmentReviews component', () => {
   });
 
   it('handles empty reviews list', async () => {
-    (getApartmentReviews as jest.Mock).mockResolvedValue({
+    vi.mocked(getApartmentReviews).mockResolvedValue({
       reviews: [],
       totalPages: 0,
       total: 0,
+      page: 1,
+      pageSize: 10,
       aggregateRating: null,
     });
     render(<ApartmentReviews propertyId="prop-123" />);

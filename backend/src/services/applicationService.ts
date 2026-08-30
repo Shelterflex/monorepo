@@ -17,6 +17,7 @@ import { ErrorCode } from "../errors/errorCodes.js";
 import { auditLog, AuditContext } from "../utils/auditLogger.js";
 import { outboxStore } from "../outbox/index.js";
 import { logger } from "../utils/logger.js";
+import { computeRti } from "./rtiAssessmentService.js";
 
 export class ApplicationService {
   constructor(
@@ -124,11 +125,28 @@ export class ApplicationService {
         ? ListingApplicationStatus.APPROVED
         : ListingApplicationStatus.REJECTED;
 
+    // Compute RTI assessment for the tenant
+    // For review flow, we use a nominal monthly repayment of 5000 NGN as default
+    // In production, this would come from an actual deal/installment plan
+    let rtiAssessment;
+    try {
+      rtiAssessment = computeRti(application.tenantId, 5000);
+    } catch (error) {
+      logger.warn("Failed to compute RTI assessment", {
+        applicationId,
+        tenantId: application.tenantId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't fail the review if RTI computation fails - it's an optional signal
+      rtiAssessment = undefined;
+    }
+
     const updated = await this.applicationRepository.updateStatus(
       applicationId,
       status,
       landlordId,
       notes,
+      rtiAssessment,
     );
 
     if (!updated) {
@@ -157,6 +175,7 @@ export class ApplicationService {
         applicationId,
         decision,
         notes,
+        rtiVerdict: rtiAssessment?.verdict,
       },
     );
 
@@ -170,11 +189,13 @@ export class ApplicationService {
         tenantId: application.tenantId,
         listingId: application.listingId,
         applicationId,
+        rtiAssessment,
       },
     });
 
     logger.info(
       `Application ${applicationId} ${decision}ed by landlord ${landlordId}`,
+      { rtiVerdict: rtiAssessment?.verdict },
     );
     return updated;
   }

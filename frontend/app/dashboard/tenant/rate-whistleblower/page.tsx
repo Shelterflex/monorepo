@@ -98,7 +98,7 @@ export default function RateWhistleblowerPage() {
                     <Card
                       key={whistleblower.id}
                       onClick={() => {
-                        setSelectedWhistleblower(whistleblower.id);
+                        setSelectedWhistleblowerId(whistleblower.id);
                         setStep("rate");
                       }}
                       className="border-3 border-foreground p-4 cursor-pointer transition-all hover:shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
@@ -151,7 +151,7 @@ export default function RateWhistleblowerPage() {
                   type="button"
                   onClick={() => {
                     setStep("select");
-                    setSelectedWhistleblower(null);
+                    setSelectedWhistleblowerId(null);
                     setRating(0);
                     setReview("");
                   }}

@@ -102,7 +102,7 @@ function LoginForm() {
                     id="email"
                     type="email"
                     {...register("email", {
-                      onChange: () => clearErrors(["email", "root.serverError"]),
+                      onChange: () => clearErrors(["email", "root.serverError" as any]),
                     })}
                     placeholder="you@email.com"
                     aria-invalid={Boolean(errors.email)}

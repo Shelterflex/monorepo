@@ -16,6 +16,7 @@ import { FeatureFlagProvider } from '@/lib/featureFlags'
 import { WalletProvider } from '@/contexts/WalletContext'
 import { CookieConsentProvider } from '@/contexts/CookieConsentContext'
 import { CookieConsentBanner } from '@/components/CookieConsentBanner'
+import { AnalyticsTracker } from '@/components/AnalyticsTracker'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { NextIntlClientProvider } from "next-intl"
@@ -104,6 +105,7 @@ export default async function RootLayout({
                 <ServiceWorkerRegister />
                 <SpeedInsights />
                 <PerformanceMonitor />
+                <AnalyticsTracker />
                 <NetworkStatusBanner />
                 <SkipLink />
                 <Header />

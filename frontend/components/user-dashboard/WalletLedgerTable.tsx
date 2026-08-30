@@ -102,7 +102,7 @@ export function WalletLedgerTable({
                   className={`font-mono font-bold ${debit ? "text-destructive" : "text-foreground"}`}
                 >
                   {debit ? "-" : ""}
-                  {formatCurrency(e.amountNgn, "NGN", "en-NG")}
+                  {formatCurrency(e.amountNgn, "NGN", "en")}
                 </div>
                 {typeof e.amountUsdc === "string" && (
                   <div className="text-xs text-muted-foreground">
@@ -117,7 +117,7 @@ export function WalletLedgerTable({
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {formatDateTime(e.timestamp, "en-NG", {
+                {formatDateTime(e.timestamp, "en", {
                   year: "numeric",
                   month: "short",
                   day: "2-digit",

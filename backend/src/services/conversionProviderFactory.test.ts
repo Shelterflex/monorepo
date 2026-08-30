@@ -16,6 +16,7 @@ function baseEnv(over: Record<string, unknown> = {}) {
   return {
     NODE_ENV: 'development',
     ENCRYPTION_KEY: 'a'.repeat(32),
+    WEBHOOK_KEY: 'k',
     FX_RATE_NGN_PER_USDC: 1600,
     ...over,
   }

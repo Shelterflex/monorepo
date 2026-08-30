@@ -144,7 +144,7 @@ describe('WhistleblowerEarningsPage', () => {
   })
 
   it('renders error state when user is not authenticated', async () => {
-    const mockUseAuthStore = useAuthStore as Mock
+    const mockUseAuthStore = useAuthStore as unknown as Mock
     mockUseAuthStore.mockReturnValue({ user: null })
 
     render(<WhistleblowerEarningsPage />)

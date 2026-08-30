@@ -2,15 +2,15 @@ import { runBackup } from '../scripts/backup.js';
 
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-export function startBackupJob() {
+export function startBackupJob(): NodeJS.Timeout | null {
   if (!process.env.DATABASE_URL) {
     console.log("[backupJob] No DATABASE_URL set. Skipping automated backups.");
-    return;
+    return null;
   }
 
   console.log(`[backupJob] Scheduling automated database backups every ${BACKUP_INTERVAL_MS / 1000 / 60 / 60} hours.`);
-  
-  setInterval(() => {
+
+  return setInterval(() => {
     runBackup().catch((err: unknown) => {
       console.error("[backupJob] Automated backup failed:", err);
     });

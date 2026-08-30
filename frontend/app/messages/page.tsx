@@ -41,6 +41,7 @@ import {
 import useAuthStore from "@/store/useAuthStore";
 import { sanitizeText } from "@/lib/sanitize";
 import { formatDate } from "@/lib/date";
+import { useMessageStream } from "@/hooks/use-message-stream";
 import {
   fetchConversations,
   fetchMessages,
@@ -124,6 +125,25 @@ export default function MessagesPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  useMessageStream({
+    enabled: isAuthenticated && !!selectedConversationId,
+    onMessage: (msg) => {
+      if (msg.type === "new_message" && msg.conversationId === selectedConversationId) {
+        const newMsg = msg.payload as unknown as ApiMessage;
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === newMsg.id);
+          return exists ? prev : [...prev, apiMessageToLocal(newMsg)];
+        });
+      } else if (msg.type === "read_receipt" && msg.conversationId === selectedConversationId) {
+        setConversations(prev =>
+          prev.map(c =>
+            c.id === selectedConversationId ? { ...c, unreadCount: 0 } : c,
+          ),
+        );
+      }
+    },
+  });
 
   const newMessage = selectedConversationId !== null ? drafts[selectedConversationId] || "" : "";
   const setNewMessage = (val: string) => {
@@ -266,50 +286,8 @@ export default function MessagesPage() {
 
     loadMessages();
 
-    const pollInterval = setInterval(async () => {
-      try {
-        const result = await fetchMessages(selectedConversationId, undefined, 50);
-        setMessages(prev => {
-          const existingIds = new Set(prev.map(m => m.id));
-          const newMsgs = result.items
-            .filter(m => !existingIds.has(m.id))
-            .map(m => apiMessageToLocal(m));
-          return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
-        });
-      } catch {
-      }
-    }, 5000);
-
-    pollTimerRef.current = pollInterval;
-
-    const handleVisibility = () => {
-      if (document.hidden && pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      } else if (!document.hidden && selectedConversationId) {
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-        const interval = setInterval(async () => {
-          try {
-            const result = await fetchMessages(selectedConversationId, undefined, 50);
-            setMessages(prev => {
-              const existingIds = new Set(prev.map(m => m.id));
-              const newMsgs = result.items
-                .filter(m => !existingIds.has(m.id))
-                .map(m => apiMessageToLocal(m));
-              return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
-            });
-          } catch {
-          }
-        }, 5000);
-        pollTimerRef.current = interval;
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [selectedConversationId, isAuthenticated, currentUserId]);
 

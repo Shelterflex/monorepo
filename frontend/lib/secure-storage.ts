@@ -161,7 +161,8 @@ class SecureStorage {
 
     const item: StorageItem = {
       value,
-      expires: ttl ? Date.now() + ttl : undefined
+      expires: ttl ? Date.now() + ttl : undefined,
+      v: 1,
     }
 
     try {

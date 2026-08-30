@@ -24,6 +24,8 @@ import { createSorobanAdapter } from "./soroban/index.js"
 import { createBalanceRouter } from "./routes/balance.js"
 import { createPaymentsRouter } from "./routes/payments.js"
 import { createAdminRouter } from "./routes/admin.js"
+import { createAdminContractAccessRouter } from "./routes/adminContractAccess.js"
+import { createAdminUpgradeableProxyRouter } from "./routes/adminUpgradeableProxy.js"
 import { createDealsRouter } from "./routes/deals.js"
 import { createWhistleblowerRouter } from "./routes/whistleblower.js"
 import { createStakingRouter } from "./routes/staking.js"
@@ -79,6 +81,7 @@ import { setDbPoolMetricsCallback, setSorobanCircuitBreakerCallback, shutdownMet
 import { metricsMiddleware } from './middleware/metricsMiddleware.js';
 import { JobScheduler, initJobStore, PostgresJobStore } from "./jobs/scheduler/index.js"
 import { createAdminJobsRouter } from "./routes/adminJobs.js"
+import { createAdminQuotaRouter } from "./routes/adminQuota.js"
 import { getNotificationService } from "./notifications/index.js"
 import { createWebhookReplayRouter } from "./routes/webhookReplay.js"
 import { PostgresWebhookReplayStore, initWebhookReplayStore as initStore } from "./webhookReplay/index.js"
@@ -171,6 +174,9 @@ import { createRentGuaranteeProviderFromEnv } from "./services/insurance/rentGua
 import { createAdminCreditScoreRouter, createCreditScoreRouter } from "./routes/creditScore.js";
 import { createSorobanContractsRouter } from "./routes/sorobanContracts.js";
 import { createContractEventsRouter } from "./routes/contractEvents.js";
+import { createVestingScheduleRouter } from "./routes/vestingSchedule.js";
+import { createWhistleblowerRewardsRouter } from "./routes/whistleblowerRewards.js";
+import { createCircuitBreakerRouter } from "./routes/circuitBreaker.js";
 
 import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
 import { createAdminFraudRouter } from "./routes/adminFraud.js";
@@ -568,43 +574,24 @@ export function createApp() {
   timelockIndexer.start();
   workers.push(timelockIndexer);
 
-  // Graceful shutdown orchestration
+  // Graceful shutdown of the workers/services started above. Exposed via
+  // app.locals rather than registering our own SIGTERM/SIGINT listeners here:
+  // index.ts owns the single centralized signal handler for the whole process
+  // (HTTP server, DB pool, Redis, and the workers it starts directly) and
+  // calls this as one step in that sequence — a second independent handler
+  // racing to process.exit() would risk cutting the other's cleanup short.
   if (env.NODE_ENV !== "test") {
-    const shutdown = async (signal: string) => {
-      logger.info(`Received ${signal}, starting graceful shutdown...`);
+    app.locals.shutdownWorkers = async () => {
+      // Stop secret rotation watcher
+      const secretRotationService = getSecretRotationService();
+      secretRotationService.stopWatching();
 
-      const timeoutMs = 30000;
-      const timeout = setTimeout(() => {
-        logger.error(
-          `Graceful shutdown timed out after ${timeoutMs}ms, forcing exit`,
-        );
-        process.exit(1);
-      }, timeoutMs);
+      // Stop all workers
+      await Promise.all(workers.map((w) => w.stop()));
 
-      try {
-        // Stop secret rotation watcher
-        const secretRotationService = getSecretRotationService();
-        secretRotationService.stopWatching();
-
-        // Stop all workers
-        await Promise.all(workers.map((w) => w.stop()));
-
-        // Shutdown metrics
-        await shutdownMetrics();
-
-        clearTimeout(timeout);
-        logger.info("Graceful shutdown completed successfully");
-        process.exit(0);
-      } catch (err) {
-        logger.error("Error during graceful shutdown", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-        process.exit(1);
-      }
+      // Shutdown metrics
+      await shutdownMetrics();
     };
-
-    process.once("SIGTERM", () => void shutdown("SIGTERM"));
-    process.once("SIGINT", () => void shutdown("SIGINT"));
   }
 
   // Core middleware
@@ -705,9 +692,16 @@ export function createApp() {
   app.use('/api/v1/admin', createAdminWithdrawalsRouter(ngnWalletService))
   app.use('/api/v1/payments', createPaymentsRouter(sorobanAdapter))
   app.use('/api/v1/admin', createAdminRouter(sorobanAdapter, walletStore as any, encryptionService as any, indexer))
+  app.use('/api/v1/admin/contract-access', createAdminContractAccessRouter(sorobanAdapter))
+  app.use('/api/v1/admin/upgradeable-proxy', createAdminUpgradeableProxyRouter(sorobanAdapter))
   app.use('/api/v1/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService))
+  app.use('/api/v1/admin/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
+  app.use('/api/v1/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
+  app.use('/api/v1/whistleblower-rewards', createWhistleblowerRewardsRouter(sorobanAdapter))
+  app.use('/api/v1/admin/circuit-breaker', createCircuitBreakerRouter(sorobanAdapter))
   app.use('/api/v1/admin/secrets', createSecretRotationRouter())
   app.use('/api/v1/admin/jobs', createAdminJobsRouter())
+  app.use('/api/v1/admin/quota', createAdminQuotaRouter())
   app.use('/api/v1/admin/webhook-replay', createWebhookReplayRouter())
   app.use('/api/v1/deals', createDealsRouter())
   app.use('/api/v1/whistleblower', createWhistleblowerRouter(earningsService))
@@ -741,9 +735,16 @@ export function createApp() {
     app.use('/api/admin', createAdminWithdrawalsRouter(ngnWalletService))
     app.use('/api/payments', createPaymentsRouter(sorobanAdapter))
     app.use('/api/admin', createAdminRouter(sorobanAdapter, walletStore as any, encryptionService as any, indexer))
+    app.use('/api/admin/contract-access', createAdminContractAccessRouter(sorobanAdapter))
+    app.use('/api/admin/upgradeable-proxy', createAdminUpgradeableProxyRouter(sorobanAdapter))
     app.use('/api/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService))
+    app.use('/api/admin/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
+    app.use('/api/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
+    app.use('/api/whistleblower-rewards', createWhistleblowerRewardsRouter(sorobanAdapter))
+    app.use('/api/admin/circuit-breaker', createCircuitBreakerRouter(sorobanAdapter))
     app.use('/api/admin/secrets', createSecretRotationRouter())
     app.use('/api/admin/jobs', createAdminJobsRouter())
+    app.use('/api/admin/quota', createAdminQuotaRouter())
     app.use('/api/admin/webhook-replay', createWebhookReplayRouter())
     app.use('/api', createContractEventsRouter())
     app.use('/api/deals', createDealsRouter())
@@ -776,6 +777,8 @@ export function createApp() {
         indexer,
       ),
     );
+    app.use("/api/admin/contract-access", createAdminContractAccessRouter(sorobanAdapter));
+    app.use("/api/admin/upgradeable-proxy", createAdminUpgradeableProxyRouter(sorobanAdapter));
     app.use(
       "/api/admin/reconciliation",
       createAdminReconciliationRouter(ngnWalletService),
@@ -785,6 +788,7 @@ export function createApp() {
     app.use("/api/admin/sessions", createAdminSessionsRouter());
     app.use("/api/admin/secrets", createSecretRotationRouter());
     app.use("/api/admin/jobs", createAdminJobsRouter());
+    app.use("/api/admin/quota", createAdminQuotaRouter());
     app.use("/api/admin/fraud", createAdminFraudRouter());
     app.use("/api/admin/outbox", createAdminOutboxRouter(sorobanAdapter));
     app.use("/api/admin", createAdminAuditRouter());
@@ -871,6 +875,8 @@ export function createApp() {
       indexer,
     ),
   );
+  app.use("/api/v1/admin/contract-access", createAdminContractAccessRouter(sorobanAdapter));
+  app.use("/api/v1/admin/upgradeable-proxy", createAdminUpgradeableProxyRouter(sorobanAdapter));
   app.use(
     "/api/v1/admin/reconciliation",
     createAdminReconciliationRouter(ngnWalletService),
@@ -880,6 +886,7 @@ export function createApp() {
   app.use("/api/v1/admin/sessions", createAdminSessionsRouter());
   app.use("/api/v1/admin/secrets", createSecretRotationRouter());
   app.use("/api/v1/admin/jobs", createAdminJobsRouter());
+  app.use("/api/v1/admin/quota", createAdminQuotaRouter());
   app.use("/api/v1/admin/fraud", createAdminFraudRouter());
   app.use("/api/v1/admin/outbox", createAdminOutboxRouter(sorobanAdapter));
   app.use("/api/v1/admin", createAdminAuditRouter());

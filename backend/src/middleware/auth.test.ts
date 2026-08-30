@@ -14,6 +14,8 @@ vi.mock('../utils/logger.js', () => ({
   },
 }))
 
+// Authentication rejection coverage should distinguish each branch by both its
+// machine-readable error code and its client-facing message.
 describe('authenticateToken middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks()

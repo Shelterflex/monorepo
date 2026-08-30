@@ -44,9 +44,11 @@ function PayoutSettingsContent() {
     handleSubmit: handleBankSubmit,
     setValue: setBankValue,
     watch: watchBank,
-    formState: { errors: bankErrors },
+    formState: { errors: bankErrors, isSubmitting: isBankSubmitting },
   } = useForm<BankFormData>({
     resolver: zodResolver(bankSchema),
+    mode: "onBlur",
+    shouldFocusError: true,
     defaultValues: { bankName: "", accountNumber: "", accountName: "" },
   });
 
@@ -54,9 +56,11 @@ function PayoutSettingsContent() {
     control: stellarControl,
     handleSubmit: handleStellarSubmit,
     setValue: setStellarValue,
-    formState: { errors: stellarErrors },
+    formState: { errors: stellarErrors, isSubmitting: isStellarSubmitting },
   } = useForm<StellarFormData>({
     resolver: zodResolver(stellarSchema),
+    mode: "onBlur",
+    shouldFocusError: true,
     defaultValues: { stellarAddress: "" },
   });
 
@@ -182,13 +186,16 @@ function PayoutSettingsContent() {
                     <form onSubmit={handleBankSubmit(onSaveBank)} className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Bank Name</label>
+                          <label htmlFor="bankName" className="text-sm font-medium">Bank Name</label>
                           <Controller
                             name="bankName"
                             control={bankControl}
                             render={({ field }) => (
                               <select
+                                id="bankName"
                                 {...field}
+                                aria-invalid={!!bankErrors.bankName}
+                                aria-describedby={bankErrors.bankName ? "bankName-error" : undefined}
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                               >
                                 <option value="">Select a bank</option>
@@ -201,26 +208,29 @@ function PayoutSettingsContent() {
                             )}
                           />
                           {bankErrors.bankName && (
-                            <p className="text-xs text-destructive">{bankErrors.bankName.message}</p>
+                            <p id="bankName-error" role="alert" className="text-xs text-destructive">{bankErrors.bankName.message}</p>
                           )}
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">Account Number</label>
+                          <label htmlFor="accountNumber" className="text-sm font-medium">Account Number</label>
                           <Controller
                             name="accountNumber"
                             control={bankControl}
                             render={({ field }) => (
                               <input
+                                id="accountNumber"
                                 {...field}
                                 type="text"
                                 maxLength={10}
                                 placeholder="0123456789"
+                                aria-invalid={!!bankErrors.accountNumber}
+                                aria-describedby={bankErrors.accountNumber ? "accountNumber-error" : undefined}
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                               />
                             )}
                           />
                           {bankErrors.accountNumber && (
-                            <p className="text-xs text-destructive">{bankErrors.accountNumber.message}</p>
+                            <p id="accountNumber-error" role="alert" className="text-xs text-destructive">{bankErrors.accountNumber.message}</p>
                           )}
                         </div>
                       </div>
@@ -256,8 +266,10 @@ function PayoutSettingsContent() {
                       <div className="pt-4">
                         <button
                           type="submit"
-                          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                          disabled={isBankSubmitting || isVerifying}
+                          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
+                          {isBankSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : null}
                           Save NGN Bank Account
                         </button>
                       </div>
@@ -276,7 +288,7 @@ function PayoutSettingsContent() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium flex justify-between items-center">
+                    <label htmlFor="stellarAddress" className="text-sm font-medium flex justify-between items-center">
                       <span>Stellar Address</span>
                       {!address ? (
                         <button
@@ -301,23 +313,28 @@ function PayoutSettingsContent() {
                       control={stellarControl}
                       render={({ field }) => (
                         <input
+                          id="stellarAddress"
                           {...field}
                           type="text"
                           placeholder="G..."
+                          aria-invalid={!!stellarErrors.stellarAddress}
+                          aria-describedby={stellarErrors.stellarAddress ? "stellarAddress-error" : undefined}
                           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring font-mono"
                         />
                       )}
                     />
                     {stellarErrors.stellarAddress && (
-                      <p className="text-xs text-destructive">{stellarErrors.stellarAddress.message}</p>
+                      <p id="stellarAddress-error" role="alert" className="text-xs text-destructive">{stellarErrors.stellarAddress.message}</p>
                     )}
                   </div>
-                  
+
                   <div className="pt-4">
                     <button
                       type="submit"
-                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                      disabled={isStellarSubmitting}
+                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
+                      {isStellarSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : null}
                       Save Stellar Address
                     </button>
                   </div>

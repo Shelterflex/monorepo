@@ -54,8 +54,13 @@ router.post(
         );
       }
 
-      // For now, using a placeholder landlordId - in production, fetch from listing
-      const landlordId = "placeholder-landlord";
+      // Persist the listing owner's real ID so subsequent reviews can enforce
+      // ownership against the landlord associated with this specific listing.
+      const landlordId =
+        await listingApplicationRepository.getListingLandlordId(listingId);
+      if (!landlordId) {
+        throw new AppError(ErrorCode.NOT_FOUND, 404, "Listing not found");
+      }
 
       const application = await applicationService.apply({
         listingId,
@@ -119,7 +124,21 @@ router.get(
         );
       }
 
-      // Verify landlord owns this listing (in production)
+      // Verify landlord owns this listing
+      const listingOwner =
+        await listingApplicationRepository.getListingLandlordId(listingId);
+      if (!listingOwner) {
+        throw new AppError(ErrorCode.NOT_FOUND, 404, "Listing not found");
+      }
+
+      if (listingOwner !== landlordId) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          403,
+          "You can only view applications for your own listings",
+        );
+      }
+
       const applications =
         await listingApplicationRepository.findByListingId(listingId);
 

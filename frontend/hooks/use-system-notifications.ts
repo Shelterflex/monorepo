@@ -9,6 +9,7 @@ export interface SystemNotification {
   message: string
   timestamp: string
   persistent?: boolean
+  read?: boolean
   actions?: Array<{
     label: string
     action: string

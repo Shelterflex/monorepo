@@ -7,16 +7,24 @@ import { createAdminAuditRouter } from './adminAudit.js'
 /**
  * Tests for GET /api/admin/audit and GET /api/admin/audit/verify.
  *
- * Mounts the router directly on a minimal Express app (no admin-secret guard
- * wired in, consistent with the rest of the admin route test suite) to focus
- * on the business logic: search, filter forwarding, pagination, and chain
- * verification responses.
+ * Mounts the router directly on a minimal Express app, with MANUAL_ADMIN_SECRET
+ * mocked so the admin-secret guard (backend/src/middleware/adminSecret.ts) is
+ * exercised the same way it is in production — every request below sends the
+ * matching x-admin-secret header. Focuses on the business logic: search,
+ * filter forwarding, pagination, and chain verification responses.
  */
 
-const { mockSearch, mockVerifyChain, mockAppend } = vi.hoisted(() => ({
+const { mockSearch, mockVerifyChain, mockAppend, ADMIN_SECRET } = vi.hoisted(() => ({
   mockSearch: vi.fn(),
   mockVerifyChain: vi.fn(),
   mockAppend: vi.fn(),
+  ADMIN_SECRET: 'test-admin-secret',
+}))
+
+vi.mock('../schemas/env.js', () => ({
+  env: {
+    MANUAL_ADMIN_SECRET: ADMIN_SECRET,
+  },
 }))
 
 vi.mock('../repositories/AuditRepository.js', () => ({
@@ -80,7 +88,9 @@ describe('Admin Audit Routes', () => {
         totalPages: 1,
       })
 
-      const res = await request(buildApp()).get('/api/admin/audit')
+      const res = await request(buildApp())
+        .get('/api/admin/audit')
+        .set('x-admin-secret', ADMIN_SECRET)
 
       expect(res.status).toBe(200)
       expect(res.body.entries).toHaveLength(1)
@@ -94,6 +104,7 @@ describe('Admin Audit Routes', () => {
 
       await request(buildApp())
         .get('/api/admin/audit?eventType=AUTH_LOGOUT&userId=user-42&page=2&pageSize=10')
+        .set('x-admin-secret', ADMIN_SECRET)
         .expect(200)
 
       expect(mockSearch).toHaveBeenCalledWith(
@@ -106,6 +117,7 @@ describe('Admin Audit Routes', () => {
 
       await request(buildApp())
         .get('/api/admin/audit?dateFrom=2026-01-01T00:00:00.000Z&dateTo=2026-01-31T23:59:59.999Z')
+        .set('x-admin-secret', ADMIN_SECRET)
         .expect(200)
 
       expect(mockSearch).toHaveBeenCalledWith(
@@ -117,17 +129,27 @@ describe('Admin Audit Routes', () => {
     })
 
     it('returns 400 for invalid pageSize', async () => {
-      const res = await request(buildApp()).get('/api/admin/audit?pageSize=9999')
+      const res = await request(buildApp())
+        .get('/api/admin/audit?pageSize=9999')
+        .set('x-admin-secret', ADMIN_SECRET)
       expect(res.status).toBe(400)
     })
 
     it('returns empty list when no entries match', async () => {
       mockSearch.mockResolvedValue({ entries: [], total: 0, page: 1, pageSize: 50, totalPages: 0 })
 
-      const res = await request(buildApp()).get('/api/admin/audit')
+      const res = await request(buildApp())
+        .get('/api/admin/audit')
+        .set('x-admin-secret', ADMIN_SECRET)
       expect(res.status).toBe(200)
       expect(res.body.entries).toHaveLength(0)
       expect(res.body.pagination.total).toBe(0)
+    })
+
+    it('rejects the request when no x-admin-secret header is sent', async () => {
+      const res = await request(buildApp()).get('/api/admin/audit')
+      expect(res.status).toBe(403)
+      expect(mockSearch).not.toHaveBeenCalled()
     })
   })
 
@@ -135,7 +157,9 @@ describe('Admin Audit Routes', () => {
     it('returns 200 when chain is valid', async () => {
       mockVerifyChain.mockResolvedValue({ valid: true, checkedCount: 42, firstBrokenId: null, error: null })
 
-      const res = await request(buildApp()).get('/api/admin/audit/verify')
+      const res = await request(buildApp())
+        .get('/api/admin/audit/verify')
+        .set('x-admin-secret', ADMIN_SECRET)
 
       expect(res.status).toBe(200)
       expect(res.body.valid).toBe(true)
@@ -151,7 +175,9 @@ describe('Admin Audit Routes', () => {
         error: 'event_hash mismatch for row broken-row-id',
       })
 
-      const res = await request(buildApp()).get('/api/admin/audit/verify')
+      const res = await request(buildApp())
+        .get('/api/admin/audit/verify')
+        .set('x-admin-secret', ADMIN_SECRET)
 
       expect(res.status).toBe(409)
       expect(res.body.valid).toBe(false)
@@ -162,7 +188,10 @@ describe('Admin Audit Routes', () => {
     it('uses default limit of 1000 when not specified', async () => {
       mockVerifyChain.mockResolvedValue({ valid: true, checkedCount: 100, firstBrokenId: null, error: null })
 
-      await request(buildApp()).get('/api/admin/audit/verify').expect(200)
+      await request(buildApp())
+        .get('/api/admin/audit/verify')
+        .set('x-admin-secret', ADMIN_SECRET)
+        .expect(200)
 
       expect(mockVerifyChain).toHaveBeenCalledWith(1000)
     })
@@ -170,14 +199,25 @@ describe('Admin Audit Routes', () => {
     it('respects the limit query param', async () => {
       mockVerifyChain.mockResolvedValue({ valid: true, checkedCount: 500, firstBrokenId: null, error: null })
 
-      await request(buildApp()).get('/api/admin/audit/verify?limit=500').expect(200)
+      await request(buildApp())
+        .get('/api/admin/audit/verify?limit=500')
+        .set('x-admin-secret', ADMIN_SECRET)
+        .expect(200)
 
       expect(mockVerifyChain).toHaveBeenCalledWith(500)
     })
 
     it('returns 400 for limit exceeding max', async () => {
-      const res = await request(buildApp()).get('/api/admin/audit/verify?limit=99999')
+      const res = await request(buildApp())
+        .get('/api/admin/audit/verify?limit=99999')
+        .set('x-admin-secret', ADMIN_SECRET)
       expect(res.status).toBe(400)
+    })
+
+    it('rejects the request when no x-admin-secret header is sent', async () => {
+      const res = await request(buildApp()).get('/api/admin/audit/verify')
+      expect(res.status).toBe(403)
+      expect(mockVerifyChain).not.toHaveBeenCalled()
     })
   })
 })

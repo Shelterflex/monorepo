@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { getPool, type PgPoolLike } from '../db.js'
 import { Reward, RewardStatus, CreateRewardInput } from './reward.js'
+import { TxType } from '../outbox/types.js'
 
 interface RewardStorePort {
   create(input: CreateRewardInput): Promise<Reward>
@@ -66,9 +67,34 @@ class InMemoryRewardStore implements RewardStorePort {
     const reward = this.rewards.get(rewardId)
     if (!reward) return null
 
+    const previousStatus = reward.status
     reward.status = status
     reward.updatedAt = new Date()
     this.rewards.set(rewardId, reward)
+
+    // When transitioning to PAYABLE, enqueue on-chain allocate call
+    if (previousStatus !== RewardStatus.PAYABLE && status === RewardStatus.PAYABLE) {
+      try {
+        const { outboxStore } = await import('../outbox/index.js')
+        await outboxStore.create({
+          txType: TxType.WHISTLEBLOWER_REWARD_ALLOCATE,
+          source: 'reward_transition',
+          ref: rewardId,
+          payload: {
+            rewardId,
+            whistleblowerId: reward.whistleblowerId,
+            amountUsdc: reward.amountUsdc.toString(),
+          },
+          aggregateId: rewardId,
+          aggregateType: 'whistleblower_reward',
+          eventType: 'status_changed_to_payable',
+        })
+      } catch (err) {
+        // Log but don't fail the status update
+        console.error('Failed to create outbox item for reward allocation:', err)
+      }
+    }
+
     return reward
   }
 

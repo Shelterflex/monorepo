@@ -268,7 +268,7 @@ export default function PropertyPageContent({
                       : null
                   }
                   whistleblowerCleared={!!property.whistleblower}
-                  verificationStatus={property.verificationStatus}
+                  verificationStatus={property.verificationStatus as any}
                 />
               </SectionBoundary>
 
@@ -282,7 +282,7 @@ export default function PropertyPageContent({
               >
                 <InspectionReportAccordion
                   report={
-                    inspectionSummary
+                    (inspectionSummary
                       ? {
                           overallGrade:
                             inspectionSummary.passCount >
@@ -298,7 +298,7 @@ export default function PropertyPageContent({
                             .map((img) => img.url)
                             .filter(Boolean) as string[],
                         }
-                      : null
+                      : null) as any
                   }
                 />
               </SectionBoundary>

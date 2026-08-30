@@ -12,10 +12,10 @@ vi.mock('@stellar/freighter-api', () => ({
 import freighterApi from '@stellar/freighter-api'
 import { StellarWalletConnection } from '@/lib/stellar-wallet'
 
-const mockedIsConnected = vi.mocked(freighterApi.isConnected)
-const mockedGetAddress = vi.mocked(freighterApi.getAddress)
-const mockedGetNetwork = vi.mocked(freighterApi.getNetwork)
-const mockedSignTransaction = vi.mocked(freighterApi.signTransaction)
+const mockedIsConnected = vi.mocked(freighterApi.isConnected) as any
+const mockedGetAddress = vi.mocked(freighterApi.getAddress) as any
+const mockedGetNetwork = vi.mocked(freighterApi.getNetwork) as any
+const mockedSignTransaction = vi.mocked(freighterApi.signTransaction) as any
 
 describe('StellarWalletConnection', () => {
   let wallet: StellarWalletConnection

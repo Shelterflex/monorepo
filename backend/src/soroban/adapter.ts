@@ -338,6 +338,20 @@ export interface SorobanAdapter {
   init?(contractId: string, adminAddress: string, operatorAddress?: string): Promise<string>
   syncDealStatus?(params: SyncDealStatusParams): Promise<void>
 
+  // Contract access role management (contract_access contract)
+  proposeAssignRole?(subject: string, role: number): Promise<string>
+  confirmAssignRole?(subject: string): Promise<string>
+  delegatePermission?(delegatee: string, permission: number): Promise<string>
+  getRole?(address: string): Promise<number | null>
+  hasPermission?(address: string, permission: number): Promise<boolean>
+  listRoles?(): Promise<Array<{ address: string; role: number }>>
+
+  // Upgradeable proxy governance (upgradeable_proxy contract)
+  proposeUpgrade?(newWasmHash: string): Promise<string>
+  confirmUpgrade?(newWasmHash: string): Promise<string>
+  cancelUpgrade?(): Promise<string>
+  transferAdmin?(newAdminAddress: string): Promise<string>
+  hasPendingUpgrade?(): Promise<boolean>
   // deal_escrow rent-release dispute mechanism
   requestRentRelease?(params: RequestRentReleaseParams): Promise<void>
   challengeRentRelease?(params: ChallengeRentReleaseParams): Promise<void>
@@ -421,4 +435,28 @@ export interface SorobanAdapter {
   executeProposal?(proposalId: number): Promise<string>
   getProposal?(proposalId: number): Promise<GovernanceProposal | null>
   getProposalCount?(): Promise<number>
+
+  // vesting_schedule contract — linear vesting with cliff
+  createVestingSchedule?(beneficiary: string, totalAmount: bigint, startTime: number, endTime: number, cliffTime: number, revocable: boolean): Promise<string>
+  claimVested?(beneficiary: string): Promise<bigint>
+  revokeVesting?(beneficiary: string): Promise<bigint>
+  getClaimableVested?(beneficiary: string): Promise<bigint>
+
+  // whistleblower_rewards contract — on-chain reward allocation and claiming
+  allocateReward?(whistleblower: string, amount: bigint): Promise<string>
+  claimReward?(whistleblower: string): Promise<bigint>
+  getClaimableReward?(whistleblower: string): Promise<bigint>
+
+  // rent_payments contract — deal-scoped rent payment receipts
+  createRentPaymentReceipt?(dealId: string, amount: bigint, payer: string, recipient: string, timestamp: number): Promise<string>
+  listRentPaymentReceiptsByDeal?(dealId: string, limit: number): Promise<any[]>
+  rentPaymentReceiptCount?(dealId: string): Promise<number>
+
+  // deal_escrow circuit-breaker — emergency controls
+  freeze?(): Promise<string>
+  isFrozen?(): Promise<boolean>
+  proposeDrain?(destination: string): Promise<string>
+  executeDrain?(): Promise<string>
+  setRecoveryDelay?(delaySeconds: number): Promise<string>
+  getCircuitBreakerState?(): Promise<{ frozen: boolean; drainProposed: boolean; drainDestination?: string; recoveryDelay: number }>
 }

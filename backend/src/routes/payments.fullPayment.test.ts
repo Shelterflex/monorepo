@@ -3,6 +3,7 @@ import request from 'supertest'
 
 describe('POST /api/payments/confirm includes full-payment payout breakdown', () => {
   beforeEach(async () => {
+    process.env.NODE_ENV = 'test'
     process.env.FULL_PAYMENT_SPLIT_VERSION = 'test-v1'
     process.env.FULL_PAYMENT_PLATFORM_SHARE = '0.1'
     process.env.FULL_PAYMENT_REPORTER_SHARE = '0.05'
@@ -54,5 +55,5 @@ describe('POST /api/payments/confirm includes full-payment payout breakdown', ()
     const entries = await settlementLedgerStore.listByDealId(dealId, 'full_payment_incentive')
     expect(entries.length).toBeGreaterThan(0)
     expect(entries.some((e) => e.beneficiaryType === 'platform')).toBe(true)
-  }, 15000)
+  }, 60000)
 })

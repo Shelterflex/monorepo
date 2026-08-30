@@ -40,6 +40,7 @@ export enum TxType {
   SLASHING_CANCEL_SLASH = 'slashing_cancel_slash',
   BOND_DEPOSIT = 'bond_deposit',
   BOND_WITHDRAW = 'bond_withdraw',
+  WHISTLEBLOWER_REWARD_ALLOCATE = 'whistleblower_reward_allocate',
 }
 
 /**

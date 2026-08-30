@@ -5,14 +5,8 @@ import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth.js'
 import { notificationService, _getNotificationMemory } from '../services/notificationService.js'
+import { assertAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 import { z } from 'zod'
-
-function requireAdmin(req: Request) {
-  const headerSecret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-    throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-  }
-}
 
 export function createNotificationsRouter() {
   const r = Router()

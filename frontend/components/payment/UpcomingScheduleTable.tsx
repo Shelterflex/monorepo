@@ -61,7 +61,7 @@ export function UpcomingScheduleTable({
         <tbody>
           {schedule.map((row) => {
             const optimistic = optimisticStatuses[row.period];
-            const effectiveStatus = optimistic ?? row.status;
+            const effectiveStatus: string = (optimistic ?? row.status) as string;
             const isProcessing = optimistic === "pending";
             const isFailed = optimistic === "failed";
             const formattedAmount = formatNgn(row.amount, locale);

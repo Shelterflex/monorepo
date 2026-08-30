@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { validate } from '../middleware/validate.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
-import { env } from '../schemas/env.js'
+import { assertAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 import { getFraudStore } from '../fraud/store.js'
 import { getFraudEngine } from '../fraud/engine.js'
 import { SignalType, RiskLevel, ActionType, EntityType } from '../fraud/types.js'
@@ -93,13 +93,6 @@ const withdrawBondSchema = z.object({
 
 export function createAdminFraudRouter() {
   const router = Router()
-
-  function requireAdmin(req: Request) {
-    const headerSecret = req.headers['x-admin-secret']
-    if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-      throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-    }
-  }
 
   // ---------------------------------------------------------------------------
   // Signal Management

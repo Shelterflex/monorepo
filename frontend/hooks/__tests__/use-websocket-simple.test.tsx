@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react'
 import { useWebSocket } from '../use-websocket'
 
 // Mock WebSocket
+type MockWsType = Record<string, any>
 const mockWebSocket = vi.fn()
 vi.stubGlobal('WebSocket', mockWebSocket)
 
@@ -38,7 +39,7 @@ describe('useWebSocket', () => {
   })
 
   it('should handle incoming messages', () => {
-    const mockWs = {
+    const mockWs: MockWsType = {
       readyState: 1,
       onopen: null,
       onmessage: null,
@@ -70,7 +71,7 @@ describe('useWebSocket', () => {
   })
 
   it('should send messages', () => {
-    const mockWs = {
+    const mockWs: MockWsType = {
       readyState: 1,
       onopen: null,
       onmessage: null,
@@ -96,7 +97,7 @@ describe('useWebSocket', () => {
   })
 
   it('should handle connection errors', () => {
-    const mockWs = {
+    const mockWs: MockWsType = {
       readyState: 3,
       onopen: null,
       onmessage: null,

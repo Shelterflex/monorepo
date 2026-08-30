@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { toast } from "sonner";
 import { Loader2, Upload, File as FileIcon, X, CheckCircle2 } from "lucide-react";
 import { OnboardingStepIndicator } from "@/components/inspector/OnboardingStepIndicator";
@@ -282,8 +283,7 @@ function InspectorOnboardingContent() {
                       <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
                         <div className="flex items-center space-x-3">
                           {passportFile.file.type.startsWith('image/') ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- blob URLs from URL.createObjectURL are incompatible with next/image
-                            <img src={passportFile.previewUrl} alt="Preview" className="w-10 h-10 object-cover rounded-md" />
+                            <Image src={passportFile.previewUrl} alt="Preview" width={40} height={40} unoptimized className="w-10 h-10 object-cover rounded-md" />
                           ) : (
                             <FileIcon className="w-10 h-10 text-muted-foreground" />
                           )}
@@ -312,8 +312,7 @@ function InspectorOnboardingContent() {
                       <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
                         <div className="flex items-center space-x-3">
                           {driverLicenseFile.file.type.startsWith('image/') ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- blob URLs from URL.createObjectURL are incompatible with next/image
-                            <img src={driverLicenseFile.previewUrl} alt="Preview" className="w-10 h-10 object-cover rounded-md" />
+                            <Image src={driverLicenseFile.previewUrl} alt="Preview" width={40} height={40} unoptimized className="w-10 h-10 object-cover rounded-md" />
                           ) : (
                             <FileIcon className="w-10 h-10 text-muted-foreground" />
                           )}

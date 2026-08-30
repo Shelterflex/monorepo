@@ -26,6 +26,10 @@ import {
 import { AppError, notFound } from "../errors/AppError.js";
 import { ErrorCode } from "../errors/errorCodes.js";
 import { validate } from "../middleware/validate.js";
+import {
+  assertAdminSecret,
+  requireAdminSecret,
+} from "../middleware/adminSecret.js";
 import { markRewardPaidSchema } from "../schemas/reward.js";
 import {
   adminListingFiltersSchema,
@@ -52,14 +56,6 @@ export function createAdminRouter(
 ) {
   const router = Router();
   const sender = new OutboxSender(adapter);
-
-  // Admin auth guard helper
-  function requireAdminSecret(req: Request) {
-    const headerSecret = req.headers["x-admin-secret"];
-    if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-      throw new AppError(ErrorCode.FORBIDDEN, 403, "Invalid admin secret");
-    }
-  }
 
   /**
    * GET /api/admin/flags
@@ -95,13 +91,7 @@ export function createAdminRouter(
           );
         }
 
-        const headerSecret = req.headers["x-admin-secret"];
-        if (
-          env.MANUAL_ADMIN_SECRET &&
-          headerSecret !== env.MANUAL_ADMIN_SECRET
-        ) {
-          throw new AppError(ErrorCode.FORBIDDEN, 403, "Invalid admin secret");
-        }
+        assertAdminSecret(req);
 
         const fromKeyId =
           typeof req.body.fromKeyId === "string"
@@ -882,7 +872,7 @@ export function createAdminRouter(
     "/indexer/metrics",
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        requireAdminSecret(req);
+        assertAdminSecret(req);
 
         if (!indexer) {
           throw new AppError(
@@ -917,7 +907,7 @@ export function createAdminRouter(
     "/indexer/pause",
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        requireAdminSecret(req);
+        assertAdminSecret(req);
 
         if (!indexer) {
           throw new AppError(
@@ -966,7 +956,7 @@ export function createAdminRouter(
     "/indexer/resume",
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        requireAdminSecret(req);
+        assertAdminSecret(req);
 
         if (!indexer) {
           throw new AppError(
@@ -1556,6 +1546,39 @@ export function createAdminRouter(
         next(error);
       }
     }
+  );
+
+  /**
+   * GET /api/admin/receipts
+   * List indexed receipts with optional filters (no admin-secret gate)
+   */
+  router.get(
+    "/receipts",
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!indexer?.receiptRepository) {
+          throw new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            501,
+            "Receipt repository not available on this deployment",
+          );
+        }
+
+        const page = Math.max(1, Number(req.query.page ?? 1));
+        const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 20)));
+        const dealId = typeof req.query.dealId === "string" ? req.query.dealId : undefined;
+
+        const result = await indexer.receiptRepository.query({
+          dealId,
+          page,
+          pageSize,
+        });
+
+        res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
   );
 
   return router;

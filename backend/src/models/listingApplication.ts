@@ -18,6 +18,14 @@ export enum PaymentPlan {
   OUTRIGHT = "outright",
 }
 
+export interface RtiAssessment {
+  monthlyIncome: number | null;
+  monthlyRepayment: number;
+  rtiPercent: number | null;
+  verdict: "pass" | "borderline" | "fail" | "income_unverified";
+  assessedAt: string;
+}
+
 export interface ListingApplication {
   id: string;
   listingId: string;
@@ -31,6 +39,7 @@ export interface ListingApplication {
   reviewedAt?: Date;
   reviewedBy?: string;
   reviewerNotes?: string;
+  rtiAssessment?: RtiAssessment;
   createdAt: Date;
   updatedAt: Date;
 }

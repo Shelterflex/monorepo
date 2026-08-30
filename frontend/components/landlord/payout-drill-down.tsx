@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import {
   getPayoutDetail,
   formatCurrency, formatPayoutDate, formatPayoutDateTime,
@@ -51,8 +52,7 @@ export function PayoutDrillDown({ payoutId, onClose }: PayoutDrillDownProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deductionsOpen, setDeductionsOpen] = useState(true);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useFocusTrap(true, onClose);
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
@@ -68,41 +68,8 @@ export function PayoutDrillDown({ payoutId, onClose }: PayoutDrillDownProps) {
   }, [payoutId]);
 
   useEffect(() => {
-    previousFocusRef.current = document.activeElement as HTMLElement;
     fetchDetail();
   }, [fetchDetail]);
-
-  // Focus trap + Escape key
-  useEffect(() => {
-    if (loading) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab" || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    // Auto-focus the dialog
-    dialogRef.current?.focus();
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      previousFocusRef.current?.focus();
-    };
-  }, [loading, onClose]);
 
   return (
     <div

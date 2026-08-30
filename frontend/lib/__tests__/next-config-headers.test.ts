@@ -4,9 +4,9 @@ import nextConfigPromise from '../../next.config.mjs';
 describe('next.config.mjs security headers', () => {
   it('defines headers function that returns security headers for all routes', async () => {
     // nextConfig exported from withBundleAnalyzer(withNextIntl(nextConfig))
-    const config = await nextConfigPromise;
+    const config = (await nextConfigPromise) as any;
     expect(config).toBeDefined();
-    expect(typeof config.headers).toBe('function');
+    expect(typeof config?.headers).toBe('function');
 
     const headersConfig = await config.headers();
     expect(Array.isArray(headersConfig)).toBe(true);

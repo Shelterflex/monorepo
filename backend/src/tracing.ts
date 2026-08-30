@@ -69,15 +69,16 @@ try {
   console.error("[backend] Error initializing OpenTelemetry", error);
 }
 
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  sdk
-    .shutdown()
-    .then(() => console.log("[backend] OpenTelemetry terminated"))
-    .catch((error) =>
-      console.log("[backend] Error terminating OpenTelemetry", error),
-    )
-    .finally(() => process.exit(0));
-});
+// Graceful shutdown is coordinated centrally by index.ts's SIGTERM/SIGINT
+// handler, which calls shutdownTracing() as one step among several — it must
+// not call process.exit() itself, or it would race that handler's cleanup.
+export async function shutdownTracing(): Promise<void> {
+  try {
+    await sdk.shutdown();
+    console.log("[backend] OpenTelemetry terminated");
+  } catch (error) {
+    console.error("[backend] Error terminating OpenTelemetry", error);
+  }
+}
 
 export default sdk;

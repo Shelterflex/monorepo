@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { getSharedRatingCard, type PublicRatingCard } from "@/lib/ratingCardApi";
 import { StarRating } from "@/components/tenant/RatingDimension";
 import { formatDate } from "@/lib/date";
+import RatingCard from "@/components/tenant/RatingCard";
 
 export default function SharedRatingCardPage({
   params,
@@ -60,18 +61,7 @@ export default function SharedRatingCardPage({
     <main className="min-h-screen bg-background">
       <section className="py-8">
         <div className="container mx-auto px-4 max-w-2xl">
-          <div className="mb-8 text-center">
-            <ShieldCheck className="mx-auto h-12 w-12 text-secondary mb-4" />
-            <div className="flex items-center justify-center gap-1 mb-2">
-              <StarRating score={card.compositeScore} size="lg" />
-            </div>
-            <p className="text-6xl font-mono font-black text-primary">
-              {card.compositeScore}
-            </p>
-            <p className="text-muted-foreground mt-1 text-lg">
-              out of 5.0 &middot; {card.totalRatings} rating{card.totalRatings !== 1 ? "s" : ""}
-            </p>
-          </div>
+          <RatingCard card={card as any} variant="full" className="mb-8" />
 
           <Card className="border-3 border-foreground p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)]">
             <h2 className="font-mono text-lg font-bold mb-6">Tenant Reputation Profile</h2>

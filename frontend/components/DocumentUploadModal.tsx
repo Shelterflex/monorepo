@@ -146,11 +146,13 @@ export function DocumentUploadModal({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
     reset,
     watch,
   } = useForm<UploadFormData>({
     resolver: zodResolver(uploadSchema),
+    mode: "onBlur",
+    shouldFocusError: true,
     defaultValues: {
       category: "other",
     },
@@ -443,6 +445,7 @@ export function DocumentUploadModal({
               id="category-select"
               {...register("category")}
               disabled={uploadState === "uploading"}
+              aria-invalid={!!errors.category}
               className="w-full border-2 border-border rounded-lg p-2 bg-background text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-foreground disabled:opacity-50"
               aria-describedby={errors.category ? "category-error" : undefined}
             >
@@ -478,6 +481,7 @@ export function DocumentUploadModal({
               maxLength={500}
               rows={3}
               disabled={uploadState === "uploading"}
+              aria-invalid={!!errors.description}
               className="w-full border-2 border-border rounded-lg p-2 bg-background text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-foreground resize-none disabled:opacity-50"
               aria-describedby={
                 errors.description ? "description-error" : undefined
@@ -508,6 +512,7 @@ export function DocumentUploadModal({
               type="text"
               placeholder="Link to a specific deal..."
               disabled={uploadState === "uploading"}
+              aria-invalid={!!errors.dealId}
               className="w-full border-2 border-border rounded-lg p-2 bg-background text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-foreground disabled:opacity-50"
               aria-describedby={errors.dealId ? "deal-id-error" : undefined}
             />

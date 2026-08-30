@@ -1,8 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
-import { env } from '../schemas/env.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { requireAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 import { validate } from '../middleware/validate.js'
 import {
   listMismatches,
@@ -14,14 +14,6 @@ import {
 import { runReconciliationPass } from '../reconciliation/engine.js'
 import { runResolutionPass } from '../reconciliation/resolver.js'
 import type { MismatchStatus, MismatchClass } from '../reconciliation/types.js'
-
-function requireAdmin(req: Request, _res: Response, next: NextFunction) {
-  const headerSecret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-    return next(new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret'))
-  }
-  return next()
-}
 
 const mismatchQuerySchema = z.object({
   status: z.enum(['open', 'auto_resolved', 'escalated', 'closed']).optional(),

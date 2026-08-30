@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { validate } from '../middleware/validate.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
-import { env } from '../schemas/env.js'
+import { assertAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 import { getJobStore } from '../jobs/scheduler/store.js'
 import { getScheduler } from '../jobs/scheduler/worker.js'
 import { JobStatus } from '../jobs/scheduler/types.js'
@@ -31,13 +31,6 @@ const rescheduleBodySchema = z.object({
 
 export function createAdminJobsRouter() {
   const router = Router()
-
-  function requireAdmin(req: Request) {
-    const headerSecret = req.headers['x-admin-secret']
-    if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-      throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-    }
-  }
 
   /**
    * GET /api/admin/jobs

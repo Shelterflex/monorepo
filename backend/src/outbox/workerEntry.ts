@@ -4,7 +4,7 @@ import { createSorobanAdapter } from '../soroban/index.js'
 import { getSorobanConfigFromEnv } from '../soroban/client.js'
 import { logger } from '../utils/logger.js'
 
-export function maybeStartOutboxWorker() {
+export function maybeStartOutboxWorker(): OutboxWorker | null {
   if (process.env.OUTBOX_WORKER_ENABLED === 'true') {
     const sorobanConfig = getSorobanConfigFromEnv(process.env)
     const adapter = createSorobanAdapter(sorobanConfig)
@@ -12,7 +12,9 @@ export function maybeStartOutboxWorker() {
     const worker = new OutboxWorker(sender, adapter)
     worker.start(60000) // 1 minute interval
     logger.info('Outbox retry worker enabled')
+    return worker
   } else {
     logger.info('Outbox retry worker disabled')
+    return null
   }
 }

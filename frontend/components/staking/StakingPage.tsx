@@ -1,15 +1,14 @@
 "use client";
 
 import {
-  getStakingPosition,
   getMvpStakingPosition,
   MvpStakingPositionResponse,
   stakeTokens,
-  StakingPositionReponse,
   unstakeTokens,
   stakeFromNgnBalance,
 } from "@/lib/config";
 import { getNgnBalance, type NgnBalanceResponse } from "@/lib/walletApi";
+import { useStakingPosition } from "@/hooks/useStakingPosition";
 import React, { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -25,6 +24,7 @@ import { StakeForm } from "./StakeForm";
 import { HistoryTable } from "./HistoryTable";
 import { DelegationPanel } from "./DelegationPanel";
 import { StakingClaimFlow } from "./StakingClaimFlow";
+import { EpochRewardsPanel } from "./EpochRewardsPanel";
 import { stellarWallet } from "@/lib/stellar-wallet";
 import { walletAuthManager } from "@/lib/wallet-auth";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -34,7 +34,10 @@ type StakingMode = "ngn_deposit" | "ngn_balance" | "usdc";
 export default function StakingPage() {
   const { isFrozen, freezeReason } = useRiskState();
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [stakingPosition, setStakingPosition] = useState<StakingPositionReponse | null>(null);
+  const { position: stakingPosition, refetch: refetchStakingPosition } = useStakingPosition({
+    walletAddress,
+    enabled: !!walletAddress && !!process.env.NEXT_PUBLIC_BACKEND_URL,
+  });
   const [mvpPosition, setMvpPosition] = useState<MvpStakingPositionResponse | null>(null);
   const [ngnBalance, setNgnBalance] = useState<NgnBalanceResponse | null>(null);
   const [stakingMode, setStakingMode] = useState<StakingMode>("ngn_balance");
@@ -68,17 +71,11 @@ export default function StakingPage() {
     }
   }, []);
 
-  // Fetch position & balance when walletAddress changes
+  // Fetch MVP position when walletAddress changes
   useEffect(() => {
     if (!walletAddress || !process.env.NEXT_PUBLIC_BACKEND_URL) {
       return;
     }
-
-    getStakingPosition(walletAddress)
-      .then((data) => setStakingPosition(data))
-      .catch((err: Error) => {
-        console.error("Failed to fetch staking position", err);
-      });
     getMvpStakingPosition(walletAddress)
       .then((data) => setMvpPosition(data))
       .catch((err: Error) => console.error("Failed to fetch MVP staking position", err));
@@ -107,9 +104,6 @@ export default function StakingPage() {
       const walletInfo = await stellarWallet.connect();
       setWalletAddress(walletInfo.publicKey);
       setStatus("Wallet connected successfully!");
-      
-      const pos = await getStakingPosition(walletInfo.publicKey);
-      setStakingPosition(pos);
       setMvpPosition(await getMvpStakingPosition(walletInfo.publicKey));
     } catch (err: any) {
       setStatus(err.message || "Failed to connect Stellar wallet");
@@ -158,8 +152,7 @@ export default function StakingPage() {
           setStatus(`Successfully staked ${res.amountUsdc || amount} USDC from ₦${amount.toLocaleString()}`);
           const updatedBalance = await getNgnBalance();
           setNgnBalance(updatedBalance);
-          const updatedPosition = await getStakingPosition(walletAddress);
-          setStakingPosition(updatedPosition);
+          refetchStakingPosition();
         } else {
           setStatus("Staking queued for processing");
         }
@@ -175,8 +168,7 @@ export default function StakingPage() {
           setStatus("Stake queued for retry");
         }
 
-        const updatedPosition = await getStakingPosition(walletAddress);
-        setStakingPosition(updatedPosition);
+        refetchStakingPosition();
         setMvpPosition(await getMvpStakingPosition(walletAddress));
         setStakeAmount("");
       }
@@ -207,8 +199,7 @@ export default function StakingPage() {
         setStatus("Unstake queued for retry");
       }
 
-      const updatedPosition = await getStakingPosition(walletAddress);
-      setStakingPosition(updatedPosition);
+      refetchStakingPosition();
 
     } catch (err: any) {
       setStatus(err.message || "Unstake failed");
@@ -221,10 +212,7 @@ export default function StakingPage() {
     setIsClaimFlowOpen(false);
     // The flow may have just claimed rewards on-chain — refresh the position
     // whether it did or not, so the claimable balance reflects reality.
-    if (!walletAddress) return;
-    getStakingPosition(walletAddress)
-      .then((data) => setStakingPosition(data))
-      .catch((err: Error) => console.error("Failed to refresh staking position", err));
+    refetchStakingPosition();
   };
 
   const handleGetQuote = async () => {
@@ -249,12 +237,7 @@ export default function StakingPage() {
   };
 
   const handleNgnFlowComplete = (position: any) => {
-    getStakingPosition(walletAddress)
-      .then((data) => setStakingPosition(data))
-      .catch((err: Error) => {
-        console.error("Failed to refresh staking position", err);
-      });
-
+    refetchStakingPosition();
     setShowNgnFlow(false);
     setNgnQuote(null);
     setNgnDepositAmount("");
@@ -353,6 +336,8 @@ export default function StakingPage() {
           </div>
 
           <DelegationPanel walletAddress={walletAddress} />
+
+          <EpochRewardsPanel />
 
           <Card className="border-2 border-foreground/10 bg-card shadow-sm">
             <CardHeader className="pb-3">

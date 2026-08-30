@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
-import { env } from '../schemas/env.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { assertAdminSecret as requireAdminSecret } from '../middleware/adminSecret.js'
 import { employerStore } from '../models/employerStore.js'
 import {
   createEmployerSchema,
@@ -14,13 +14,6 @@ import {
   type EmployerAuthenticatedRequest,
 } from '../middleware/employerApiKey.js'
 import { processEmployerDeductionNotification } from '../services/salaryDeductionService.js'
-
-function requireAdminSecret(req: Request): void {
-  const headerSecret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-    throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-  }
-}
 
 export function createEmployersRouter(): Router {
   const router = Router()

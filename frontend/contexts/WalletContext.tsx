@@ -17,6 +17,7 @@ const POLL_INTERVAL_MS = 3000
 
 interface WalletContextType {
   publicKey: string | null
+  address: string | null
   connected: boolean
   connecting: boolean
   freighterInstalled: boolean
@@ -130,6 +131,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     <WalletContext.Provider
       value={{
         publicKey,
+        address: publicKey,
         connected: publicKey !== null,
         connecting,
         freighterInstalled: freighterInstalled === true,

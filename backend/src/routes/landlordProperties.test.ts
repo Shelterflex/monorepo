@@ -32,7 +32,7 @@ describe('Landlord Properties API', () => {
       email: landlordEmail,
       createdAt: new Date(),
     })
-    
+
     // Mock the postgres repo to fail so it uses fallback cache
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })

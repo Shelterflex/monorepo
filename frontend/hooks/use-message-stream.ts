@@ -28,7 +28,7 @@ export function useMessageStream({
 }: UseMessageStreamOptions) {
   const token = useAuthStore((s) => s.token)
   const eventSourceRef = useRef<EventSource | null>(null)
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const reconnectAttemptRef = useRef(0)
   const lastEventIdRef = useRef<string | null>(null)
   const mountedRef = useRef(true)

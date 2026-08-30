@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 import { Upload, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
 } from "./InspectionChecklist";
 import { AccessibleFlowStatus } from "./AccessibleFlowStatus";
 import { propertyInspectionApi, type ChecklistItem } from "@/lib/propertyInspectionApi";
+import { startWhistleblowerReport, trackWhistleblowerReportStep, trackFormSubmission } from "@/lib/analytics-init";
 
 interface ReportSubmitFormProps {
   jobId: string;
@@ -101,6 +103,8 @@ export function ReportSubmitForm({ jobId, propertyTitle, onSubmitted, onError }:
     e.preventDefault();
     if (!validate()) return;
 
+    startWhistleblowerReport("anonymous");
+    trackWhistleblowerReportStep("anonymous", "complete_inspection_report");
     setIsSubmitting(true);
     setError("");
     setStatus("Submitting inspection report.");
@@ -128,6 +132,8 @@ export function ReportSubmitForm({ jobId, propertyTitle, onSubmitted, onError }:
         inspectorNotes: notes,
       });
 
+      trackFormSubmission("inspection_report", { job_id: jobId });
+      trackWhistleblowerReportStep("anonymous", "submit_report", { completed: true });
       setStatus("Inspection report submitted successfully.");
       onSubmitted?.();
     } catch (err) {
@@ -194,7 +200,7 @@ export function ReportSubmitForm({ jobId, propertyTitle, onSubmitted, onError }:
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4" aria-label="Selected inspection photos">
               {photos.map((photo, index) => (
                 <div key={`${photo.name}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border-2 border-foreground bg-muted">
-                  <img src={URL.createObjectURL(photo)} alt={`Photo ${index + 1}: ${photo.name}`} className="h-full w-full object-cover" />
+                  <Image src={URL.createObjectURL(photo)} alt={`Photo ${index + 1}: ${photo.name}`} fill unoptimized sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
                   <button
                     type="button"
                     onClick={() => removePhoto(index)}

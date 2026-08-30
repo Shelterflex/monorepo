@@ -192,29 +192,45 @@ describe("initiateWalletTopUp", () => {
 
 describe("getMyDisputes", () => {
   it("fetches disputes list", async () => {
-    vi.mocked(apiGet).mockResolvedValue({ disputes: [] });
+    vi.mocked(apiGet).mockResolvedValue({ success: true, data: { disputes: [] } });
     const result = await getMyDisputes();
     expect(apiGet).toHaveBeenCalledWith("/api/tenant/payments/disputes");
-    expect(result.disputes).toEqual([]);
+    expect(result.data.disputes).toEqual([]);
   });
 });
 
 describe("createDispute", () => {
   it("POSTs dispute data", async () => {
-    vi.mocked(apiPost).mockResolvedValue({ success: true, disputeId: "DIS-001" });
+    vi.mocked(apiPost).mockResolvedValue({
+      success: true,
+      data: {
+        dispute: {
+          id: "DIS-001",
+          paymentId: "P-001",
+          dealId: "D-001",
+          reason: "amount_discrepancy",
+          description: "Charged wrong amount",
+          status: "pending",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
 
     const result = await createDispute({
       paymentId: "P-001",
+      dealId: "D-001",
       reason: "amount_discrepancy",
       description: "Charged wrong amount",
     });
 
     expect(apiPost).toHaveBeenCalledWith("/api/tenant/payments/disputes", {
       paymentId: "P-001",
+      dealId: "D-001",
       reason: "amount_discrepancy",
       description: "Charged wrong amount",
     });
-    expect(result.disputeId).toBe("DIS-001");
+    expect(result.data.dispute.id).toBe("DIS-001");
   });
 });
 

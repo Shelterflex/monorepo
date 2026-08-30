@@ -1,143 +1,109 @@
-import { stellarWallet } from "./stellar-wallet";
-import { requestWalletChallenge, verifyWalletSignature } from "./authApi";
+/**
+ * Wallet Authentication Session Manager
+ */
 
-export interface WalletAuthSession {
+import { stellarWallet } from "@/lib/stellar-wallet";
+import { requestWalletChallenge, verifyWalletSignature } from "@/lib/authApi";
+
+export interface WalletSession {
   publicKey: string;
   network: string;
   token: string;
   expiresAt: number;
 }
 
-const SESSION_STORAGE_KEY = "wallet_auth_session";
-const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
-
 export class WalletAuthManager {
-  private static instance: WalletAuthManager;
-  private session: WalletAuthSession | null = null;
+  private static instance?: WalletAuthManager;
+  private session: WalletSession | null = null;
+  private storageKey = "wallet_auth_session";
 
   private constructor() {
-    this.loadSession();
+    this.restoreSession();
   }
 
-  static getInstance(): WalletAuthManager {
+  public static getInstance(): WalletAuthManager {
     if (!WalletAuthManager.instance) {
       WalletAuthManager.instance = new WalletAuthManager();
     }
     return WalletAuthManager.instance;
   }
 
-  private loadSession(): void {
+  private restoreSession(): void {
     if (typeof window === "undefined") return;
-
     try {
-      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (stored) {
-        const session = JSON.parse(stored) as WalletAuthSession;
-        if (session.expiresAt > Date.now()) {
-          this.session = session;
-        } else {
-          this.clearSession();
-        }
+      const stored = localStorage.getItem(this.storageKey);
+      if (!stored) {
+        this.session = null;
+        return;
       }
-    } catch (error) {
-      console.error("Failed to load wallet session:", error);
-      this.clearSession();
-    }
-  }
-
-  private saveSession(session: WalletAuthSession): void {
-    if (typeof window === "undefined") return;
-
-    try {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-      this.session = session;
-    } catch (error) {
-      console.error("Failed to save wallet session:", error);
-    }
-  }
-
-  private clearSession(): void {
-    if (typeof window === "undefined") return;
-
-    try {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
+      const parsed = JSON.parse(stored) as WalletSession;
+      if (parsed.expiresAt && parsed.expiresAt > Date.now()) {
+        this.session = parsed;
+      } else {
+        this.session = null;
+        localStorage.removeItem(this.storageKey);
+      }
+    } catch {
       this.session = null;
-    } catch (error) {
-      console.error("Failed to clear wallet session:", error);
     }
   }
 
-  async connectAndAuthenticate(): Promise<WalletAuthSession> {
-    try {
-      // Step 1: Connect wallet
-      const walletInfo = await stellarWallet.connect();
+  public async connectAndAuthenticate(): Promise<WalletSession> {
+    const { publicKey, network } = await stellarWallet.connect();
+    const { challengeXdr } = await requestWalletChallenge(publicKey);
+    const signedXdr = await stellarWallet.signTransaction(challengeXdr);
+    const { token } = await verifyWalletSignature(publicKey, signedXdr);
 
-      // Step 2: Request challenge from backend
-      const challenge = await requestWalletChallenge(walletInfo.publicKey);
+    const session: WalletSession = {
+      publicKey,
+      network: network || "testnet",
+      token: token || "",
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    };
 
-      // Step 3: Sign challenge with wallet
-      const signedChallengeXdr = await stellarWallet.signTransaction(
-        challenge.challengeXdr
-      );
-
-      // Step 4: Verify signature and get session token
-      const verifyResponse = await verifyWalletSignature(
-        walletInfo.publicKey,
-        signedChallengeXdr
-      );
-
-      // Step 5: Create and persist session
-      const session: WalletAuthSession = {
-        publicKey: walletInfo.publicKey,
-        network: walletInfo.network || "testnet",
-        token: verifyResponse.token,
-        expiresAt: Date.now() + SESSION_DURATION_MS,
-      };
-
-      this.saveSession(session);
-      return session;
-    } catch (error) {
-      console.error("Wallet authentication failed:", error);
-      throw error;
+    this.session = session;
+    if (typeof window !== "undefined") {
+      localStorage.setItem(this.storageKey, JSON.stringify(session));
     }
+    return session;
   }
 
-  async disconnect(): Promise<void> {
-    await stellarWallet.disconnect();
-    this.clearSession();
-  }
-
-  getSession(): WalletAuthSession | null {
-    if (this.session && this.session.expiresAt > Date.now()) {
-      return this.session;
+  public getSession(): WalletSession | null {
+    if (this.session && this.session.expiresAt && this.session.expiresAt <= Date.now()) {
+      this.session = null;
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(this.storageKey);
+      }
+      return null;
     }
-    this.clearSession();
-    return null;
+    if (!this.session) {
+      this.restoreSession();
+    }
+    return this.session;
   }
 
-  isAuthenticated(): boolean {
+  public isAuthenticated(): boolean {
     return this.getSession() !== null;
   }
 
-  getAuthToken(): string | null {
-    const session = this.getSession();
-    return session?.token || null;
+  public getAuthToken(): string | null {
+    return this.getSession()?.token ?? null;
   }
 
-  async refreshIfNeeded(): Promise<void> {
+  public async disconnect(): Promise<void> {
+    await stellarWallet.disconnect();
+    this.session = null;
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(this.storageKey);
+    }
+  }
+
+  public async refreshIfNeeded(): Promise<void> {
     const session = this.getSession();
     if (!session) return;
-
-    const timeUntilExpiry = session.expiresAt - Date.now();
-    const refreshThreshold = 60 * 60 * 1000; // 1 hour
-
-    if (timeUntilExpiry < refreshThreshold) {
-      try {
-        await this.connectAndAuthenticate();
-      } catch (error) {
-        console.error("Session refresh failed:", error);
-        this.clearSession();
-      }
+    const oneHour = 60 * 60 * 1000;
+    if (session.expiresAt - Date.now() < oneHour) {
+      await this.connectAndAuthenticate();
     }
   }
 }

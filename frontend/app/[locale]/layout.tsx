@@ -3,13 +3,7 @@ import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/header";
-import { Footer } from "@/components/footer";
-import { Toaster } from "@/components/ui/toaster";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LocaleDocumentSync } from "@/components/locale-document-sync";
-import { NetworkStatusBanner } from "@/components/network-status-banner";
-import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { WebVitalsReporter } from "@/components/web-vitals-reporter";
 import { locales, type Locale, rtlLocales } from "@/i18n";
 import "../globals.css";
@@ -20,21 +14,9 @@ export const metadata: Metadata = {
     "Shelterflex - The modern way to rent. Get your rent financed upfront and pay back in flexible monthly installments.",
   generator: "v0.app",
   icons: {
-    icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
-    ],
-    apple: "/apple-icon.png",
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 
@@ -47,9 +29,9 @@ export default async function LocaleLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await Promise.resolve(params);
+  const { locale } = await params;
 
   // Validate that the incoming `locale` parameter is valid
   if (!locales.includes(locale as Locale)) {
@@ -62,18 +44,15 @@ export default async function LocaleLayout({
   // Determine text direction
   const dir = rtlLocales.includes(locale as Locale) ? "rtl" : "ltr";
 
+  // Header, Footer, NetworkStatusBanner, ServiceWorkerRegister, ErrorBoundary,
+  // and Toaster all already come from the root layout (app/layout.tsx), which
+  // wraps every route including this one — rendering them again here would
+  // duplicate them on screen. Only locale-specific concerns belong in this layout.
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       <LocaleDocumentSync locale={locale} dir={dir} />
-      <ErrorBoundary>
-        <ServiceWorkerRegister />
-        <WebVitalsReporter />
-        <NetworkStatusBanner />
-        <Header />
-        {children}
-        <Footer />
-        <Toaster />
-      </ErrorBoundary>
+      <WebVitalsReporter />
+      {children}
     </NextIntlClientProvider>
   );
 }

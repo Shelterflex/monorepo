@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { NotificationService, initNotificationService } from './notificationService.js'
 import { NotificationChannel, type NotificationJobPayload } from './types.js'
-import { FailoverNotificationProvider } from './providers.js'
+import { FailoverNotificationProvider, EmailNotificationProvider } from './providers.js'
 import { getScheduler, initScheduler } from '../jobs/scheduler/worker.js'
 import { InMemoryJobStore } from '../jobs/scheduler/store.js'
 import { JobStatus } from '../jobs/scheduler/types.js'
@@ -254,3 +254,23 @@ describe('FailoverNotificationProvider', () => {
     expect(provider['failureCount']).toBe(0)
   })
 })
+
+describe('EmailNotificationProvider', () => {
+  it('should throw an error on send when RESEND_API_KEY is missing', async () => {
+    const provider = new EmailNotificationProvider()
+    // Force resend to null as if RESEND_API_KEY was not provided
+    ;(provider as any).resend = null
+
+    const payload: NotificationJobPayload = {
+      channel: NotificationChannel.EMAIL,
+      recipient: 'user@example.com',
+      subject: 'Test',
+      body: 'Hello',
+    }
+
+    await expect(provider.send(payload)).rejects.toThrow(
+      'Email notification provider not configured (RESEND_API_KEY missing)'
+    )
+  })
+})
+

@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, Upload, CheckCircle, Loader2, X, AlertCircle  } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { startWhistleblowerReport, trackWhistleblowerReportStep, trackFormSubmission } from "@/lib/analytics-init";
 
 interface PhotoFile {
   id: string;
@@ -79,6 +81,8 @@ export default function ReportApartmentPage() {
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
+    startWhistleblowerReport("anonymous");
+    trackWhistleblowerReportStep("anonymous", "submit_listing_report");
     setServerError(null);
 
     if (!formData.address || !formData.bedrooms || !formData.annualRent) return;
@@ -118,6 +122,8 @@ export default function ReportApartmentPage() {
         return;
       }
 
+      trackFormSubmission("whistleblower_report", { photo_count: formData.photos.length });
+      trackWhistleblowerReportStep("anonymous", "report_submitted", { completed: true });
       setStep("confirmation");
     } catch {
       setServerError(
@@ -291,10 +297,12 @@ export default function ReportApartmentPage() {
                             key={photo.id}
                             className="relative group border-3 border-foreground overflow-hidden"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element -- blob URLs from URL.createObjectURL are incompatible with next/image */}
-                            <img
+                            <Image
                               src={photo.url}
                               alt="Preview"
+                              width={240}
+                              height={96}
+                              unoptimized
                               className="w-full h-24 object-cover"
                             />
                             <button

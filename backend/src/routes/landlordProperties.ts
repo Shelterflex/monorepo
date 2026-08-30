@@ -14,6 +14,7 @@ import { PricingValidationError } from '../services/pricingService.js'
 import { syncLandlordPropertyListing } from '../services/landlordPropertyListingSync.js'
 import { PostgresUserRepository } from '../repositories/AuthRepository.js'
 import { createSorobanAdapter, getSorobanConfigFromEnv } from '../soroban/index.js'
+import { getPool } from '../db.js'
 
 const router = Router()
 
@@ -27,6 +28,29 @@ function assertOwner(propertyLandlordId: string, req: AuthenticatedRequest) {
   if (req.user?.role === 'admin') return
   if (propertyLandlordId !== req.user?.id) {
     throw new AppError(ErrorCode.FORBIDDEN, 403, 'You do not have permission to modify this property')
+  }
+}
+
+async function assertVerificationLevel(userId: string) {
+  const pool = await getPool()
+  if (!pool) return
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT verification_level FROM landlord_profiles WHERE user_id = $1 AND deleted_at IS NULL`,
+      [userId],
+    )
+
+    const level = rows[0]?.verification_level ?? 'unverified'
+    if (level === 'unverified') {
+      throw new AppError(
+        ErrorCode.FORBIDDEN,
+        403,
+        'You must complete landlord verification before creating properties',
+      )
+    }
+  } catch (err) {
+    if (err instanceof AppError) throw err
   }
 }
 
@@ -74,6 +98,8 @@ router.post(
       if (req.user?.role !== 'landlord') {
         throw new AppError(ErrorCode.FORBIDDEN, 403, 'Only landlords can create properties')
       }
+
+      await assertVerificationLevel(req.user.id)
 
       // Verify on-chain allowlist status for KYC-approved landlords (non-blocking)
       try {

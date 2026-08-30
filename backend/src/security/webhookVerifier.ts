@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { env } from "../schemas/env.js";
 
 export interface WebhookStrategy {
   verify(payload: string, signature: string, timestamp: string): boolean;
@@ -27,7 +28,7 @@ export function checkReplay(eventId: string) {
 }
 
 const keys = {
-  current: process.env.WEBHOOK_KEY || "",
+  current: env.WEBHOOK_KEY,
   previous: process.env.WEBHOOK_OLD_KEY || "",
 };
 

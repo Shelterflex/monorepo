@@ -121,6 +121,27 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
             amountNgn,
             fxRateNgnPerUsdc
           }, { requestId: req.requestId }).catch(err => logger.error('Failed to enqueue payment.received webhook:', err))
+
+          // Create rent payment receipt on rent_payments contract (deal-scoped receipt)
+          // TODO: Wire rent_payments contract integration - requires proper payer/recipient address resolution
+          // if (adapter.createRentPaymentReceipt) {
+          //   try {
+          //     const { dealStore } = await import('../models/dealStore.js')
+          //     const deal = await dealStore.findById(dealId)
+          //     if (deal) {
+          //       await adapter.createRentPaymentReceipt(
+          //         dealId,
+          //         BigInt(amountUsdc),
+          //         'GUNKNOWN', // Would need actual payer address from auth context
+          //         deal.landlordId || 'GUNKNOWN', // Recipient is landlord
+          //         Math.floor(Date.now() / 1000)
+          //       )
+          //       logger.info('Rent payment receipt created on rent_payments contract', { dealId })
+          //     }
+          //   } catch (err) {
+          //     logger.error('Failed to create rent payment receipt', { error: err instanceof Error ? err.message : String(err) })
+          //   }
+          // }
         } else if (txType === TxType.LANDLORD_PAYOUT) {
           await enqueueDelivery(WebhookEventType.PAYOUT_DISBURSED, {
             dealId,

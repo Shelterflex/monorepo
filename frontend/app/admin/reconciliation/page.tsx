@@ -13,6 +13,7 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getOutboxItems, retryOutboxItem, retryAllOutboxItems, type OutboxItem } from "@/lib/reconciliationApi";
 import { handleError, showSuccessToast } from "@/lib/toast";
 import { parseBackendError, type ParsedError } from "@/lib/errors";
+import { apiGet, apiPost } from "@/lib/apiClient";
 
 type LoadState<T> =
   | { type: "loading" }
@@ -27,6 +29,17 @@ type LoadState<T> =
   | { type: "success"; data: T };
 
 type OutboxStatus = "pending" | "sent" | "failed" | "all";
+
+interface Mismatch {
+  id: string;
+  status: string;
+  mismatchClass: string;
+  createdAt: string;
+}
+
+interface AgingReport {
+  data: Array<{ class: string; status: string; count: number; oldest: string }>;
+}
 
 const ITEMS_PER_PAGE = 10;
 
@@ -181,12 +194,16 @@ function getStatusIcon(status: string) {
 }
 
 export default function ReconciliationDashboard() {
-  const [activeTab, setActiveTab] = useState<"deposits" | "conversions" | "outbox">("outbox");
+  const [activeTab, setActiveTab] = useState<"deposits" | "conversions" | "outbox" | "mismatches" | "aging">("outbox");
   const [outboxState, setOutboxState] = useState<LoadState<OutboxItem[]>>({ type: "loading" });
   const [outboxStatusFilter, setOutboxStatusFilter] = useState<OutboxStatus>("all");
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [mismatchesState, setMismatchesState] = useState<LoadState<Mismatch[]>>({ type: "loading" });
+  const [agingState, setAgingState] = useState<LoadState<AgingReport>>({ type: "loading" });
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
@@ -210,11 +227,47 @@ export default function ReconciliationDashboard() {
     }
   }, [outboxStatusFilter]);
 
+  const fetchMismatches = useCallback(async () => {
+    setMismatchesState({ type: "loading" });
+    try {
+      const response = await apiGet<{ data: Mismatch[] }>("/admin/ledger-reconciliation/mismatches");
+      setMismatchesState({ type: "success", data: response.data });
+    } catch (err) {
+      handleError(err, "Failed to load mismatches");
+      const parsedError = parseBackendError(err, "Failed to load mismatches");
+      setMismatchesState({
+        type: "error",
+        message: parsedError.message,
+        parsedError,
+      });
+    }
+  }, []);
+
+  const fetchAging = useCallback(async () => {
+    setAgingState({ type: "loading" });
+    try {
+      const response = await apiGet<AgingReport>("/admin/ledger-reconciliation/aging");
+      setAgingState({ type: "success", data: response });
+    } catch (err) {
+      handleError(err, "Failed to load aging report");
+      const parsedError = parseBackendError(err, "Failed to load aging report");
+      setAgingState({
+        type: "error",
+        message: parsedError.message,
+        parsedError,
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === "outbox") {
       fetchOutboxItems();
+    } else if (activeTab === "mismatches") {
+      fetchMismatches();
+    } else if (activeTab === "aging") {
+      fetchAging();
     }
-  }, [activeTab, fetchOutboxItems]);
+  }, [activeTab, fetchOutboxItems, fetchMismatches, fetchAging]);
 
   const handleRetryItem = async (id: string) => {
     setRetryingIds((prev) => new Set(prev).add(id));
@@ -243,6 +296,19 @@ export default function ReconciliationDashboard() {
       handleError(err, "Failed to retry all outbox items");
     } finally {
       setRetryingIds(new Set());
+    }
+  };
+
+  const handleCloseMismatch = async () => {
+    if (!closingId) return;
+    try {
+      await apiPost(`/admin/ledger-reconciliation/mismatches/${encodeURIComponent(closingId)}/close`, {});
+      showSuccessToast("Mismatch closed successfully");
+      setShowCloseConfirm(false);
+      setClosingId(null);
+      await fetchMismatches();
+    } catch (err) {
+      handleError(err, "Failed to close mismatch");
     }
   };
 
@@ -300,6 +366,32 @@ export default function ReconciliationDashboard() {
             <Inbox className="h-4 w-4" aria-hidden="true" />
             Outbox
           </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "mismatches"}
+            onClick={() => setActiveTab("mismatches")}
+            className={`flex items-center gap-2 border-3 border-foreground px-3 py-2 text-sm font-bold transition-all md:px-6 md:py-3 md:text-base ${
+              activeTab === "mismatches"
+                ? "bg-foreground text-background shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                : "bg-card hover:bg-muted"
+            }`}
+          >
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            Mismatches
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "aging"}
+            onClick={() => setActiveTab("aging")}
+            className={`flex items-center gap-2 border-3 border-foreground px-3 py-2 text-sm font-bold transition-all md:px-6 md:py-3 md:text-base ${
+              activeTab === "aging"
+                ? "bg-foreground text-background shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
+                : "bg-card hover:bg-muted"
+            }`}
+          >
+            <Clock className="h-4 w-4" aria-hidden="true" />
+            Aging
+          </button>
           </div>
         </nav>
 
@@ -334,6 +426,186 @@ export default function ReconciliationDashboard() {
               title="No conversions available"
               description="Conversion reconciliation will be available when the backend API is implemented. This tab will show pending and failed NGN to USDC conversions."
             />
+          </Card>
+        )}
+
+        {/* Mismatches Tab */}
+        {activeTab === "mismatches" && (
+          <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-black mb-2">Ledger Mismatches</h2>
+                <p className="text-sm text-muted-foreground">
+                  Discrepancies between internal ledger and provider records
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchMismatches}
+                aria-label="Refresh mismatches"
+                className="border-3 border-foreground bg-background font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+            {mismatchesState.type === "loading" && <SkeletonList count={3} />}
+            {mismatchesState.type === "error" && (
+              <ErrorPanel
+                error={mismatchesState.parsedError || mismatchesState.message}
+                onRetry={fetchMismatches}
+                entityName="mismatches"
+              />
+            )}
+            {mismatchesState.type === "success" && (
+              <>
+                {mismatchesState.data.length === 0 ? (
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No mismatches found"
+                    description="All ledger records match provider data"
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {mismatchesState.data.map((item) => (
+                      <Card
+                        key={item.id}
+                        className="border-3 border-foreground bg-card p-4 shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="px-2 py-1 border-2 border-foreground bg-accent font-bold text-xs">
+                                {item.mismatchClass}
+                              </div>
+                              <div className="px-2 py-1 border-2 border-foreground bg-muted font-mono text-xs font-bold">
+                                {item.status}
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              ID: <code className="bg-muted px-1.5 py-0.5 rounded">{item.id.slice(0, 12)}...</code>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Created: {new Date(item.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+                          {item.status !== "closed" && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => {
+                                setClosingId(item.id);
+                                setShowCloseConfirm(true);
+                              }}
+                              className="border-3 border-destructive font-bold"
+                            >
+                              Close
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {showCloseConfirm && closingId && (
+              <div className="mt-6 border-3 border-destructive bg-destructive/10 p-6">
+                <h3 className="font-bold text-lg mb-3">Confirm mismatch closure</h3>
+                <p className="text-sm mb-4">Are you sure you want to manually close this mismatch?</p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowCloseConfirm(false);
+                      setClosingId(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => void handleCloseMismatch()}
+                    className="border-2 border-destructive font-bold"
+                  >
+                    Confirm
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Aging Tab */}
+        {activeTab === "aging" && (
+          <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-black mb-2">Mismatch Aging</h2>
+                <p className="text-sm text-muted-foreground">
+                  SLA aging report for open mismatches
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchAging}
+                aria-label="Refresh aging report"
+                className="border-3 border-foreground bg-background font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+            {agingState.type === "loading" && <SkeletonList count={3} />}
+            {agingState.type === "error" && (
+              <ErrorPanel
+                error={agingState.parsedError || agingState.message}
+                onRetry={fetchAging}
+                entityName="aging report"
+              />
+            )}
+            {agingState.type === "success" && (
+              <>
+                {agingState.data.data.length === 0 ? (
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No aging data"
+                    description="No open mismatches to report"
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b-3 border-foreground">
+                          <th className="text-left px-4 py-2 font-bold">Class</th>
+                          <th className="text-left px-4 py-2 font-bold">Status</th>
+                          <th className="text-right px-4 py-2 font-bold">Count</th>
+                          <th className="text-left px-4 py-2 font-bold text-xs">Oldest</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {agingState.data.data.map((row, idx) => (
+                          <tr key={idx} className="border-b-2 border-foreground/20">
+                            <td className="px-4 py-2 font-mono">{row.class}</td>
+                            <td className="px-4 py-2">
+                              <span className="px-2 py-1 border border-foreground text-xs font-bold bg-muted">
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="text-right px-4 py-2 font-bold">{row.count}</td>
+                            <td className="px-4 py-2 text-xs text-muted-foreground">
+                              {new Date(row.oldest).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
           </Card>
         )}
 

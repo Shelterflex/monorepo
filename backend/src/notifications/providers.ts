@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import { logger } from '../utils/logger.js'
 import { env } from '../schemas/env.js'
+import { meter } from '../utils/metrics.js'
 import type { NotificationJobPayload, NotificationProvider, NotificationDeliveryResult } from './types.js'
 import { NotificationChannel } from './types.js'
 
@@ -22,11 +23,16 @@ export class EmailNotificationProvider implements NotificationProvider {
 
   async send(payload: NotificationJobPayload): Promise<void> {
     if (!this.resend) {
-      logger.warn('[Notification] Email provider not configured, skipping send', {
+      logger.error('[Notification] Email provider not configured (RESEND_API_KEY missing), cannot send email', {
         recipient: payload.recipient,
         subject: payload.subject,
       })
-      return
+      if (process.env.NODE_ENV !== 'test') {
+        meter.createCounter('notifications_skipped_unconfigured_total', {
+          description: 'Total notifications skipped due to missing provider configuration',
+        }).add(1, { channel: this.channel })
+      }
+      throw new Error('Email notification provider not configured (RESEND_API_KEY missing)')
     }
 
     const fromEmail = env.RESEND_FROM_EMAIL

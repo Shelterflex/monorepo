@@ -51,7 +51,7 @@ class MockWebSocket {
 }
 
 // Mock global WebSocket
-const mockWebSocket = vi.fn(MockWebSocket)
+const mockWebSocket = vi.fn(MockWebSocket as any)
 vi.stubGlobal('WebSocket', mockWebSocket)
 
 describe('useWebSocket', () => {

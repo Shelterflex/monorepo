@@ -47,14 +47,10 @@ interface JobHealthReport {
   failingCount: number;
   jobs: JobHealth[];
 }
-
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
 const REFRESH_INTERVAL_MS = 15_000;
 
 async function fetchJobHealth(): Promise<JobHealthReport> {
-  const res = await fetch(`${BACKEND}/api/admin/jobs/health`, {
-    headers: { "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "" },
-  });
+  const res = await fetch(`/api/admin/jobs/health`);
   if (!res.ok) throw new Error(`Job health failed: ${res.status}`);
   return res.json();
 }

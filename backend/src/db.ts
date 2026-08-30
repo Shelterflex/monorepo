@@ -2,6 +2,7 @@ import {
   getRequestContext,
   incrementRequestQueryCount,
 } from './request-context.js'
+import { logger } from './utils/logger.js'
 
 export type PgClientLike = {
   query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number }>
@@ -11,6 +12,7 @@ export type PgClientLike = {
 export type PgPoolLike = {
   query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number }>
   connect: () => Promise<PgClientLike>
+  end?: () => Promise<void>
 }
 
 let pool: PgPoolLike | null = null
@@ -56,7 +58,7 @@ function recordFailure(cb: CircuitBreaker): void {
   if (cb.failures >= CB_FAILURE_THRESHOLD) {
     cb.state = 'open'
     cb.openedAt = Date.now()
-    console.error(JSON.stringify({ level: 'error', message: 'DB circuit breaker OPEN', failures: cb.failures, timestamp: new Date().toISOString() }))
+    logger.error('DB circuit breaker OPEN', { failures: cb.failures })
   }
 }
 
@@ -64,7 +66,7 @@ function isAvailable(cb: CircuitBreaker): boolean {
   if (cb.state === 'closed') return true
   if (cb.state === 'open' && cb.openedAt !== null && Date.now() - cb.openedAt >= CB_RECOVERY_MS) {
     cb.state = 'half-open'
-    console.log(JSON.stringify({ level: 'info', message: 'DB circuit breaker HALF-OPEN (probing)', timestamp: new Date().toISOString() }))
+    logger.info('DB circuit breaker HALF-OPEN (probing)')
     return true
   }
   return cb.state === 'half-open'
@@ -137,6 +139,27 @@ export function setReadPool(newPool: PgPoolLike | null) {
 }
 
 /**
+ * Closes the primary and (if initialized) read-replica pools. Safe to call
+ * even if no pool was ever opened (e.g. no DATABASE_URL configured).
+ */
+export async function closeDbPools(): Promise<void> {
+  const pools = [pool, readPool]
+  pool = null
+  readPool = null
+
+  await Promise.all(
+    pools.map(async (p) => {
+      if (!p?.end) return
+      try {
+        await p.end()
+      } catch (err) {
+        logger.error('Error closing DB pool', {}, err instanceof Error ? err : undefined)
+      }
+    }),
+  )
+}
+
+/**
  * Returns a pool for read queries. Prefers the read replica when available and
  * its circuit breaker is closed/half-open; falls back to the primary pool.
  */
@@ -161,25 +184,12 @@ export async function getReadPool(): Promise<PgPoolLike | null> {
           await candidate.query('SELECT 1')
 
           candidate.on('error', (err: Error) => {
-            console.error(
-              JSON.stringify({
-                level: 'error',
-                message: 'Unexpected replica pool client error',
-                errorMessage: err.message,
-                timestamp: new Date().toISOString(),
-              }),
-            )
+            logger.error('Unexpected replica pool client error', {}, err)
           })
 
           readPool = wrapPoolWithQueryLogging(candidate)
 
-          console.log(
-            JSON.stringify({
-              level: 'info',
-              message: 'Read replica pool initialized',
-              ...(attempt > 1 ? { connectedOnAttempt: attempt } : {}),
-            }),
-          )
+          logger.info('Read replica pool initialized', attempt > 1 ? { connectedOnAttempt: attempt } : undefined)
           break
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
@@ -235,17 +245,12 @@ function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
       if (durationMs >= DB_SLOW_QUERY_THRESHOLD_MS) {
         slowQueryCount++
         isSlow = true
-        console.warn(
-          JSON.stringify({
-            level: 'warn',
-            message: 'Slow query detected',
-            durationMs,
-            query: text,
-            requestId: getRequestContext()?.requestId,
-            threshold: DB_SLOW_QUERY_THRESHOLD_MS,
-            timestamp: new Date().toISOString(),
-          }),
-        )
+        logger.warn('Slow query detected', {
+          durationMs,
+          query: text,
+          requestId: getRequestContext()?.requestId,
+          threshold: DB_SLOW_QUERY_THRESHOLD_MS,
+        })
       }
       
       // Track metrics (lazy import to avoid circular dependencies)
@@ -262,16 +267,10 @@ function wrapPoolWithQueryLogging(candidate: any): PgPoolLike {
     } catch (err) {
       success = false
       const durationMs = Date.now() - start
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          message: 'Query failed',
-          durationMs,
-          query: text.slice(0, 200),
-          errorMessage: err instanceof Error ? err.message : String(err),
-          timestamp: new Date().toISOString(),
-        }),
-      )
+      logger.error('Query failed', {
+        durationMs,
+        query: text.slice(0, 200),
+      }, err)
       
       // Track error metrics
       if (process.env.NODE_ENV !== 'test') {
@@ -294,13 +293,7 @@ export async function getPool(): Promise<PgPoolLike | null> {
   if (!process.env.DATABASE_URL) return null
 
   if (!isAvailable(primaryCircuit)) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        message: 'DB primary circuit breaker is OPEN — refusing connection',
-        timestamp: new Date().toISOString(),
-      }),
-    )
+    logger.error('DB primary circuit breaker is OPEN — refusing connection')
     return null
   }
 
@@ -323,31 +316,20 @@ export async function getPool(): Promise<PgPoolLike | null> {
 
       // Log pool error events to prevent silent failures
       candidate.on('error', (err: Error) => {
-        console.error(
-          JSON.stringify({
-            level: 'error',
-            message: 'Unexpected pool client error',
-            errorMessage: err.message,
-            timestamp: new Date().toISOString(),
-          }),
-        )
+        logger.error('Unexpected pool client error', {}, err)
       })
 
       pool = wrapPoolWithQueryLogging(candidate)
 
-      console.log(
-        JSON.stringify({
-          level: 'info',
-          message: 'Database pool initialized',
-          poolMax: DB_POOL_MAX,
-          poolMin: DB_POOL_MIN,
-          idleTimeoutMs: DB_POOL_IDLE_TIMEOUT_MS,
-          connectionTimeoutMs: DB_POOL_CONNECTION_TIMEOUT_MS,
-          statementTimeoutMs: DB_STATEMENT_TIMEOUT_MS,
-          slowQueryThresholdMs: DB_SLOW_QUERY_THRESHOLD_MS,
-          ...(attempt > 1 ? { connectedOnAttempt: attempt } : {}),
-        }),
-      )
+      logger.info('Database pool initialized', {
+        poolMax: DB_POOL_MAX,
+        poolMin: DB_POOL_MIN,
+        idleTimeoutMs: DB_POOL_IDLE_TIMEOUT_MS,
+        connectionTimeoutMs: DB_POOL_CONNECTION_TIMEOUT_MS,
+        statementTimeoutMs: DB_STATEMENT_TIMEOUT_MS,
+        slowQueryThresholdMs: DB_SLOW_QUERY_THRESHOLD_MS,
+        ...(attempt > 1 ? { connectedOnAttempt: attempt } : {}),
+      })
 
       return pool
     } catch (err) {

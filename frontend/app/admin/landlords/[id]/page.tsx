@@ -40,6 +40,8 @@ export default function AdminLandlordVerificationPage({ params }: PageProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [pendingLevel, setPendingLevel] = useState<LandlordVerificationLevel | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -57,19 +59,28 @@ export default function AdminLandlordVerificationPage({ params }: PageProps) {
     })()
   }, [params.id])
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
     setSuccess(null)
+    setPendingLevel(verificationLevel)
+    setShowConfirm(true)
+  }
+
+  const handleConfirm = async () => {
+    if (!pendingLevel || !reason.trim()) return
     setSaving(true)
 
     try {
       await apiPost<{ success: boolean }>(`/admin/landlords/${encodeURIComponent(params.id)}/verify`, {
-        verificationLevel,
+        verificationLevel: pendingLevel,
         note: reason,
       })
       setSuccess("Verification status updated successfully.")
-      setCurrentStatus({ level: verificationLevel, verifiedAt: new Date().toISOString() })
+      setCurrentStatus({ level: pendingLevel, verifiedAt: new Date().toISOString() })
+      setVerificationLevel(pendingLevel)
+      setShowConfirm(false)
+      setPendingLevel(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update verification status")
     } finally {
@@ -145,6 +156,40 @@ export default function AdminLandlordVerificationPage({ params }: PageProps) {
                   {saving ? 'Updating…' : 'Update Verification'}
                 </Button>
               </div>
+
+              {showConfirm && (
+                <div className="mt-6 border-3 border-destructive bg-destructive/10 p-6">
+                  <h3 className="font-bold text-lg mb-3">Confirm verification level change</h3>
+                  <p className="text-sm mb-4">
+                    You are about to change the verification level to <strong>{pendingLevel}</strong>.
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Reason: {reason}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowConfirm(false)
+                        setPendingLevel(null)
+                      }}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => void handleConfirm()}
+                      disabled={saving}
+                      className="border-2 border-destructive font-bold"
+                    >
+                      {saving ? 'Confirming…' : 'Confirm Change'}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </form>
           </Card>
 

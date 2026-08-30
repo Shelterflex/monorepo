@@ -5,18 +5,9 @@ import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth
 import { extractAuditContext } from '../utils/auditLogger.js'
 import { getWebhookReplayService, ActorType } from '../webhookReplay/index.js'
 import { ReplayRequest } from '../webhookReplay/types.js'
-import { env } from '../schemas/env.js'
+import { requireAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 
 const router = Router()
-
-// Admin check middleware
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const headerSecret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-    throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-  }
-  next()
-}
 
 // Validation schemas
 const replayRequestSchema = z.object({

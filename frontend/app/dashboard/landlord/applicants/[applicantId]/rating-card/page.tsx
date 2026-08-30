@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { getRatingCard, type PublicRatingCard } from "@/lib/ratingCardApi";
 import { StarRating } from "@/components/tenant/RatingDimension";
 import { formatDate } from "@/lib/date";
+import RatingCard from "@/components/tenant/RatingCard";
 
 export default function LandlordRatingCardPage() {
   const params = useParams();
@@ -84,18 +85,9 @@ export default function LandlordRatingCardPage() {
           </div>
 
           <div className="space-y-6">
-            <Card className="border-3 border-foreground p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)]">
-              <div className="text-center mb-6">
-                <p className="text-sm text-muted-foreground mb-2">Composite Score</p>
-                <div className="flex items-center justify-center gap-1 mb-2">
-                  <StarRating score={card.compositeScore} size="lg" />
-                </div>
-                <p className="text-5xl font-mono font-black text-primary">
-                  {card.compositeScore}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">out of 5.0</p>
-              </div>
+            <RatingCard card={card as any} variant="full" />
 
+            <Card className="border-3 border-foreground p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)]">
               <div className="space-y-4">
                 {card.ratings.length > 0 ? (
                   <>

@@ -7,6 +7,7 @@ import { Star, Home, Shield, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import RatingCard from "@/components/tenant/RatingCard";
 import {
   Empty,
   EmptyHeader,
@@ -179,34 +180,8 @@ function SuccessPage({ card }: { card: PublicRatingCard }) {
 
       <section className="py-12">
         <div className="container mx-auto px-4 max-w-3xl">
-          {/* Composite Score */}
-          <Card className="border-3 border-foreground p-8 shadow-[8px_8px_0px_0px_rgba(26,26,26,1)] mb-8">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground mb-2">Overall Rating</p>
-              <div className="flex justify-center mb-3">
-                {renderStars(card.compositeScore)}
-              </div>
-              <p
-                className="text-6xl font-mono font-black text-primary"
-                aria-label={`Overall score: ${card.compositeScore} out of 5`}
-              >
-                {card.compositeScore}
-              </p>
-              <p className="text-muted-foreground mt-1" aria-hidden="true">
-                out of 5.0
-              </p>
-            </div>
-          </Card>
-
-          {/* Score Breakdown */}
-          <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] mb-8">
-            <h2 className="mb-4 font-bold">Score Breakdown</h2>
-            <div className="space-y-4">
-              <ScoreBar label="Payment History" score={card.paymentScore} />
-              <ScoreBar label="Property Care" score={card.propertyCareScore} />
-              <ScoreBar label="Communication" score={card.communicationScore} />
-            </div>
-          </Card>
+          {/* Composite Score & Score Breakdown */}
+          <RatingCard card={card as any} variant="full" className="mb-8" />
 
           {/* Individual Ratings or Empty State */}
           <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">

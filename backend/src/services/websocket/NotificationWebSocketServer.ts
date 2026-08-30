@@ -96,6 +96,27 @@ export class NotificationWebSocketServer {
   getActiveConnectionCount(): number {
     return this.connections.size
   }
+
+  close(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.wss) {
+        resolve()
+        return
+      }
+
+      for (const conns of this.connections.values()) {
+        for (const ws of conns) {
+          ws.close(1001, "Server shutting down")
+        }
+      }
+      this.connections.clear()
+
+      this.wss.close(() => {
+        logger.info("Notification WebSocket server closed")
+        resolve()
+      })
+    })
+  }
 }
 
 export const notificationWSS = new NotificationWebSocketServer()

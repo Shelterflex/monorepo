@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 export type PayoutSchedule = "activation" | "weekly" | "monthly";
 
@@ -24,17 +25,7 @@ export function PayoutScheduleSelector({
   const [schedule, setSchedule] = useState<PayoutSchedule>(initialSchedule);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingValue, setPendingValue] = useState<PayoutSchedule | null>(null);
-  const confirmDialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!pendingValue) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPendingValue(null);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    confirmDialogRef.current?.focus();
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [pendingValue]);
+  const confirmDialogRef = useFocusTrap(!!pendingValue, () => setPendingValue(null));
 
   const handleScheduleChange = async (value: string) => {
     const newSchedule = value as PayoutSchedule;

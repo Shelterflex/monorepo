@@ -1,11 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { Clock, ShieldAlert, History, Play, XCircle, RefreshCw, Loader2, Info } from "lucide-react";
 import { useTimelock, useCountdown } from "@/hooks/useTimelock";
+import type { QueuedTransaction } from "@/lib/timelockApi";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/date";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 function TransactionCard({ tx, onExecute, onCancel }: { tx: any, onExecute: any, onCancel: any }) {
   const { timeLeft, formatTime } = useCountdown(tx.eta);
@@ -57,7 +69,7 @@ function TransactionCard({ tx, onExecute, onCancel }: { tx: any, onExecute: any,
               className="flex-1 font-bold border-2 border-foreground shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none transition-all"
               variant="destructive"
               size="sm"
-              onClick={() => onCancel(tx.txHash)}
+              onClick={() => onCancel(tx)}
             >
               <XCircle className="w-4 h-4 mr-1" />
               Cancel
@@ -81,6 +93,13 @@ function TransactionCard({ tx, onExecute, onCancel }: { tx: any, onExecute: any,
 
 export default function TimelockAdminPage() {
   const { queuedTransactions, isLoading, fetchTransactions, handleExecute, handleCancel } = useTimelock();
+  const [cancelTarget, setCancelTarget] = useState<QueuedTransaction | null>(null);
+
+  const confirmCancel = () => {
+    if (!cancelTarget) return;
+    handleCancel(cancelTarget.txHash);
+    setCancelTarget(null);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -141,11 +160,11 @@ export default function TimelockAdminPage() {
             ) : (
               <div className="space-y-6">
                 {queuedTransactions.map((tx) => (
-                  <TransactionCard 
-                    key={tx.txHash} 
-                    tx={tx} 
+                  <TransactionCard
+                    key={tx.txHash}
+                    tx={tx}
                     onExecute={handleExecute}
-                    onCancel={handleCancel}
+                    onCancel={setCancelTarget}
                   />
                 ))}
               </div>
@@ -198,6 +217,36 @@ export default function TimelockAdminPage() {
           </div>
         </div>
       </main>
+
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={cancelTarget !== null} onOpenChange={(open) => !open && setCancelTarget(null)}>
+        <AlertDialogContent className="border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-black text-destructive">Cancel Queued Operation?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              {cancelTarget ? (
+                <>
+                  Are you sure you want to cancel <span className="font-mono font-bold">{cancelTarget.functionName}</span> on{" "}
+                  <span className="font-mono font-bold">{cancelTarget.target}</span>? This will permanently remove the operation
+                  from the timelock queue. It cannot be undone — the operation will need to be re-proposed and wait out the
+                  delay again if it's still needed.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4">
+            <AlertDialogCancel className="border-3 border-foreground font-bold shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+              Keep Queued
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCancel}
+              className="border-3 border-foreground bg-destructive font-bold text-destructive-foreground shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:bg-destructive/90"
+            >
+              Confirm Cancel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

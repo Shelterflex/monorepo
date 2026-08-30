@@ -67,8 +67,13 @@ export const inspectionChecklistTemplate: ChecklistCategory[] = [
   },
 ];
 
-export function InspectionChecklist() {
-  const [checklist, setChecklist] = useState<ChecklistCategory[]>(
+export interface InspectionChecklistProps {
+  checklist?: ChecklistCategory[];
+  onChange?: (checklist: ChecklistCategory[]) => void;
+}
+
+export function InspectionChecklist({ checklist: controlledChecklist, onChange }: InspectionChecklistProps = {}) {
+  const [internalChecklist, setInternalChecklist] = useState<ChecklistCategory[]>(
     inspectionChecklistTemplate.map((cat) => ({
       ...cat,
       items: cat.items.map((item) => ({
@@ -78,6 +83,13 @@ export function InspectionChecklist() {
       })),
     })),
   );
+
+  const checklist = controlledChecklist || internalChecklist;
+  const setChecklist = (updater: ChecklistCategory[] | ((prev: ChecklistCategory[]) => ChecklistCategory[])) => {
+    const next = typeof updater === "function" ? updater(checklist) : updater;
+    setInternalChecklist(next);
+    onChange?.(next);
+  };
 
   const toggleItem = (categoryId: string, itemId: string) => {
     setChecklist(

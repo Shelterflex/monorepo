@@ -2,10 +2,19 @@
 
 import { Card } from "@/components/ui/card";
 import RatingDimension, { StarRating } from "@/components/tenant/RatingDimension";
-import type { TenantRatingCard as TenantRatingCardType } from "@/lib/ratingCardApi";
+import type {
+  TenantRatingCard as TenantRatingCardType,
+  PublicRatingCard as PublicRatingCardType,
+} from "@/lib/ratingCardApi";
 
 interface RatingCardProps {
-  card: TenantRatingCardType;
+  card: TenantRatingCardType | PublicRatingCardType | {
+    compositeScore: number;
+    paymentScore: number;
+    propertyCareScore: number;
+    communicationScore: number;
+    totalRatings: number;
+  };
   variant?: "full" | "compact";
   className?: string;
 }

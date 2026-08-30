@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
-import { env } from '../schemas/env.js'
+import { assertAdminSecret } from '../middleware/adminSecret.js'
 import { erasureService } from '../services/erasureService.js'
 import { auditLog, extractAuditContext } from '../utils/auditLogger.js'
 import { validate } from '../middleware/validate.js'
@@ -14,13 +14,6 @@ const confirmErasureParamsSchema = z.object({
 export function createAdminErasureRouter(): Router {
   const router = Router()
 
-  function requireAdminSecret(req: Request): void {
-    const headerSecret = req.headers['x-admin-secret']
-    if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-      throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-    }
-  }
-
   /**
    * POST /api/admin/erasure/:requestId/confirm
    * Admin confirms a pending erasure request and anonymises user PII.
@@ -30,7 +23,7 @@ export function createAdminErasureRouter(): Router {
     validate(confirmErasureParamsSchema, 'params'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        requireAdminSecret(req)
+        assertAdminSecret(req)
         const adminUserId = (req as any).user?.id ?? 'admin'
         const { requestId } = req.params
 

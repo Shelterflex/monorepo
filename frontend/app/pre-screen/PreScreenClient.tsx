@@ -58,7 +58,7 @@ export function PreScreenClient() {
   const defaultValues: PreScreenFormValues = {
     monthlyNetIncome: "",
     monthlyRent: listingPrice ? String(parseFloat(listingPrice) / 12) : "",
-    employmentStatus: null as EmploymentStatus | null,
+    employmentStatus: "employed",
     depositPercentage: 10,
   }
 

@@ -1,11 +1,12 @@
 // PhotoGallery.test.tsx – component tests for PhotoGallery
 import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@/components/__tests__/test-utils';
 import { PhotoGallery } from '@/components/properties/PhotoGallery';
 import '@testing-library/jest-dom';
 
 // Mock next/image to simple img element
-jest.mock('next/image', () => ({
+vi.mock('next/image', () => ({
   __esModule: true,
   default: (props: any) => {
     // eslint-disable-next-line @next/next/no-img-element

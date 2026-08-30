@@ -6,6 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "analyze": "ANALYZE=true next build",
     "start": "next start",
     "test": "vitest run --coverage",

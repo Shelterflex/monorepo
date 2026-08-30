@@ -20,6 +20,7 @@ import {
   XCircle,
   Layers,
   Zap,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import BackendHealthCompact from "@/components/BackendHealthCompact";
 import JobHealthPanel from "@/components/admin/JobHealthPanel";
+import { apiGet } from "@/lib/apiClient";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,6 +79,21 @@ interface AlertPage {
   nextCursor: string | null;
 }
 
+interface IndexedReceipt {
+  txId: string;
+  txType: string;
+  dealId: string;
+  amountUsdc: string;
+  indexedAt: string;
+}
+
+interface ReceiptsPage {
+  data: IndexedReceipt[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 type PanelState<T> =
   | { type: "loading" }
   | { type: "error"; message: string }
@@ -84,12 +101,8 @@ type PanelState<T> =
 
 // ── Mock fetch helpers (replace with real apiFetch calls) ─────────────────────
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
-
 async function fetchHealthSnapshot(): Promise<HealthSnapshot> {
-  const res = await fetch(`${BACKEND}/api/admin/health-snapshot`, {
-    headers: { "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "" },
-  });
+  const res = await fetch(`/api/admin/health-snapshot`);
   if (!res.ok) throw new Error(`Health snapshot failed: ${res.status}`);
   return res.json();
 }
@@ -105,9 +118,7 @@ async function fetchAlerts(params: {
   if (params.status)   q.set("status",   params.status);
   if (params.cursor)   q.set("cursor",   params.cursor);
   q.set("limit", String(params.limit ?? 20));
-  const res = await fetch(`${BACKEND}/api/admin/alerts?${q}`, {
-    headers: { "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "" },
-  });
+  const res = await fetch(`/api/admin/alerts?${q}`);
   if (!res.ok) throw new Error(`Alerts failed: ${res.status}`);
   return res.json();
 }
@@ -226,6 +237,7 @@ const ALERT_STATUS_OPTIONS: Array<AlertStatus | "all"> = ["all", "open", "resolv
 export default function AdminHealthPage() {
   const [snapshot, setSnapshot] = useState<PanelState<HealthSnapshot>>({ type: "loading" });
   const [alerts, setAlerts]     = useState<PanelState<AlertPage>>({ type: "loading" });
+  const [receipts, setReceipts] = useState<PanelState<ReceiptsPage>>({ type: "loading" });
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | "all">("all");
   const [statusFilter, setStatusFilter]     = useState<AlertStatus | "all">("open");
   const [lastRefreshed, setLastRefreshed]   = useState<Date | null>(null);
@@ -252,16 +264,26 @@ export default function AdminHealthPage() {
     }
   }, [severityFilter, statusFilter]);
 
+  const loadReceipts = useCallback(async () => {
+    try {
+      const data = await apiGet<ReceiptsPage>("/admin/receipts?page=1&pageSize=10");
+      setReceipts({ type: "ok", data });
+    } catch (err) {
+      setReceipts({ type: "error", message: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }, []);
+
   // Initial load + auto-refresh (startTransition prevents cascading-render lint error)
   useEffect(() => {
     startTransition(() => { void loadSnapshot(); });
     startTransition(() => { void loadAlerts(); });
+    startTransition(() => { void loadReceipts(); });
     const id = setInterval(
       () => startTransition(() => { void loadSnapshot(); }),
       REFRESH_INTERVAL_MS,
     );
     return () => clearInterval(id);
-  }, [loadSnapshot, loadAlerts]);
+  }, [loadSnapshot, loadAlerts, loadReceipts]);
 
   // Reload alerts when filters change (loadAlerts dep already includes filter values via closure)
   useEffect(() => {
@@ -448,6 +470,79 @@ export default function AdminHealthPage() {
                   </div>
                 )}
               </>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Receipts section */}
+      <section>
+        <div className="flex items-center gap-3 mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <FileText className="h-4 w-4" /> Recent Receipts
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void loadReceipts()}
+            className="text-muted-foreground text-xs hover:text-foreground"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <Card>
+          <CardContent className="pt-4">
+            {receipts.type === "loading" && (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded" />)}
+              </div>
+            )}
+            {receipts.type === "error" && (
+              <div className="flex items-center gap-2 text-red-600 text-sm py-4">
+                <XCircle className="h-4 w-4" /> {receipts.message}
+              </div>
+            )}
+            {receipts.type === "ok" && receipts.data.data.length === 0 && (
+              <div className="flex flex-col items-center py-10 text-muted-foreground gap-2">
+                <CheckCircle2 className="h-8 w-8 text-green-500" />
+                <p className="text-sm">No receipts indexed yet.</p>
+              </div>
+            )}
+            {receipts.type === "ok" && receipts.data.data.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead className="border-b-2 border-foreground">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-xs font-bold">TX ID</th>
+                      <th className="text-left px-3 py-2 text-xs font-bold">Type</th>
+                      <th className="text-left px-3 py-2 text-xs font-bold">Deal</th>
+                      <th className="text-right px-3 py-2 text-xs font-bold">Amount</th>
+                      <th className="text-left px-3 py-2 text-xs font-bold">Indexed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receipts.data.data.map((r) => (
+                      <tr key={r.txId} className="border-b border-foreground/10 hover:bg-muted/50">
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.txId.slice(0, 10)}...</td>
+                        <td className="px-3 py-2">
+                          <span className="px-2 py-1 bg-accent text-xs font-bold rounded">
+                            {r.txType}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.dealId.slice(0, 10)}...</td>
+                        <td className="text-right px-3 py-2 font-semibold">${r.amountUsdc}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {new Date(r.indexedAt).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="pt-3 text-center text-xs text-muted-foreground">
+                  Showing {receipts.data.data.length} of {receipts.data.total} total
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -11,7 +11,10 @@ export type SorobanConfig = {
   stakeDelegationId?: string
   usdcTokenId?: string
   dealEscrowId?: string
+  rentPaymentsId?: string
   inspectorBondId?: string
+  contractAccessId?: string
+  upgradeableProxyId?: string
   rentToOwnId?: string
   oraclePriceFeedsId?: string
   transactionReceiptId?: string
@@ -21,6 +24,8 @@ export type SorobanConfig = {
   slashingModuleId?: string
   bondCollateralId?: string
   governanceId?: string
+  vestingScheduleId?: string
+  whistleblowerRewardsId?: string
   adminSecret?: string
   seed?: string | number
 }
@@ -38,7 +43,10 @@ export function getSorobanConfigFromEnv(env: NodeJS.ProcessEnv): SorobanConfig {
     stakeDelegationId: addresses.stakeDelegation,
     usdcTokenId: addresses.usdcToken,
     dealEscrowId: addresses.dealEscrow,
+    rentPaymentsId: addresses.rentPayments,
     inspectorBondId: addresses.inspectorBond,
+    contractAccessId: addresses.contractAccess,
+    upgradeableProxyId: addresses.upgradeableProxy,
     rentToOwnId: addresses.rentToOwn,
     oraclePriceFeedsId: addresses.oraclePriceFeeds,
     transactionReceiptId: addresses.transactionReceipt,
@@ -48,6 +56,8 @@ export function getSorobanConfigFromEnv(env: NodeJS.ProcessEnv): SorobanConfig {
     slashingModuleId: addresses.slashingModule,
     bondCollateralId: addresses.bondCollateral,
     governanceId: addresses.governance,
+    vestingScheduleId: addresses.vestingSchedule,
+    whistleblowerRewardsId: addresses.whistleblowerRewards,
     adminSecret: env.SOROBAN_ADMIN_SECRET,
     seed: env.SOROBAN_STUB_SEED,
   }

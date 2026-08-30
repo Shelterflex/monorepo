@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { formatDate } from "@/lib/date";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
@@ -54,44 +55,12 @@ interface DocWithContent extends TenantLeaseDocument {
 
 interface DocPreviewModalProps {
   doc: DocWithContent;
-  modalRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }
 
-function DocPreviewModal({ doc, modalRef, onClose }: DocPreviewModalProps) {
+function DocPreviewModal({ doc, onClose }: DocPreviewModalProps) {
   const titleId = "doc-preview-title";
-
-  useEffect(() => {
-    const el = modalRef.current;
-    if (!el) return;
-
-    el.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const focusable = el.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) { e.preventDefault(); return; }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [modalRef, onClose]);
+  const focusTrapRef = useFocusTrap(true, onClose);
 
   return (
     <div
@@ -99,7 +68,7 @@ function DocPreviewModal({ doc, modalRef, onClose }: DocPreviewModalProps) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        ref={modalRef}
+        ref={focusTrapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -191,8 +160,6 @@ export default function TenantLeasePage() {
 
   const [selectedDocument, setSelectedDocument] =
     useState<DocWithContent | null>(null);
-  const docModalRef = useRef<HTMLDivElement>(null);
-  const docModalTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     getTenantCurrentLease()
@@ -606,10 +573,7 @@ export default function TenantLeasePage() {
                       <button
                         type="button"
                         className="flex flex-1 items-center gap-4 text-left"
-                        onClick={(e) => {
-                          docModalTriggerRef.current = e.currentTarget;
-                          setSelectedDocument(doc);
-                        }}
+                        onClick={() => setSelectedDocument(doc)}
                         aria-label={`View details for ${doc.name}`}
                       >
                         <div className="flex h-10 w-10 items-center justify-center border-2 border-foreground bg-muted shrink-0">
@@ -642,11 +606,7 @@ export default function TenantLeasePage() {
               {selectedDocument && (
                 <DocPreviewModal
                   doc={selectedDocument}
-                  modalRef={docModalRef}
-                  onClose={() => {
-                    setSelectedDocument(null);
-                    docModalTriggerRef.current?.focus();
-                  }}
+                  onClose={() => setSelectedDocument(null)}
                 />
               )}
 

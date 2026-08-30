@@ -6,13 +6,26 @@ import { dealStore } from '../models/dealStore.js'
 import { DealStatus } from '../models/deal.js'
 import { applyDealRepaymentMethod } from '../services/salaryDeductionService.js'
 
-const ADMIN_SECRET = 'test-admin-secret-for-employers'
+const { ADMIN_SECRET } = vi.hoisted(() => ({
+  ADMIN_SECRET: 'test-admin-secret-for-employers',
+}))
+
+// env.js parses MANUAL_ADMIN_SECRET from process.env once at import time, so
+// setting process.env in beforeEach (as this file used to do) has no effect
+// on the already-parsed `env` object. Override it directly instead — every
+// other env field stays real since this suite boots the full app.
+vi.mock('../schemas/env.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../schemas/env.js')>()
+  return {
+    ...actual,
+    env: { ...actual.env, MANUAL_ADMIN_SECRET: ADMIN_SECRET },
+  }
+})
 
 describe('Employers API', () => {
   let app: ReturnType<typeof createApp>
 
   beforeEach(async () => {
-    process.env.MANUAL_ADMIN_SECRET = ADMIN_SECRET
     await employerStore.clear()
     await dealStore.clear()
     app = createApp()

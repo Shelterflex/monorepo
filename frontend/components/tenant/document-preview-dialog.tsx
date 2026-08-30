@@ -375,7 +375,7 @@ export function DocumentPreviewDialog({
         )}
 
         {/* Empty State */}
-        {state === "empty" && (
+        {state === "idle" && (
           <div className="text-center py-12">
             <File className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <p className="font-bold text-foreground">No document selected</p>

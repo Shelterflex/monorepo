@@ -80,7 +80,7 @@ export function ApplicationsTable({
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {formatDate(app.submittedAt, "en-NG", {
+                {formatDate(app.submittedAt, "en", {
                   year: "numeric",
                   month: "short",
                   day: "2-digit",

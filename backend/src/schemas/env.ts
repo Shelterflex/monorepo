@@ -19,6 +19,12 @@ export const envSchema = z.object({
   SOROBAN_USDC_TOKEN_ID: z.string().optional(),
   SOROBAN_INSPECTOR_BOND_ID: z.string().optional(),
   ENCRYPTION_KEY: z.string().min(32, 'Encryption key must be at least 32 characters'),
+  // HMAC key used by webhookVerifier.ts to sign/verify outbound webhook rotation.
+  // Distinct from WEBHOOK_SECRET, which validates inbound provider (Paystack/Flutterwave) signatures.
+  WEBHOOK_KEY: z.string().min(1, 'WEBHOOK_KEY is required to sign/verify webhooks'),
+  // Presence-only flag gating a secure config path at startup. Purpose beyond that is undocumented
+  // (no other reference in the codebase); required in production to preserve existing behavior.
+  SECURE_CONFIG: z.string().optional(),
   CUSTODIAL_WALLET_MASTER_KEY_V1: z.string().optional(),
   CUSTODIAL_WALLET_MASTER_KEY_V2: z.string().optional(),
   CUSTODIAL_WALLET_MASTER_KEY_ACTIVE_VERSION: z.coerce.number().default(1),
@@ -140,8 +146,22 @@ export const envSchema = z.object({
     if (data.NODE_ENV !== 'production') return true
     return !!data.MANUAL_ADMIN_SECRET
   }, {
-    message: 'MANUAL_ADMIN_SECRET is required in production for webhook signature validation',
+    message: 'MANUAL_ADMIN_SECRET is required in production to guard legacy shared-secret admin routes',
     path: ['MANUAL_ADMIN_SECRET'],
+  })
+  .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.SECURE_CONFIG
+  }, {
+    message: 'SECURE_CONFIG is required in production',
+    path: ['SECURE_CONFIG'],
+  })
+  .refine((data) => {
+    if (data.NODE_ENV !== 'production') return true
+    return !!data.RESEND_API_KEY && !!data.RESEND_FROM_EMAIL
+  }, {
+    message: 'RESEND_API_KEY and RESEND_FROM_EMAIL are required in production for email notifications',
+    path: ['RESEND_API_KEY'],
   })
   .refine((data) => {
     if (data.OTP_DELIVERY_PROVIDER !== 'email') return true

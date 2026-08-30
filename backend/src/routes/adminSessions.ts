@@ -11,7 +11,7 @@ import { sha256Hex } from '../utils/sha256.js'
 import { z } from 'zod'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
-import { env } from '../schemas/env.js'
+import { assertAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 import { getPool } from '../db.js'
 import { generateId } from '../utils/tokens.js'
 import { logger } from '../utils/logger.js'
@@ -24,13 +24,6 @@ const MAX_CONCURRENT_SESSIONS = parseInt(
 )
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function requireAdmin(req: Request): void {
-  const secret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && secret !== env.MANUAL_ADMIN_SECRET) {
-    throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-  }
-}
 
 function hashIp(ip: string | undefined): string | null {
   if (!ip) return null

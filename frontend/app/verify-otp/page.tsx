@@ -92,7 +92,7 @@ function VerifyOtpForm() {
                 id="otp"
                 type="text"
                 inputMode="numeric"
-                {...register("otp", { onChange: () => clearErrors(["otp", "root.serverError"]) })}
+                {...register("otp", { onChange: () => clearErrors(["otp", "root.serverError" as any]) })}
                 placeholder="123456"
                 aria-invalid={Boolean(errors.otp)}
                 aria-describedby={errors.otp ? "otp-error" : undefined}

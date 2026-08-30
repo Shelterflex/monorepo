@@ -1,17 +1,10 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { getPool } from '../db.js'
-import { env } from '../schemas/env.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { assertAdminSecret as requireAdmin } from '../middleware/adminSecret.js'
 import { generateId } from '../utils/tokens.js'
 import { logger } from '../utils/logger.js'
-
-function requireAdmin(req: Request) {
-  const headerSecret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-    throw new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret')
-  }
-}
 
 /**
  * Admin tools for dead-letter queue replay (settlement outbox).

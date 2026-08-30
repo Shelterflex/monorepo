@@ -10,8 +10,7 @@ The platform combines three layers:
 
 ### Platform Stakeholders Part
 
-
-
+ 
 
 | Role | Description |
 |---|---|

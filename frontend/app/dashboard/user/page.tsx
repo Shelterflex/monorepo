@@ -127,7 +127,7 @@ export default function UserDashboardPage() {
           id: e.id,
           type: e.type as WalletLedgerEntry["type"],
           amountNgn: e.amountNgn,
-          amountUsdc: e.amountUsdc,
+          amountUsdc: (e as any).amountUsdc,
           status: e.status,
           timestamp: e.timestamp,
           reference: e.reference || null,

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { validate } from '../middleware/validate.js'
-import { env } from '../schemas/env.js'
+import { requireAdminSecret } from '../middleware/adminSecret.js'
 import { ngnDepositStore } from '../models/ngnDepositStore.js'
 import { depositStore } from '../models/depositStore.js'
 import { conversionStore } from '../models/conversionStore.js'
@@ -19,14 +19,6 @@ import {
 import { userRiskStateStore } from '../models/userRiskStateStore.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
-
-function requireAdminSecret(req: Request, _res: Response, next: NextFunction) {
-  const headerSecret = req.headers['x-admin-secret']
-  if (env.MANUAL_ADMIN_SECRET && headerSecret !== env.MANUAL_ADMIN_SECRET) {
-    return next(new AppError(ErrorCode.FORBIDDEN, 403, 'Invalid admin secret'))
-  }
-  return next()
-}
 
 export function createAdminReconciliationRouter(ngnWalletService: NgnWalletService) {
   const router = Router()

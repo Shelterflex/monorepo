@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePolling } from './use-polling'
 
 export interface WebSocketMessage {
-  type: 'transaction_status' | 'staking_reward' | 'system_notification'
+  type: 'transaction_status' | 'staking_reward' | 'system_notification' | 'staking_position'
   data: any
   timestamp: string
 }

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage, temporal } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { logger } from "./logger";
 
 export interface UserPreferences {

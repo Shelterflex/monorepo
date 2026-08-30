@@ -829,4 +829,131 @@ async requestRentRelease(params: RequestRentReleaseParams): Promise<void> {
      async getProposalCount(): Promise<number> {
           return StubSorobanAdapter.stubProposalCount
      }
+
+     // ── vesting_schedule contract ─────────────────────────────────────────────
+     
+     async createVestingSchedule(
+          beneficiary: string,
+          totalAmount: bigint,
+          startTime: number,
+          endTime: number,
+          cliffTime: number,
+          revocable: boolean
+     ): Promise<string> {
+          logger.info('Soroban stub: createVestingSchedule', {
+               beneficiary,
+               totalAmount: totalAmount.toString(),
+               startTime,
+               endTime,
+               cliffTime,
+               revocable,
+          })
+          return 'stub_tx_hash_create_vesting_schedule'
+     }
+
+     async claimVested(beneficiary: string): Promise<bigint> {
+          logger.info('Soroban stub: claimVested', { beneficiary })
+          // Return a deterministic stub amount
+          const hash = this.simpleHash(`claimable:${this.config.vestingScheduleId ?? 'stub'}:${beneficiary}`)
+          return BigInt(hash % 100) * 1_000_000n
+     }
+
+     async revokeVesting(beneficiary: string): Promise<bigint> {
+          logger.info('Soroban stub: revokeVesting', { beneficiary })
+          // Return a deterministic stub amount for unclaimed
+          const hash = this.simpleHash(`unclaimed:${this.config.vestingScheduleId ?? 'stub'}:${beneficiary}`)
+          return BigInt(hash % 50) * 1_000_000n
+     }
+
+     async getClaimableVested(beneficiary: string): Promise<bigint> {
+          logger.debug('Soroban stub: getClaimableVested', { beneficiary })
+          // Return a deterministic stub amount
+          const hash = this.simpleHash(`claimable:${this.config.vestingScheduleId ?? 'stub'}:${beneficiary}`)
+          return BigInt(hash % 100) * 1_000_000n
+     }
+
+     // ── whistleblower_rewards contract ───────────────────────────────────────────
+     
+     async allocateReward(whistleblower: string, amount: bigint): Promise<string> {
+          logger.info('Soroban stub: allocateReward', { whistleblower, amount: amount.toString() })
+          return 'stub_tx_hash_allocate_reward'
+     }
+
+     async claimReward(whistleblower: string): Promise<bigint> {
+          logger.info('Soroban stub: claimReward', { whistleblower })
+          const hash = this.simpleHash(`claimable:${this.config.whistleblowerRewardsId ?? 'stub'}:${whistleblower}`)
+          return BigInt(hash % 100) * 1_000_000n
+     }
+
+     async getClaimableReward(whistleblower: string): Promise<bigint> {
+          logger.debug('Soroban stub: getClaimableReward', { whistleblower })
+          const hash = this.simpleHash(`claimable:${this.config.whistleblowerRewardsId ?? 'stub'}:${whistleblower}`)
+          return BigInt(hash % 100) * 1_000_000n
+     }
+
+     // ── rent_payments contract ──────────────────────────────────────────────────
+     
+     async createRentPaymentReceipt(
+          dealId: string,
+          amount: bigint,
+          payer: string,
+          recipient: string,
+          timestamp: number
+     ): Promise<string> {
+          logger.info('Soroban stub: createRentPaymentReceipt', {
+               dealId,
+               amount: amount.toString(),
+               payer,
+               recipient,
+               timestamp,
+          })
+          return 'stub_tx_hash_create_rent_payment_receipt'
+     }
+
+     async listRentPaymentReceiptsByDeal(dealId: string, limit: number): Promise<any[]> {
+          logger.debug('Soroban stub: listRentPaymentReceiptsByDeal', { dealId, limit })
+          return []
+     }
+
+     async rentPaymentReceiptCount(dealId: string): Promise<number> {
+          logger.debug('Soroban stub: rentPaymentReceiptCount', { dealId })
+          return 0
+     }
+
+     // ── deal_escrow circuit-breaker ─────────────────────────────────────────────
+     
+     async freeze(): Promise<string> {
+          logger.info('Soroban stub: freeze')
+          return 'stub_tx_hash_freeze'
+     }
+
+     async isFrozen(): Promise<boolean> {
+          logger.debug('Soroban stub: isFrozen')
+          return false
+     }
+
+     async proposeDrain(destination: string): Promise<string> {
+          logger.info('Soroban stub: proposeDrain', { destination })
+          return 'stub_tx_hash_propose_drain'
+     }
+
+     async executeDrain(): Promise<string> {
+          logger.info('Soroban stub: executeDrain')
+          return 'stub_tx_hash_execute_drain'
+     }
+
+     async setRecoveryDelay(delaySeconds: number): Promise<string> {
+          logger.info('Soroban stub: setRecoveryDelay', { delaySeconds })
+          return 'stub_tx_hash_set_recovery_delay'
+     }
+
+     async getCircuitBreakerState(): Promise<{ frozen: boolean; drainProposed: boolean; drainDestination?: string; recoveryDelay: number }> {
+          logger.debug('Soroban stub: getCircuitBreakerState')
+          return {
+               frozen: false,
+               drainProposed: false,
+               drainDestination: undefined,
+               recoveryDelay: 0,
+          }
+     }
 }

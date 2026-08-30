@@ -6,6 +6,7 @@ export const CONTRACT_ENV_VARS = {
   dealEscrow: 'SOROBAN_DEAL_ESCROW_ID',
   rewardDistribution: 'SOROBAN_REWARD_DISTRIBUTION_ID',
   whistleblowerValidation: 'SOROBAN_WHISTLEBLOWER_VALIDATION_ID',
+  whistleblowerRewards: 'SOROBAN_WHISTLEBLOWER_REWARDS_ID',
   stakingPool: 'SOROBAN_STAKING_POOL_ID',
   stakingRewards: 'SOROBAN_STAKING_REWARDS_ID',
   mvpStakingPool: 'SOROBAN_MVP_STAKING_POOL_ID',
@@ -14,6 +15,8 @@ export const CONTRACT_ENV_VARS = {
   inspectorBond: 'SOROBAN_INSPECTOR_BOND_ID',
   tenantReputation: 'SOROBAN_TENANT_REPUTATION_ID',
   usdcToken: 'SOROBAN_USDC_TOKEN_ID',
+  contractAccess: 'SOROBAN_CONTRACT_ACCESS_ID',
+  upgradeableProxy: 'SOROBAN_UPGRADEABLE_PROXY_ID',
   rentToOwn: 'SOROBAN_RENT_TO_OWN_ID',
   oraclePriceFeeds: 'SOROBAN_ORACLE_PRICE_FEEDS_ID',
   transactionReceipt: 'SOROBAN_TRANSACTION_RECEIPT_ID',
@@ -26,6 +29,8 @@ export const CONTRACT_ENV_VARS = {
   // `timelock` above — the timelock contract merely uses "governance" as its
   // event-topic namespace and is an unrelated feature.
   governance: 'SOROBAN_GOVERNANCE_ID',
+  // Linear vesting with cliff (contracts/vesting_schedule)
+  vestingSchedule: 'SOROBAN_VESTING_SCHEDULE_ID',
 } as const
 
 export type ContractName = keyof typeof CONTRACT_ENV_VARS

@@ -1,22 +1,23 @@
 // PropertyInfo.test.tsx – component tests for PropertyInfo
 import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@/components/__tests__/test-utils';
 import { PropertyInfo } from '@/components/properties/PropertyInfo';
 import '@testing-library/jest-dom';
 
 // Mock toast helpers
-jest.mock('@/lib/toast', () => ({
-  showSuccessToast: jest.fn(),
-  showErrorToast: jest.fn(),
+vi.mock('@/lib/toast', () => ({
+  showSuccessToast: vi.fn(),
+  showErrorToast: vi.fn(),
 }));
 
-const mockOnFavoriteToggle = jest.fn();
+const mockOnFavoriteToggle = vi.fn();
 
 describe('PropertyInfo component', () => {
   const defaultProps = {
     title: 'Elegant Studio Apartment',
     address: '123 Main St, Lagos',
-    verificationStatus: 'VERIFIED',
+    verificationStatus: 'VERIFIED' as const,
     beds: 1,
     baths: 1,
     sqm: 45,
@@ -25,7 +26,7 @@ describe('PropertyInfo component', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders title, address and verification badge', () => {
@@ -51,7 +52,7 @@ describe('PropertyInfo component', () => {
 
   it('copies link to clipboard and shows success toast on share', async () => {
     // Mock clipboard API
-    const writeTextMock = jest.fn().mockResolvedValue(undefined);
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
 
     const { showSuccessToast } = await import('@/lib/toast');
@@ -65,7 +66,7 @@ describe('PropertyInfo component', () => {
 
   it('shows error toast when clipboard write fails', async () => {
     const error = new Error('Permission denied');
-    const writeTextMock = jest.fn().mockRejectedValue(error);
+    const writeTextMock = vi.fn().mockRejectedValue(error);
     Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
 
     const { showErrorToast } = await import('@/lib/toast');

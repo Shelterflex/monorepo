@@ -62,7 +62,6 @@ export default function PropertyPhotosPage({ params }: { params: { id: string } 
   ]
 
   const handlePhotosChange = (photos: PropertyPhoto[]) => {
-    console.log('Photos changed:', photos)
     // In a real implementation, sync with backend
   }
 

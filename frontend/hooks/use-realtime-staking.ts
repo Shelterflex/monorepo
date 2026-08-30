@@ -93,8 +93,7 @@ export function useRealtimeStaking(options: UseRealtimeStakingOptions = {}) {
             if (existingPosition) {
               const updatedPosition: StakingPosition = {
                 ...existingPosition,
-                status: positionData.status,
-                rewards: positionData.rewards || existingPosition.rewards,
+                amount: positionData.amount || existingPosition.amount,
                 maturityDate: positionData.maturityDate || existingPosition.maturityDate,
               }
               newMap.set(positionData.positionId, updatedPosition)

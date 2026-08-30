@@ -45,7 +45,7 @@ export function PaymentTimeline({
               <PaymentTimelineNode
                 date={payment.transactionDate}
                 amount={payment.amount}
-                status={payment.status}
+                status={payment.status as any}
                 reference={payment.reference}
                 isOverdue={payment.isOverdue}
                 daysOverdue={payment.daysOverdue}

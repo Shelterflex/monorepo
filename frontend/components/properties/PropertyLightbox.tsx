@@ -1,8 +1,8 @@
 "use client"
 
-import { useRef, useEffect } from "react"
 import Image from "next/image"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { useFocusTrap } from "@/hooks/useFocusTrap"
 
 export interface GalleryImage {
   id: number
@@ -29,13 +29,7 @@ export function PropertyLightbox({
   onNext,
   onThumbnailClick,
 }: PropertyLightboxProps) {
-  const lightboxRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (open && lightboxRef.current) {
-      lightboxRef.current.focus()
-    }
-  }, [open])
+  const lightboxRef = useFocusTrap(open, onClose)
 
   if (!open) return null
 
