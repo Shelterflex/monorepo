@@ -21,9 +21,16 @@ import { sendLatePaymentNotification } from './latePaymentNotifier.js'
 import { logger } from '../utils/logger.js'
 import { recordLatePaymentEscalation } from '../metrics.js'
 
+export interface EscalationRunError {
+  dealId: string
+  error: string
+}
+
 export interface EscalationRunResult {
   dealsProcessed: number
   installmentsProcessed: number
+  failedDeals: number
+  errors: EscalationRunError[]
 }
 
 export class LatePaymentEscalationService {
@@ -40,34 +47,47 @@ export class LatePaymentEscalationService {
   async processAllActiveDeals(now: Date = new Date()): Promise<EscalationRunResult> {
     const deals = await dealStore.listActiveDealsWithSchedules()
     let installmentsProcessed = 0
+    let failedDeals = 0
+    const errors: EscalationRunError[] = []
 
     for (const deal of deals) {
-      if (deal.status === DealStatus.DEFAULTED || deal.status === DealStatus.COMPLETED) {
-        continue
-      }
-
-      const paidPeriods = deal.schedule
-        .filter((s) => s.status === ScheduleItemStatus.PAID)
-        .map((s) => s.period)
-
-      if (paidPeriods.length === deal.schedule.length) {
-        continue
-      }
-
-      const refreshed = updateScheduleStatuses(deal.schedule, now, paidPeriods)
-
-      for (const item of refreshed) {
-        if (item.status === ScheduleItemStatus.PAID) continue
-        if (item.status === ScheduleItemStatus.UPCOMING && daysPastDue(item.dueDate, now) < 0) {
+      try {
+        if (deal.status === DealStatus.DEFAULTED || deal.status === DealStatus.COMPLETED) {
           continue
         }
 
-        await this.processInstallment(deal, item, now)
-        installmentsProcessed += 1
+        const paidPeriods = deal.schedule
+          .filter((s) => s.status === ScheduleItemStatus.PAID)
+          .map((s) => s.period)
+
+        if (paidPeriods.length === deal.schedule.length) {
+          continue
+        }
+
+        const refreshed = updateScheduleStatuses(deal.schedule, now, paidPeriods)
+
+        for (const item of refreshed) {
+          if (item.status === ScheduleItemStatus.PAID) continue
+          if (item.status === ScheduleItemStatus.UPCOMING && daysPastDue(item.dueDate, now) < 0) {
+            continue
+          }
+
+          await this.processInstallment(deal, item, now)
+          installmentsProcessed += 1
+        }
+      } catch (error) {
+        failedDeals += 1
+        const message = error instanceof Error ? error.message : String(error)
+        errors.push({ dealId: deal.dealId, error: message })
+        logger.error(
+          'Late payment escalation failed for deal; continuing with remaining deals',
+          { dealId: deal.dealId },
+          error,
+        )
       }
     }
 
-    return { dealsProcessed: deals.length, installmentsProcessed }
+    return { dealsProcessed: deals.length, installmentsProcessed, failedDeals, errors }
   }
 
   private async processInstallment(

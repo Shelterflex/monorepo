@@ -144,13 +144,17 @@ export async function collectUpcomingDeductions(
 
   const byEmployer = new Map<string, UpcomingDeduction[]>()
 
-  for (const instruction of employerStore.listActiveInstructions()) {
+  const instructions = employerStore.listActiveInstructions()
+  const deals = await dealStore.findByIds(instructions.map((instruction) => instruction.dealId))
+  const dealsById = new Map(deals.map((deal) => [deal.dealId, deal]))
+
+  for (const instruction of instructions) {
     const employer = employerStore.findById(instruction.employerId)
     if (!employer || employer.status !== 'active' || !employer.monthlyDeductionWebhookUrl) {
       continue
     }
 
-    const deal = await dealStore.findById(instruction.dealId)
+    const deal = dealsById.get(instruction.dealId)
     if (!deal || deal.status !== DealStatus.ACTIVE) continue
 
     const instalment = findInstalmentForPeriod(deal.schedule, periodMonth, periodYear)
