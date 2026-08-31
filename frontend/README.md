@@ -12,8 +12,7 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-- The frontend currently contains both `package-lock.json` and `pnpm-lock.yaml`.
-- `pnpm-lock.yaml` is authoritative for this project; do not use `npm install` here.
+- `pnpm-lock.yaml` is the only lockfile for this project; do not use `npm install` here.
 
 ## Notes
 

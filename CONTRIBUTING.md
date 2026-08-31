@@ -49,8 +49,8 @@ pnpm run build
 ```
 
 - The frontend uses pnpm, not npm.
-- The authoritative lockfile is `frontend/pnpm-lock.yaml`.
-- `frontend/package-lock.json` is stale and should not be used; do not run `npm install` in this directory.
+- `frontend/pnpm-lock.yaml` is the only lockfile. Do not run `npm install` in this
+  directory; it would create a `package-lock.json` that drifts from what CI validates.
 
 ### Backend setup (npm, Node 22)
 
