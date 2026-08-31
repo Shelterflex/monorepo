@@ -3,6 +3,10 @@
 # dependencies
 /node_modules
 
+# This repo uses pnpm; an npm lockfile here would drift from what CI
+# validates with `pnpm install --frozen-lockfile` (see #1635).
+package-lock.json
+
 # next.js
 /.next/
 /out/
@@ -26,4 +30,5 @@ yarn-error.log*
 *.tsbuildinfo
 
 # pnpm 10 auto-generated file (CI uses pnpm 9 which can't parse it)
-pnpm-workspace.yamlfrontend/coverage/
+pnpm-workspace.yaml
+frontend/coverage/

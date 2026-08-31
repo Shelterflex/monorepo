@@ -2,7 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+# This project uses pnpm (matches CI and pnpm-lock.yaml); pin the CI pnpm version.
+RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
 
-CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+CMD ["pnpm", "run", "dev", "-H", "0.0.0.0"]
