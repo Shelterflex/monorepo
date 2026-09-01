@@ -11,5 +11,3 @@ export const metadata: Metadata = buildPageMetadata({
 export default function CalculatorPage() {
   return <CalculatorClient />
 }
-
-// Metadata is server-rendered; the interactive calculator lives in CalculatorClient.

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getRatingCard, type PublicRatingCard } from "@/lib/ratingCardApi";
 import { StarRating } from "@/components/tenant/RatingDimension";
+import { formatDate } from "@/lib/date";
 import RatingCard from "@/components/tenant/RatingCard";
 
 export default function LandlordRatingCardPage() {
@@ -28,14 +29,6 @@ export default function LandlordRatingCardPage() {
       })
       .finally(() => setIsLoading(false));
   }, [applicantId]);
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-NG", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
 
   if (isLoading) {
     return (

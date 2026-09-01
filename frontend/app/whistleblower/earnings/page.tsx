@@ -28,7 +28,8 @@ import {
   type EarningsResponse 
 } from "@/lib/api/whistleblowerApplications";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { formatDual } from "@/lib/currency";
+import { formatDual, formatNgn } from "@/lib/currency";
+import { formatDate } from "@/lib/date";
 
 export default function WhistleblowerEarningsPage() {
   const { user } = useAuthStore();
@@ -109,22 +110,12 @@ export default function WhistleblowerEarningsPage() {
       : "ready";
 
   /** Pairs an NGN figure with its USDC counterpart for the dual-currency display. */
-  const formatPair = (usdc: number | undefined) => (ngn: number) =>
-    formatAmount(ngn, usdc ?? 0);
+  const formatPair = (usdc: number | null | undefined) => (ngn: number) =>
+    typeof usdc === "number" ? formatAmount(ngn, usdc) : formatNgn(ngn);
 
   // Map backend status to frontend status
   const mapStatus = (status: string): "completed" | "pending" => {
     return status === "paid" ? "completed" : "pending";
-  };
-
-  // Format date for display
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
   };
 
   return (
@@ -200,7 +191,9 @@ export default function WhistleblowerEarningsPage() {
                           status={moneyStatus}
                           amount={totalEarnings}
                           format={(ngn) =>
-                            formatDual(ngn, earningsData.totals.totalUsdc ?? 0)
+                            typeof earningsData.totals.totalUsdc === "number"
+                              ? formatDual(ngn, earningsData.totals.totalUsdc)
+                              : formatNgn(ngn)
                           }
                           skeletonClassName="h-3 w-24"
                           unavailableLabel="Total earnings unavailable"

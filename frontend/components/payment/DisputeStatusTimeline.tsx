@@ -7,6 +7,7 @@ import {
   type TimelineStepState,
 } from "@/lib/disputeTimeline";
 import type { PaymentDispute } from "@/lib/tenantApi";
+import { formatDate, formatDateTime } from "@/lib/date";
 
 const stateIcon: Record<TimelineStepState, typeof CircleDot> = {
   complete: CheckCircle2,
@@ -28,7 +29,7 @@ export function DisputeStatusTimeline({ dispute }: { dispute: PaymentDispute }) 
         <div>
           <p className="text-sm font-bold">{DISPUTE_REASON_LABELS[dispute.reason]}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Filed {new Date(dispute.createdAt).toLocaleDateString()}
+            Filed {formatDate(dispute.createdAt)}
           </p>
         </div>
         <span
@@ -75,7 +76,7 @@ export function DisputeStatusTimeline({ dispute }: { dispute: PaymentDispute }) 
                 </p>
                 {step.timestamp ? (
                   <p className="text-xs text-muted-foreground">
-                    {new Date(step.timestamp).toLocaleString()}
+                    {formatDateTime(step.timestamp)}
                   </p>
                 ) : null}
               </div>

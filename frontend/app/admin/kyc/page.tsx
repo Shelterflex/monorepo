@@ -22,6 +22,7 @@ import {
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { apiGet } from "@/lib/apiClient"
+import { formatDate } from "@/lib/date"
 
 interface KycRecord {
   id: string
@@ -193,7 +194,7 @@ export default function KycReviewQueuePage() {
                           <td className="px-4 py-3 font-mono text-sm">{record.userId.slice(0, 8)}...</td>
                           <td className="px-4 py-3 capitalize">{record.documentType.replace(/_/g, " ")}</td>
                           <td className="px-4 py-3 text-sm">
-                            {new Date(record.createdAt).toLocaleDateString()}
+                            {formatDate(record.createdAt)}
                           </td>
                           <td className="px-4 py-3">
                             <Badge className={`gap-1 border-2 border-foreground ${cfg.color}`}>

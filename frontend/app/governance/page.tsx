@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { GovernanceProposal } from "@/lib/governanceApi";
+import { formatDateTime } from "@/lib/date";
 
 const STATUS_STYLES: Record<GovernanceProposal["status"], string> = {
   Active: "bg-accent text-accent-foreground",
@@ -21,7 +22,7 @@ const STATUS_STYLES: Record<GovernanceProposal["status"], string> = {
 
 function formatTimestamp(seconds: number): string {
   if (!seconds) return "—";
-  return new Date(seconds * 1000).toLocaleString();
+  return formatDateTime(seconds * 1000);
 }
 
 function ProposalCard({

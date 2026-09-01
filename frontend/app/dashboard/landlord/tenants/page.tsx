@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { landlordApi, type LandlordTenant } from "@/lib/landlordApi";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { formatDate } from "@/lib/date";
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<LandlordTenant[]>([]);
@@ -146,21 +147,13 @@ export default function TenantsPage() {
                         <div>
                           <p className="text-xs text-muted-foreground">Lease Start</p>
                           <p className="font-bold">
-                            {new Date(tenant.leaseStart).toLocaleDateString("en-NG", {
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                            })}
+                            {formatDate(tenant.leaseStart)}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Lease End</p>
                           <p className="font-bold">
-                            {new Date(tenant.leaseEnd).toLocaleDateString("en-NG", {
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                            })}
+                            {formatDate(tenant.leaseEnd)}
                           </p>
                         </div>
                         <div>

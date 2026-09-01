@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middleware/auth.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { kycRepository, MAX_ATTEMPTS } from '../repositories/KycRepository.js'
+import { getPaymentProvider } from '../payments/registry.js'
 
 export function createLandlordRouter() {
   const router = Router()
@@ -136,6 +137,38 @@ export function createLandlordRouter() {
       })
 
       res.json({ success: true })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // POST /api/landlord/payout/verify-account
+  router.post('/payout/verify-account', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { bankName, bankCode, accountNumber } = req.body ?? {}
+
+      if (!bankName && !bankCode) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Bank name and account number are required')
+      }
+      if (!accountNumber || String(accountNumber).trim().length < 10) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Invalid account number length')
+      }
+
+      const provider = getPaymentProvider('paystack')
+      if (!provider.resolveBankAccount) {
+        throw new AppError(ErrorCode.PAYMENT_PROVIDER_ERROR, 502, 'Bank account resolution is not supported')
+      }
+
+      const result = await provider.resolveBankAccount(
+        String(accountNumber).trim(),
+        String(bankCode || bankName).trim(),
+      )
+
+      res.json({
+        success: true,
+        accountName: result.accountName,
+        accountNumber: result.accountNumber,
+      })
     } catch (error) {
       next(error)
     }

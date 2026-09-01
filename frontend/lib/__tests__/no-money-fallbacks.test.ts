@@ -31,7 +31,7 @@ const MONEY_FORMATTERS = [
  * expression that falls back to a literal zero.
  */
 const FORMATTER_FALLBACK = new RegExp(
-  String.raw`\b(?:${MONEY_FORMATTERS.join("|")})\s*\(\s*[^),]*?(?:\?\?|\|\|)\s*0(?:\.0+)?\s*[,)]`,
+  String.raw`\b(?:${MONEY_FORMATTERS.join("|")})\s*\([^)]*?(?:\?\?|\|\|)\s*0(?:\.0+)?\s*[,)]`,
 );
 
 /**
@@ -97,6 +97,17 @@ describe("no monetary value renders from a fallback", () => {
       offenders,
       `Use <MoneyValue> so an unknown amount renders as a dash, not as zero:\n${offenders.join("\n")}`,
     ).toEqual([]);
+  });
+
+  it("catches zero fallbacks in second or later argument positions", () => {
+    // Regression fixtures from issue #1579 (multi-argument formatter calls)
+    const secondArgFallback1 = "const formatPair = (usdc) => (ngn) => formatAmount(ngn, usdc ?? 0);";
+    const secondArgFallback2 = "format={(ngn) => formatDual(ngn, earningsData.totals.totalUsdc ?? 0)}";
+    const firstArgFallback = "formatNgn(balance ?? 0)";
+
+    expect(FORMATTER_FALLBACK.test(secondArgFallback1)).toBe(true);
+    expect(FORMATTER_FALLBACK.test(secondArgFallback2)).toBe(true);
+    expect(FORMATTER_FALLBACK.test(firstArgFallback)).toBe(true);
   });
 });
 

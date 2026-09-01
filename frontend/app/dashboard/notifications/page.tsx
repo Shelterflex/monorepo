@@ -13,6 +13,7 @@ import {
   type NotificationItem,
 } from "@/lib/notificationsApi";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/date";
 
 const CATEGORIES = [
   { value: "", label: "All" },
@@ -225,7 +226,7 @@ export default function NotificationsPage() {
                     {n.body}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {new Date(n.createdAt).toLocaleString()}
+                    {formatDateTime(n.createdAt)}
                   </p>
                 </div>
                 {!n.read && (

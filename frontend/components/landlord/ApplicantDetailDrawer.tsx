@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ApplicationStatusBadge } from "./ApplicationStatusBadge";
+import { formatDate } from "@/lib/date";
 import {
   FileText,
   CheckCircle,
@@ -124,7 +125,7 @@ export function ApplicantDetailDrawer({
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Applied:</span>
                     <span className="font-medium">
-                      {new Date(displayDate).toLocaleDateString()}
+                      {formatDate(displayDate)}
                     </span>
                   </div>
                   {applicant.paymentPlan && (

@@ -15,6 +15,7 @@ import {
   getWithdrawalHistory,
   type WithdrawalResponse,
 } from "@/lib/walletApi";
+import { formatDateTime } from "@/lib/date";
 
 type LoadState<T> =
   | { type: "loading" }
@@ -171,7 +172,7 @@ export function WithdrawalHistory({ className }: Readonly<WithdrawalHistoryProps
                       <p className="font-bold">Withdrawal</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span>
-                          {new Date(withdrawal.createdAt).toLocaleString("en-NG")}
+                          {formatDateTime(withdrawal.createdAt)}
                         </span>
                         <span className="truncate border border-foreground/20 bg-muted px-2 py-0.5 font-mono">
                           {withdrawal.reference}

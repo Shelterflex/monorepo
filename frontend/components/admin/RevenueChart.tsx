@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { formatDate } from "@/lib/date";
 
 export interface RevenueTimelineItem {
   date: string;
@@ -35,12 +36,7 @@ const formatFullCurrency = (val: number) => {
 
 // Format date labels
 const formatDateLabel = (dateStr: string) => {
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch {
-    return dateStr;
-  }
+  return formatDate(dateStr, { month: "short", day: "numeric" });
 };
 
 // Custom Neobrutalist Tooltip — declared at module level to avoid creating during render
