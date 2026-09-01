@@ -28,7 +28,7 @@ import {
   type EarningsResponse 
 } from "@/lib/api/whistleblowerApplications";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { formatDual } from "@/lib/currency";
+import { formatDual, formatNgn } from "@/lib/currency";
 import { formatDate } from "@/lib/date";
 
 export default function WhistleblowerEarningsPage() {

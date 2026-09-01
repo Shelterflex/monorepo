@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { randomUUID } from 'node:crypto'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { AuthenticatedRequest } from '../middleware/auth.js'
@@ -52,8 +51,9 @@ export function createInspectorOnboardingRouter(): Router {
 
       const { personalInfo, kyc, serviceAreas, bankDetails } = parsed.data
       const authReq = req as AuthenticatedRequest
-      const userId = authReq.user?.id || `usr_ins_${randomUUID().slice(0, 8)}`
-      const inspectorId = `INS-${randomUUID().slice(0, 8).toUpperCase()}`
+      const randSuffix = (typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : Math.random().toString(36).slice(2)).slice(0, 8)
+      const userId = authReq.user?.id || `usr_ins_${randSuffix}`
+      const inspectorId = `INS-${randSuffix.toUpperCase()}`
 
       // Create or update inspector profile
       const profile = await inspectorProfileStore.create({
