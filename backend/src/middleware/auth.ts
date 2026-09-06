@@ -11,6 +11,7 @@ export interface AuthenticatedRequest extends Request {
     email: string
     name: string
     role: 'tenant' | 'landlord' | 'agent' | 'admin' | 'inspector' | 'super_admin'
+    walletAddress?: string
     displayCurrency?: 'NGN' | 'USDC'
   }
 }
@@ -78,6 +79,7 @@ export async function authenticateToken(
       email: user.email,
       name: user.name,
       role: user.role,
+      walletAddress: user.walletAddress,
       displayCurrency: user.displayCurrency,
     }
     

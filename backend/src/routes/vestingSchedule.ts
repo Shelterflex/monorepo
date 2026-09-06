@@ -10,6 +10,7 @@ import { AppError } from "../errors/AppError.js";
 import { ErrorCode } from "../errors/errorCodes.js";
 import { validate } from "../middleware/validate.js";
 import { requireAdminSecret } from "../middleware/adminSecret.js";
+import { authenticateToken, type AuthenticatedRequest } from "../middleware/auth.js";
 import { z } from "zod";
 
 // Validation schemas
@@ -26,13 +27,19 @@ const revokeVestingSchema = z.object({
   beneficiary: z.string(),
 });
 
-const getClaimableVestedSchema = z.object({
-  beneficiary: z.string(),
-});
+const ownClaimSchema = z.object({}).strict().default({});
 
-const claimVestedSchema = z.object({
-  beneficiary: z.string(),
-});
+function requireWalletAddress(req: AuthenticatedRequest): string {
+  const address = req.user?.walletAddress;
+  if (!address) {
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      400,
+      "User must have a linked Stellar wallet address"
+    );
+  }
+  return address;
+}
 
 export function createAdminVestingScheduleRouter(adapter: SorobanAdapter) {
   const router = Router();
@@ -137,10 +144,11 @@ export function createVestingScheduleRouter(adapter: SorobanAdapter) {
    */
   router.get(
     "/claimable",
-    validate(getClaimableVestedSchema, 'query'),
-    async (req: Request, res: Response, next: NextFunction) => {
+    authenticateToken,
+    validate(ownClaimSchema, 'query'),
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { beneficiary } = req.query as { beneficiary: string };
+        const beneficiary = requireWalletAddress(req);
 
         if (!adapter.getClaimableVested) {
           throw new AppError(
@@ -168,10 +176,11 @@ export function createVestingScheduleRouter(adapter: SorobanAdapter) {
    */
   router.post(
     "/claim",
-    validate(claimVestedSchema, 'body'),
-    async (req: Request, res: Response, next: NextFunction) => {
+    authenticateToken,
+    validate(ownClaimSchema, 'body'),
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { beneficiary } = req.body;
+        const beneficiary = requireWalletAddress(req);
 
         if (!adapter.claimVested) {
           throw new AppError(

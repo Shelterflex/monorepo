@@ -8,6 +8,24 @@ import {
 } from './vestingSchedule.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 
+vi.mock('../middleware/auth.js', () => ({
+  authenticateToken: (req: express.Request & { user?: unknown }, res: express.Response, next: express.NextFunction) => {
+    const walletAddress = req.header('x-test-wallet')
+    if (!walletAddress) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED' } })
+      return
+    }
+    req.user = {
+      id: 'user-123',
+      email: 'user@example.com',
+      name: 'Test User',
+      role: 'tenant',
+      walletAddress,
+    }
+    next()
+  },
+}))
+
 // Mock the env module
 vi.mock('../schemas/env.js', () => ({
   env: {
@@ -224,27 +242,48 @@ describe('Vesting Schedule Routes', () => {
   })
 
   describe('GET /api/vesting-schedule/claimable', () => {
-    it('should get claimable amount for a beneficiary', async () => {
+    it('rejects unauthenticated requests', async () => {
+      const response = await request(app).get('/api/vesting-schedule/claimable')
+
+      expect(response.status).toBe(401)
+      expect(mockAdapter.getClaimableVested).not.toHaveBeenCalled()
+    })
+
+    it('gets the claimable amount for the authenticated wallet', async () => {
       const response = await request(app)
         .get('/api/vesting-schedule/claimable')
-        .query({
-          beneficiary: 'GTEST123456789',
-        })
+        .set('x-test-wallet', 'GTEST123456789')
 
       expect(response.status).toBe(200)
       expect(response.body.beneficiary).toBe('GTEST123456789')
       expect(response.body.claimableAmount).toBe('100000')
       expect(mockAdapter.getClaimableVested).toHaveBeenCalledWith('GTEST123456789')
     })
+
+    it('rejects attempts to query another beneficiary', async () => {
+      const response = await request(app)
+        .get('/api/vesting-schedule/claimable')
+        .set('x-test-wallet', 'GTEST123456789')
+        .query({ beneficiary: 'GOTHER123456789' })
+
+      expect(response.status).toBe(400)
+      expect(mockAdapter.getClaimableVested).not.toHaveBeenCalled()
+    })
   })
 
   describe('POST /api/vesting-schedule/claim', () => {
-    it('should claim vested tokens for a beneficiary', async () => {
+    it('rejects unauthenticated requests', async () => {
+      const response = await request(app).post('/api/vesting-schedule/claim').send({})
+
+      expect(response.status).toBe(401)
+      expect(mockAdapter.claimVested).not.toHaveBeenCalled()
+    })
+
+    it('claims vested tokens for the authenticated wallet', async () => {
       const response = await request(app)
         .post('/api/vesting-schedule/claim')
-        .send({
-          beneficiary: 'GTEST123456789',
-        })
+        .set('x-test-wallet', 'GTEST123456789')
+        .send({})
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
@@ -254,13 +293,13 @@ describe('Vesting Schedule Routes', () => {
       expect(mockAdapter.claimVested).toHaveBeenCalledWith('GTEST123456789')
     })
 
-    it('does not expose claim under the admin prefix', async () => {
+    it('rejects attempts to claim for another beneficiary', async () => {
       const response = await request(app)
-        .post('/api/admin/vesting-schedule/claim')
-        .set('x-admin-secret', 'test-secret')
-        .send({ beneficiary: 'GTEST123456789' })
+        .post('/api/vesting-schedule/claim')
+        .set('x-test-wallet', 'GTEST123456789')
+        .send({ beneficiary: 'GOTHER123456789' })
 
-      expect(response.status).toBe(404)
+      expect(response.status).toBe(400)
       expect(mockAdapter.claimVested).not.toHaveBeenCalled()
     })
   })
