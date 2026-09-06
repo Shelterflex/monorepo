@@ -183,6 +183,36 @@ describe('Landlord API', () => {
     })
   })
 
+  describe('POST /api/landlord/payout/verify-account', () => {
+    it('verifies a valid bank account number', async () => {
+      const response = await request(app)
+        .post('/api/landlord/payout/verify-account')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          bankName: 'Access Bank',
+          accountNumber: '0123456789',
+        })
+        .expect(200)
+
+      expect(response.body.success).toBe(true)
+      expect(response.body.accountName).toBeDefined()
+      expect(response.body.accountNumber).toBe('0123456789')
+    })
+
+    it('rejects an invalid account number or missing bank', async () => {
+      const response = await request(app)
+        .post('/api/landlord/payout/verify-account')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          bankName: '',
+          accountNumber: '123',
+        })
+        .expect(400)
+
+      expect(response.body.error).toBeDefined()
+    })
+  })
+
   // Note: The landlord routes require a database connection for tenant data,
   // settings, and KYC status. In the test environment without a database,
   // these routes return 500 errors which is expected behavior.

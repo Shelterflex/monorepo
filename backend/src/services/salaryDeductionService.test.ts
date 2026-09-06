@@ -437,6 +437,49 @@ describe("salaryDeductionService", () => {
       // Period 1 is paid, but if period 2 is in the next month window, it will be collected
       expect(result.size).toBeGreaterThanOrEqual(0);
     });
+
+    it("batches deal lookups into a single query (no N+1)", async () => {
+      const { employer } = employerStore.create({
+        name: "Test Corp",
+        registrationNumber: "RC123",
+        contactEmail: "hr@test.com",
+        contactPhone: "+234800000",
+        monthlyDeductionWebhookUrl: "https://test.com/webhook",
+      });
+      employerStore.activate(employer.id);
+
+      let referenceDate = new Date();
+      for (let i = 0; i < 3; i++) {
+        const deal = await dealStore.create({
+          tenantId: `tenant-${i}`,
+          landlordId: `landlord-${i}`,
+          annualRentNgn: 120000,
+          depositNgn: 24000,
+          termMonths: 3,
+        });
+        await dealStore.updateStatus(deal.dealId, DealStatus.ACTIVE);
+        employerStore.createInstruction({
+          dealId: deal.dealId,
+          employerId: employer.id,
+          employeeId: `EMP00${i}`,
+          deductionAmount: deal.schedule[0]!.amountNgn,
+          deductionDay: 25,
+        });
+        if (i === 0) {
+          referenceDate = new Date(deal.schedule[0]!.dueDate);
+          referenceDate.setUTCDate(referenceDate.getUTCDate() - 40);
+        }
+      }
+
+      const findByIdsSpy = vi.spyOn(dealStore, "findByIds");
+      const findByIdSpy = vi.spyOn(dealStore, "findById");
+
+      await collectUpcomingDeductions(referenceDate);
+
+      // One batched lookup for all instructions, no per-instruction findById.
+      expect(findByIdsSpy).toHaveBeenCalledTimes(1);
+      expect(findByIdSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe("sendMonthlyDeductionAdvanceNotices", () => {

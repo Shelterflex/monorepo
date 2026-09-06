@@ -19,6 +19,7 @@ import {
 import { handleError, showSuccessToast } from "@/lib/toast";
 import { generateLedgerCsv, downloadCsv } from "@/lib/csvExport";
 import { formatConversionRate, formatNgn, formatUsdc } from "@/lib/currency";
+import { formatDateTime } from "@/lib/date";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -152,13 +153,6 @@ function getTypesFromFilterIds(filterIds: string[]): WalletLedgerType[] {
 function getFilterLabel(filterId: string): string {
   const group = FILTER_GROUPS.find((g) => g.id === filterId);
   return group?.label ?? filterId;
-}
-
-function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-NG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(iso));
 }
 
 function WalletPageContent() {
@@ -958,7 +952,7 @@ function WalletPageContent() {
                               )}
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <span>{new Date(entry.timestamp).toLocaleString("en-NG")}</span>
+                              <span>{formatDateTime(entry.timestamp)}</span>
                               {entry.reference ? (
                                 <span className="truncate border border-foreground/20 bg-muted px-2 py-0.5 font-mono">
                                   {entry.reference}

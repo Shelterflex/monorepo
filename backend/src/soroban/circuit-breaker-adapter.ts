@@ -399,4 +399,19 @@ export class CircuitBreakerAdapter implements SorobanAdapter {
       this.wrappedAdapter.isOraclePriceStale!(pair),
     )
   }
+
+  async createRentPaymentReceipt?(
+    dealId: string,
+    amount: bigint,
+    payer: string,
+    recipient: string,
+    timestamp: number,
+  ): Promise<string> {
+    if (!this.wrappedAdapter.createRentPaymentReceipt) {
+      throw new Error('createRentPaymentReceipt not supported by wrapped adapter')
+    }
+    return this.executeWithCircuitBreaker('createRentPaymentReceipt', () =>
+      this.wrappedAdapter.createRentPaymentReceipt!(dealId, amount, payer, recipient, timestamp),
+    )
+  }
 }

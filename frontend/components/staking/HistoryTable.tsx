@@ -11,6 +11,7 @@ import {
   ListRowSkeleton,
   LoadingState,
 } from "@/components/ui/data-state";
+import { formatDateTime } from "@/lib/date";
 
 interface HistoryTableProps {
   walletAddress?: string | null;
@@ -42,21 +43,6 @@ export function HistoryTable({ walletAddress }: HistoryTableProps) {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
-
-  const formatDateTime = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return isoString;
-    }
-  };
 
   const getTxTypeDetails = (type: string) => {
     switch (type) {

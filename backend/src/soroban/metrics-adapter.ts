@@ -258,6 +258,21 @@ export class MetricsSorobanAdapter implements SorobanAdapter {
     return this.trackCall('isOraclePriceStale', () => this.wrapped.isOraclePriceStale!(pair));
   }
 
+  async createRentPaymentReceipt?(
+    dealId: string,
+    amount: bigint,
+    payer: string,
+    recipient: string,
+    timestamp: number,
+  ): Promise<string> {
+    if (!this.wrapped.createRentPaymentReceipt) {
+      throw new Error('createRentPaymentReceipt not implemented');
+    }
+    return this.trackCall('createRentPaymentReceipt', () =>
+      this.wrapped.createRentPaymentReceipt!(dealId, amount, payer, recipient, timestamp),
+    );
+  }
+
   // governance contract (issue #1494)
   async createProposal?(params: CreateGovernanceProposalParams): Promise<UnsignedTransaction> {
     if (!this.wrapped.createProposal) {

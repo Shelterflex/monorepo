@@ -558,8 +558,8 @@ mod tests {
     extern crate std;
     use super::*;
     use soroban_sdk::{
-        testutils::{Address as _, MockAuth, MockAuthInvoke},
-        Address, Env, IntoVal,
+        testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
+        Address, Env, IntoVal, TryIntoVal,
     };
 
     fn setup(env: &Env) -> (Address, Address, Address, AccessControlClient<'_>) {
@@ -580,6 +580,78 @@ mod tests {
         client.try_init(&admin, &approver).unwrap().unwrap();
 
         (contract_id, admin, approver, client)
+    }
+
+    /// Run the full two-step (propose + confirm) assignment of `role` to
+    /// `subject`.  Mirrors the inline pattern used by the pre-existing tests.
+    fn assign_role(
+        env: &Env,
+        contract_id: &Address,
+        client: &AccessControlClient<'_>,
+        admin: &Address,
+        approver: &Address,
+        subject: &Address,
+        role: Role,
+    ) {
+        env.mock_auths(&[MockAuth {
+            address: admin,
+            invoke: &MockAuthInvoke {
+                contract: contract_id,
+                fn_name: "propose_assign_role",
+                args: (admin.clone(), subject.clone(), role).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_assign_role(admin, subject, &role)
+            .unwrap()
+            .unwrap();
+
+        env.mock_auths(&[MockAuth {
+            address: approver,
+            invoke: &MockAuthInvoke {
+                contract: contract_id,
+                fn_name: "confirm_assign_role",
+                args: (approver.clone(), subject.clone()).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_confirm_assign_role(approver, subject)
+            .unwrap()
+            .unwrap();
+    }
+
+    /// Search the events published by the most recent contract invocation for an
+    /// audit event with topics `(Symbol "access_control", Symbol `action`,
+    /// <subject Address>)` and return `(subject, detail_u32)`.  `emit_audit` is
+    /// the only event source in this contract, so every event has exactly three
+    /// topics and a `u32` body.
+    ///
+    /// NOTE: `Events::all()` only exposes the *last* invocation's events, so
+    /// callers must assert immediately after the emitting call — before any
+    /// other client call (queries included) clears the buffer.
+    fn find_audit_event(env: &Env, action: &str) -> Option<(Address, u32)> {
+        let all = env.events().all();
+        for i in (0..all.len()).rev() {
+            let (_cid, topics, data) = all.get(i).unwrap();
+            if topics.len() != 3 {
+                continue;
+            }
+            let t0: Result<Symbol, _> = topics.get(0).unwrap().try_into_val(env);
+            let t1: Result<Symbol, _> = topics.get(1).unwrap().try_into_val(env);
+            match (t0, t1) {
+                (Ok(a), Ok(b))
+                    if a == Symbol::new(env, "access_control") && b == Symbol::new(env, action) =>
+                {
+                    let subject: Address = topics.get(2).unwrap().try_into_val(env).ok()?;
+                    let detail: u32 = data.try_into_val(env).ok()?;
+                    return Some((subject, detail));
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     // ── init ─────────────────────────────────────────────────────────────────
@@ -1170,5 +1242,789 @@ mod tests {
         }]);
         let result = client.try_delegate_permission(&stranger, &target, &Permission::ReadBalance);
         assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+    }
+
+    // ── unauthorized-caller rejection for every privileged function ───────────
+
+    #[test]
+    fn propose_assign_role_rejects_non_admin() {
+        let env = Env::default();
+        let (contract_id, _admin, _approver, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        let subject = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &stranger,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_assign_role",
+                args: (stranger.clone(), subject.clone(), Role::Operator).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_propose_assign_role(&stranger, &subject, &Role::Operator);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+
+        // no role assigned as a side effect
+        assert_eq!(client.get_role(&subject), None);
+        assert_eq!(client.list_roles().len(), 1);
+    }
+
+    #[test]
+    fn confirm_assign_role_rejects_non_approver() {
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+        let impostor = Address::generate(&env);
+
+        // a valid proposal exists
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_assign_role",
+                args: (admin.clone(), subject.clone(), Role::Operator).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_assign_role(&admin, &subject, &Role::Operator)
+            .unwrap()
+            .unwrap();
+
+        // someone who is not the configured second approver tries to confirm
+        env.mock_auths(&[MockAuth {
+            address: &impostor,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_assign_role",
+                args: (impostor.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_confirm_assign_role(&impostor, &subject);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+        assert_eq!(client.get_role(&subject), None);
+    }
+
+    #[test]
+    fn confirm_assign_role_without_proposal_fails() {
+        let env = Env::default();
+        let (contract_id, _admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_assign_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_confirm_assign_role(&approver, &subject);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::AwaitingApproval);
+    }
+
+    #[test]
+    fn propose_revoke_role_rejects_non_admin() {
+        let env = Env::default();
+        let (contract_id, _admin, _approver, client) = setup(&env);
+        let stranger = Address::generate(&env);
+        let subject = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &stranger,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (stranger.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_propose_revoke_role(&stranger, &subject);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+    }
+
+    #[test]
+    fn confirm_revoke_role_rejects_non_approver() {
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+        let impostor = Address::generate(&env);
+
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &subject,
+            Role::Operator,
+        );
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (admin.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_revoke_role(&admin, &subject)
+            .unwrap()
+            .unwrap();
+
+        env.mock_auths(&[MockAuth {
+            address: &impostor,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_revoke_role",
+                args: (impostor.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_confirm_revoke_role(&impostor, &subject);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+        // the role survived the failed confirmation
+        assert_eq!(client.get_role(&subject), Some(Role::Operator));
+    }
+
+    #[test]
+    fn confirm_revoke_role_without_proposal_fails() {
+        let env = Env::default();
+        let (contract_id, _admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_revoke_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_confirm_revoke_role(&approver, &subject);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::AwaitingApproval);
+    }
+
+    #[test]
+    fn confirm_revoke_role_rejects_assign_sentinel() {
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+
+        // pending ASSIGN proposal: Proposals[subject] holds `role as u32`, not the
+        // `u32::MAX` sentinel that `propose_revoke_role` writes.
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_assign_role",
+                args: (admin.clone(), subject.clone(), Role::Operator).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_assign_role(&admin, &subject, &Role::Operator)
+            .unwrap()
+            .unwrap();
+
+        // confirm_revoke_role must refuse to act on an assign proposal
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_revoke_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_confirm_revoke_role(&approver, &subject);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::AwaitingApproval);
+        assert_eq!(client.get_role(&subject), None);
+    }
+
+    #[test]
+    fn confirm_assign_role_on_pending_revocation_grants_auditor_defect() {
+        // DEFECT REPRODUCTION — not an endorsement of this behavior.
+        //
+        // `propose_revoke_role` stores the sentinel `u32::MAX` in the shared
+        // `Proposals` map. `confirm_assign_role` then decodes any unrecognised
+        // value through its catch-all `_ => Role::Auditor` arm. Consequently the
+        // second approver can unilaterally convert a pending *revocation* into an
+        // *Auditor grant*, defeating the two-step multisig, and it emits an
+        // `assign_role` audit event that looks legitimate to an indexer.
+        //
+        // This test pins the CURRENT (buggy) behavior so the PR carries a
+        // reproduction. It must be fixed under a SEPARATE issue; when fixed,
+        // replace this with a test asserting the revocation is honored or a
+        // typed error is returned.
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &subject,
+            Role::Operator,
+        );
+        assert_eq!(client.get_role(&subject), Some(Role::Operator));
+
+        // admin proposes to REVOKE the subject's role
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (admin.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_revoke_role(&admin, &subject)
+            .unwrap()
+            .unwrap();
+
+        // the second approver calls the WRONG confirm function...
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_assign_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_confirm_assign_role(&approver, &subject)
+            .unwrap()
+            .unwrap();
+
+        // the audit trail shows a legitimate-looking assignment to Auditor (3).
+        // (Asserted before any query call — `Events::all()` only keeps the last
+        // invocation's events.)
+        let (subj, detail) = find_audit_event(&env, "assign_role").expect("assign_role event");
+        assert_eq!(subj, subject);
+        assert_eq!(detail, Role::Auditor as u32);
+
+        // ...and the pending revocation has silently become an Auditor grant.
+        assert_eq!(client.get_role(&subject), Some(Role::Auditor));
+    }
+
+    // ── last-admin guard (restored regression) ──────────────────────────────
+
+    #[test]
+    fn cannot_revoke_last_admin() {
+        // Regression: this test existed until commit 6bba8263 ("fix compilation
+        // and clippy errors in contract_access and rent_payments"), which removed
+        // an accidentally duplicated copy — and with it the only copy — leaving
+        // `test_snapshots/tests/cannot_revoke_last_admin.1.json` orphaned and the
+        // `admin_count <= 1` guard in `propose_revoke_role` entirely uncovered.
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (admin.clone(), admin.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_propose_revoke_role(&admin, &admin);
+        assert_eq!(
+            result.unwrap_err().unwrap(),
+            AccessError::CannotRevokeLastAdmin
+        );
+        assert_eq!(client.get_role(&admin), Some(Role::Admin));
+    }
+
+    #[test]
+    fn can_revoke_admin_when_two_exist() {
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let admin2 = Address::generate(&env);
+
+        // promote a second admin so the last-admin guard no longer applies
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &admin2,
+            Role::Admin,
+        );
+        assert_eq!(client.get_role(&admin2), Some(Role::Admin));
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (admin.clone(), admin2.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_revoke_role(&admin, &admin2)
+            .unwrap()
+            .unwrap();
+
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_revoke_role",
+                args: (approver.clone(), admin2.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_confirm_revoke_role(&approver, &admin2)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(client.get_role(&admin2), None);
+        assert_eq!(client.get_role(&admin), Some(Role::Admin));
+    }
+
+    // ── revoke_delegation authorization boundaries ──────────────────────────
+
+    #[test]
+    fn revoke_delegation_rejects_unrelated_caller() {
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+        let delegatee = Address::generate(&env);
+        let stranger = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (admin.clone(), delegatee.clone(), Permission::ReadBalance).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_delegate_permission(&admin, &delegatee, &Permission::ReadBalance)
+            .unwrap()
+            .unwrap();
+
+        // caller is neither the admin nor the original delegator
+        env.mock_auths(&[MockAuth {
+            address: &stranger,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "revoke_delegation",
+                args: (stranger.clone(), delegatee.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_revoke_delegation(&stranger, &delegatee);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+
+        // the delegation survived the failed revoke
+        assert!(client.has_permission(&delegatee, &Permission::ReadBalance));
+        assert_eq!(
+            client.get_delegation(&delegatee),
+            Some(Permission::ReadBalance)
+        );
+    }
+
+    #[test]
+    fn original_delegator_can_revoke_own_delegation() {
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let delegator = Address::generate(&env);
+        let delegatee = Address::generate(&env);
+
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &delegator,
+            Role::Operator,
+        );
+
+        env.mock_auths(&[MockAuth {
+            address: &delegator,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (
+                    delegator.clone(),
+                    delegatee.clone(),
+                    Permission::CreditFunds,
+                )
+                    .into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_delegate_permission(&delegator, &delegatee, &Permission::CreditFunds)
+            .unwrap()
+            .unwrap();
+        assert!(client.has_permission(&delegatee, &Permission::CreditFunds));
+
+        // the original delegator holds no admin role but may revoke their grant
+        env.mock_auths(&[MockAuth {
+            address: &delegator,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "revoke_delegation",
+                args: (delegator.clone(), delegatee.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_revoke_delegation(&delegator, &delegatee)
+            .unwrap()
+            .unwrap();
+
+        assert!(!client.has_permission(&delegatee, &Permission::CreditFunds));
+        assert_eq!(client.get_delegation(&delegatee), None);
+    }
+
+    // ── grant / revoke / re-grant cycle ────────────────────────────────────
+
+    #[test]
+    fn assign_revoke_reassign_cycle() {
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &subject,
+            Role::Operator,
+        );
+        assert!(client.has_permission(&subject, &Permission::CreditFunds));
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (admin.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_revoke_role(&admin, &subject)
+            .unwrap()
+            .unwrap();
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_revoke_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_confirm_revoke_role(&approver, &subject)
+            .unwrap()
+            .unwrap();
+        assert!(!client.has_permission(&subject, &Permission::CreditFunds));
+        assert_eq!(client.get_role(&subject), None);
+
+        // re-grant, a different role this time
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &subject,
+            Role::Auditor,
+        );
+        assert_eq!(client.get_role(&subject), Some(Role::Auditor));
+        assert!(client.has_permission(&subject, &Permission::ReadBalance));
+        assert!(!client.has_permission(&subject, &Permission::CreditFunds));
+    }
+
+    // ── transitive-delegation safety boundary ──────────────────────────────
+
+    #[test]
+    fn second_hop_delegation_confers_no_usable_permission() {
+        // A delegatee may itself call `delegate_permission` (the guard accepts a
+        // permission held via delegation), and the call succeeds and emits a
+        // `delegate_perm` event — but the second hop is INERT: `has_delegation`
+        // only consults the *immediate* delegator's ROLE, so a second-hop
+        // delegatee gains nothing usable. This pins the transitive-escalation
+        // safety boundary. (Whether the second hop should be rejected outright,
+        // rather than silently accepted + evented, is flagged for the maintainer.)
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let d1 = Address::generate(&env);
+        let d2 = Address::generate(&env);
+        let d3 = Address::generate(&env);
+
+        assign_role(
+            &env,
+            &contract_id,
+            &client,
+            &admin,
+            &approver,
+            &d1,
+            Role::Operator,
+        );
+
+        // hop 1: d1 holds CreditFunds via its Operator role
+        env.mock_auths(&[MockAuth {
+            address: &d1,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (d1.clone(), d2.clone(), Permission::CreditFunds).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_delegate_permission(&d1, &d2, &Permission::CreditFunds)
+            .unwrap()
+            .unwrap();
+        assert!(client.has_permission(&d2, &Permission::CreditFunds));
+
+        // hop 2: d2 holds CreditFunds ONLY via delegation, re-delegates to d3
+        env.mock_auths(&[MockAuth {
+            address: &d2,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (d2.clone(), d3.clone(), Permission::CreditFunds).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        // the call is accepted and the delegation is stored...
+        client
+            .try_delegate_permission(&d2, &d3, &Permission::CreditFunds)
+            .unwrap()
+            .unwrap();
+        assert_eq!(client.get_delegation(&d3), Some(Permission::CreditFunds));
+
+        // ...but it confers no usable permission — no transitive escalation
+        assert!(!client.has_permission(&d3, &Permission::CreditFunds));
+        assert_eq!(client.get_role(&d3), None);
+    }
+
+    // ── pre-init behavior (see report: failure modes are inconsistent) ──────
+
+    #[test]
+    #[should_panic(expected = "admin not set")]
+    fn pre_init_propose_assign_role_panics() {
+        // The `propose_*` role fns read the admin via `get_admin`'s
+        // `.expect("admin not set")`, so calling one before `init` is a bare
+        // panic, not a typed error. (The `confirm_*` fns and the
+        // delegate/require paths instead return typed errors pre-init — the
+        // inconsistency is flagged in the report.)
+        let env = Env::default();
+        let contract_id = env.register(AccessControl, ());
+        let client = AccessControlClient::new(&env, &contract_id);
+        let caller = Address::generate(&env);
+        let subject = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &caller,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_assign_role",
+                args: (caller.clone(), subject.clone(), Role::Operator).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client.propose_assign_role(&caller, &subject, &Role::Operator);
+    }
+
+    #[test]
+    fn pre_init_require_permission_is_unauthorized() {
+        let env = Env::default();
+        let contract_id = env.register(AccessControl, ());
+        let client = AccessControlClient::new(&env, &contract_id);
+        let caller = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &caller,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "require_permission",
+                args: (caller.clone(), Permission::ReadBalance).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_require_permission(&caller, &Permission::ReadBalance);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+    }
+
+    #[test]
+    fn pre_init_delegate_permission_is_unauthorized() {
+        let env = Env::default();
+        let contract_id = env.register(AccessControl, ());
+        let client = AccessControlClient::new(&env, &contract_id);
+        let caller = Address::generate(&env);
+        let target = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &caller,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (caller.clone(), target.clone(), Permission::ReadBalance).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_delegate_permission(&caller, &target, &Permission::ReadBalance);
+        assert_eq!(result.unwrap_err().unwrap(), AccessError::Unauthorized);
+    }
+
+    // ── event assertions (no pre-existing test asserted any event) ──────────
+
+    #[test]
+    fn init_emits_audit_event() {
+        let env = Env::default();
+        let (_id, admin, _approver, _client) = setup(&env);
+
+        let (subject, detail) = find_audit_event(&env, "init").expect("init event");
+        assert_eq!(subject, admin);
+        assert_eq!(detail, Role::Admin as u32);
+    }
+
+    #[test]
+    fn assign_and_revoke_flow_emit_events() {
+        let env = Env::default();
+        let (contract_id, admin, approver, client) = setup(&env);
+        let subject = Address::generate(&env);
+
+        // Each event is asserted immediately after its emitting call, because
+        // `Events::all()` only exposes the most recent invocation's events.
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_assign_role",
+                args: (admin.clone(), subject.clone(), Role::Operator).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_assign_role(&admin, &subject, &Role::Operator)
+            .unwrap()
+            .unwrap();
+        let (s, d) = find_audit_event(&env, "propose_assign").expect("propose_assign event");
+        assert_eq!(s, subject);
+        assert_eq!(d, Role::Operator as u32);
+
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_assign_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_confirm_assign_role(&approver, &subject)
+            .unwrap()
+            .unwrap();
+        let (s, d) = find_audit_event(&env, "assign_role").expect("assign_role event");
+        assert_eq!(s, subject);
+        assert_eq!(d, Role::Operator as u32);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "propose_revoke_role",
+                args: (admin.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_propose_revoke_role(&admin, &subject)
+            .unwrap()
+            .unwrap();
+        let (s, d) = find_audit_event(&env, "propose_revoke").expect("propose_revoke event");
+        assert_eq!(s, subject);
+        assert_eq!(d, 0);
+
+        env.mock_auths(&[MockAuth {
+            address: &approver,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "confirm_revoke_role",
+                args: (approver.clone(), subject.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_confirm_revoke_role(&approver, &subject)
+            .unwrap()
+            .unwrap();
+        let (s, d) = find_audit_event(&env, "revoke_role").expect("revoke_role event");
+        assert_eq!(s, subject);
+        assert_eq!(d, 0);
+    }
+
+    #[test]
+    fn delegation_flow_emits_events() {
+        let env = Env::default();
+        let (contract_id, admin, _approver, client) = setup(&env);
+        let delegatee = Address::generate(&env);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "delegate_permission",
+                args: (admin.clone(), delegatee.clone(), Permission::CreditFunds).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_delegate_permission(&admin, &delegatee, &Permission::CreditFunds)
+            .unwrap()
+            .unwrap();
+
+        let (s, d) = find_audit_event(&env, "delegate_perm").expect("delegate_perm event");
+        assert_eq!(s, delegatee);
+        assert_eq!(d, Permission::CreditFunds as u32);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "revoke_delegation",
+                args: (admin.clone(), delegatee.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        client
+            .try_revoke_delegation(&admin, &delegatee)
+            .unwrap()
+            .unwrap();
+
+        let (s, d) = find_audit_event(&env, "revoke_delegation").expect("revoke_delegation event");
+        assert_eq!(s, delegatee);
+        assert_eq!(d, 0);
     }
 }

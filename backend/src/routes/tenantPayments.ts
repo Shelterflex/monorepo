@@ -16,6 +16,7 @@ import type { NgnTopupInitiateRequest } from "../schemas/ngnTopup.js";
 import { initiateNgnTopup } from "../services/ngnTopupInitiateService.js";
 import { generateId } from "../utils/tokens.js";
 import { logger } from "../utils/logger.js";
+import { deriveInstalmentStatus, type InstalmentInput } from "../utils/installmentSchedule.js";
 
 const router = Router();
 const ngnWalletService = new NgnWalletService();
@@ -99,22 +100,35 @@ function formatIsoDate(date: Date) {
 function getMockPaymentSchedule(dealId: string) {
   const now = new Date()
   const amounts = dealId === "deal-2" ? [145000, 145000, 145000, 145000, 145000] : [120000, 120000, 120000, 120000, 120000]
-  const schedule = amounts.map((amount, index) => {
+  
+  const instalments: InstalmentInput[] = amounts.map((amount, index) => {
     const dueDate = new Date(now)
     dueDate.setDate(now.getDate() + (index - 1) * 30)
     const isPast = dueDate < now
-    const isOverdue = isPast && index === 0
-    const status = isOverdue ? "overdue" : isPast ? "paid" : "upcoming"
+    const paid = isPast && index !== 0
     return {
       period: index + 1,
-      month: dueDate.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-      amount,
-      dueDate: formatIsoDate(dueDate),
-      status,
-      paidDate: status === "paid" ? formatIsoDate(new Date(dueDate.getTime() - 5 * 24 * 60 * 60 * 1000)) : undefined,
-      isNextDue: index === 1,
+      dueDate: dueDate.toISOString(),
+      amountNgn: amount,
+      paid,
+      paidAt: paid ? new Date(dueDate.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString() : null,
     }
   })
+  
+  const schedule = instalments.map((instalment) => {
+    const status = deriveInstalmentStatus(instalment, now)
+    const dueDate = new Date(instalment.dueDate)
+    return {
+      period: instalment.period,
+      month: dueDate.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+      amount: instalment.amountNgn,
+      dueDate: formatIsoDate(dueDate),
+      status,
+      paidDate: instalment.paidAt ? formatIsoDate(new Date(instalment.paidAt)) : undefined,
+      isNextDue: instalment.period === 2,
+    }
+  })
+  
   return schedule
 }
 

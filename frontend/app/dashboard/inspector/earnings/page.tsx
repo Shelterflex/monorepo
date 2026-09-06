@@ -16,6 +16,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { propertyInspectionApi, type InspectorEarnings } from "@/lib/propertyInspectionApi";
 import { useFeatureFlag } from "@/lib/featureFlags";
+import { formatDate } from "@/lib/date";
 
 export default function EarningsPage() {
   const isEnabled = useFeatureFlag("INSPECTOR_DASHBOARD_ENABLED");
@@ -210,7 +211,7 @@ export default function EarningsPage() {
                       </p>
                       <div className="mt-2 flex items-center gap-4 text-sm">
                         <span className="text-muted-foreground">
-                          Completed: {new Date(inspection.completedAt).toLocaleDateString()}
+                          Completed: {formatDate(inspection.completedAt)}
                         </span>
                       </div>
                     </div>

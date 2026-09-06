@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Copy, ExternalLink, ArrowRight, AlertCircle, Check, Loader2 } from "lucide-react";
 import { handleError, showSuccessToast } from "@/lib/toast";
+import { formatDateTime } from "@/lib/date";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -343,7 +344,7 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
 
                 {topUpResult.expiresAt && (
                   <p className="text-xs text-muted-foreground">
-                    Expires: {new Date(topUpResult.expiresAt).toLocaleString("en-NG")}
+                    Expires: {formatDateTime(topUpResult.expiresAt)}
                   </p>
                 )}
               </div>

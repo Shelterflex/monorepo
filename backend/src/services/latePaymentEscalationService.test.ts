@@ -140,6 +140,38 @@ describe('LatePaymentEscalationService', () => {
 
     expect(secondCallCount).toBe(0)
   })
+
+  it('isolates a per-deal failure and continues processing remaining deals', async () => {
+    const dueDate = new Date('2024-01-01')
+    const now = new Date('2024-01-08')
+
+    const deal1 = await createTestDeal([{ dueDate, status: ScheduleItemStatus.PENDING }])
+    const deal2 = await createTestDeal([{ dueDate, status: ScheduleItemStatus.PENDING }])
+
+    // Fail deterministically for deal1 regardless of processing order.
+    vi.mocked(lateFeeService.ensurePaymentRecord).mockImplementation(
+      (dealId: string, period: number) => {
+        if (dealId === deal1.dealId) {
+          throw new Error('Database error on deal 1')
+        }
+        return `pmt-${dealId}-${period}`
+      },
+    )
+
+    const result = await service.processAllActiveDeals(now)
+
+    expect(result.dealsProcessed).toBe(2)
+    expect(result.failedDeals).toBe(1)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]?.dealId).toBe(deal1.dealId)
+
+    // deal2 was still processed despite deal1 throwing.
+    expect(latePaymentNotifier.sendLatePaymentNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ dealId: deal2.dealId }),
+      }),
+    )
+  })
 })
 
 async function createTestDeal(

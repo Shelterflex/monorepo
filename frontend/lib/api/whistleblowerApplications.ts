@@ -157,6 +157,18 @@ export function getValidationErrors(error: unknown): Record<string, string> | nu
  * Whistleblower Earnings API Client
  */
 
+export interface ClaimableRewardResponse {
+  whistleblower: string;
+  claimableAmount: string;
+}
+
+export interface ClaimRewardResponse {
+  success: boolean;
+  whistleblower: string;
+  claimedAmount: string;
+  message: string;
+}
+
 export interface EarningsTotals {
   totalNgn: number;
   pendingNgn: number;
@@ -175,6 +187,7 @@ export interface EarningsHistoryItem {
   status: 'pending' | 'payable' | 'paid';
   createdAt: string;
   paidAt?: string;
+  onChainAllocated?: boolean;
 }
 
 export interface EarningsResponse {
@@ -211,4 +224,67 @@ export async function getWhistleblowerEarnings(
   }
 
   return result as EarningsResponse;
+}
+
+/**
+ * Fetches the claimable on-chain reward amount for a whistleblower.
+ * 
+ * @param whistleblowerId - The ID of the whistleblower
+ * @returns Promise resolving to the claimable reward response
+ * @throws Error if the request fails
+ */
+export async function getClaimableReward(
+  whistleblowerId: string
+): Promise<ClaimableRewardResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/whistleblower-rewards/claimable?whistleblower=${whistleblowerId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    const error = new Error(
+      result.error?.message || 'Failed to fetch claimable reward'
+    ) as Error & { apiError?: ApiError; statusCode?: number };
+    error.apiError = result as ApiError;
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return result as ClaimableRewardResponse;
+}
+
+/**
+ * Claims an allocated on-chain reward for a whistleblower.
+ * 
+ * @param whistleblowerId - The ID of the whistleblower
+ * @returns Promise resolving to the claim reward response
+ * @throws Error if the request fails
+ */
+export async function claimReward(
+  whistleblowerId: string
+): Promise<ClaimRewardResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/whistleblower-rewards/claim`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ whistleblower: whistleblowerId }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    const error = new Error(
+      result.error?.message || 'Failed to claim reward'
+    ) as Error & { apiError?: ApiError; statusCode?: number };
+    error.apiError = result as ApiError;
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return result as ClaimRewardResponse;
 }

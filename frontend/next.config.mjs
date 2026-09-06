@@ -9,6 +9,14 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 const withNextIntl = createNextIntlPlugin("./i18n.ts");
 
+if (!process.env.NEXT_PUBLIC_BACKEND_URL && process.env.NODE_ENV === 'production' && !process.env.GITHUB_ACTIONS) {
+  throw new Error(
+    'NEXT_PUBLIC_BACKEND_URL must be set in production builds. ' +
+    'Without it, the CSP connect-src directive (and any code relying on this ' +
+    'build-time value) would silently fall back to http://localhost:4000.'
+  )
+}
+
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'
 
 /**

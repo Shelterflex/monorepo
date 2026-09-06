@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import request from 'supertest'
 import express from 'express'
 import { errorHandler } from '../middleware/errorHandler.js'
-import { createVestingScheduleRouter } from './vestingSchedule.js'
+import {
+  createAdminVestingScheduleRouter,
+  createVestingScheduleRouter,
+} from './vestingSchedule.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 
 vi.mock('../middleware/auth.js', () => ({
@@ -145,7 +148,7 @@ describe('Vesting Schedule Routes', () => {
     app = express()
     app.use(express.json())
     mockAdapter = new MockSorobanAdapter()
-    app.use('/api/admin/vesting-schedule', createVestingScheduleRouter(mockAdapter))
+    app.use('/api/admin/vesting-schedule', createAdminVestingScheduleRouter(mockAdapter))
     app.use('/api/vesting-schedule', createVestingScheduleRouter(mockAdapter))
     app.use(errorHandler)
   })
@@ -191,6 +194,23 @@ describe('Vesting Schedule Routes', () => {
         })
 
       expect(response.status).toBe(403)
+    })
+
+    it('does not expose create under the user-facing prefix', async () => {
+      const response = await request(app)
+        .post('/api/vesting-schedule/create')
+        .set('x-admin-secret', 'test-secret')
+        .send({
+          beneficiary: 'GTEST123456789',
+          totalAmount: '1000000',
+          startTime: 1,
+          endTime: 2,
+          cliffTime: 1,
+          revocable: true,
+        })
+
+      expect(response.status).toBe(404)
+      expect(mockAdapter.createVestingSchedule).not.toHaveBeenCalled()
     })
   })
 

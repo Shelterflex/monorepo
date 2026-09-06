@@ -73,7 +73,7 @@ pnpm run dev
 ```
 
 - Runs on: `http://localhost:3000`
-- Uses mock data (no backend required)
+- Static pages work without a backend; data-driven features (properties, messages, dashboards, auth) require a running backend
 - See [`frontend/README.md`](frontend/README.md) for details
 
 ### Option B: Backend Only
@@ -208,6 +208,10 @@ Ensure you have the WASM target installed:
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 

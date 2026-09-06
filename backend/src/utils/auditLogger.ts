@@ -36,6 +36,10 @@ export type AuditEventType =
   | "ADMIN_LISTING_REJECT"
   | "ADMIN_RISK_FREEZE"
   | "ADMIN_RISK_UNFREEZE"
+  | "ADMIN_CIRCUIT_BREAKER_FREEZE"
+  | "ADMIN_CIRCUIT_BREAKER_PROPOSE_DRAIN"
+  | "ADMIN_CIRCUIT_BREAKER_EXECUTE_DRAIN"
+  | "ADMIN_CIRCUIT_BREAKER_SET_RECOVERY_DELAY"
   | "WEBHOOK_REPLAY_INITIATED"
   | "WEBHOOK_REPLAY_COMPLETED"
   | "WEBHOOK_REPLAY_FAILED"
@@ -218,10 +222,14 @@ async function persistToDatabase(
   context: AuditContext,
   metadata: Record<string, unknown>,
   timestamp: string,
+  required = false,
 ): Promise<void> {
   try {
     const pool = await getPool()
-    if (!pool) return // no database configured
+    if (!pool) {
+      if (required) throw new Error('Audit database is not configured')
+      return
+    }
 
     // Lazy import to avoid circular dependency at module load time
     const { auditRepository } = await import('../repositories/AuditRepository.js')
@@ -242,7 +250,13 @@ async function persistToDatabase(
       eventType,
       error: err instanceof Error ? err.message : String(err),
     })
+    if (required) throw err
   }
+}
+
+export interface AuditLogOptions {
+  /** Wait for the append-only database write and propagate persistence failures. */
+  durable?: boolean
 }
 
 /**
@@ -252,7 +266,8 @@ export function auditLog(
   eventType: AuditEventType,
   context: AuditContext,
   metadata: Record<string, unknown> = {},
-): void {
+  options: AuditLogOptions = {},
+): void | Promise<void> {
   const safeMetadata = sanitizeMetadata(metadata)
   const timestamp = new Date().toISOString()
 
@@ -272,6 +287,10 @@ export function auditLog(
   process.stdout.write(JSON.stringify(entry) + '\n')
 
   // Async DB persistence — failures are swallowed after logging a warning
+  if (options.durable) {
+    return persistToDatabase(eventType, context, safeMetadata, timestamp, true)
+  }
+
   void persistToDatabase(eventType, context, safeMetadata, timestamp)
 }
 

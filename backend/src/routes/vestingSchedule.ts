@@ -41,7 +41,7 @@ function requireWalletAddress(req: AuthenticatedRequest): string {
   return address;
 }
 
-export function createVestingScheduleRouter(adapter: SorobanAdapter) {
+export function createAdminVestingScheduleRouter(adapter: SorobanAdapter) {
   const router = Router();
 
   /**
@@ -131,6 +131,12 @@ export function createVestingScheduleRouter(adapter: SorobanAdapter) {
       }
     }
   );
+
+  return router;
+}
+
+export function createVestingScheduleRouter(adapter: SorobanAdapter) {
+  const router = Router();
 
   /**
    * GET /api/vesting-schedule/claimable

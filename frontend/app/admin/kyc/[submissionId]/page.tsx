@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { apiGet, apiPost } from "@/lib/apiClient"
+import { formatDateTime } from "@/lib/date"
 
 interface KycRecord {
   id: string
@@ -203,7 +204,7 @@ export default function KycSubmissionDetailPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase">Submission Date</p>
-              <p className="font-bold">{new Date(record.createdAt).toLocaleString()}</p>
+              <p className="font-bold">{formatDateTime(record.createdAt)}</p>
             </div>
             {record.rejectionReason && (
               <div>
@@ -242,12 +243,12 @@ export default function KycSubmissionDetailPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-muted-foreground uppercase w-32">Added At</p>
-                    <p className="font-mono text-sm">{new Date(allowlistStatus.entry.added_at * 1000).toLocaleString()}</p>
+                    <p className="font-mono text-sm">{formatDateTime(allowlistStatus.entry.added_at * 1000)}</p>
                   </div>
                   {allowlistStatus.entry.expires_at > 0 && (
                     <div className="flex items-center gap-2">
                       <p className="text-xs text-muted-foreground uppercase w-32">Expires At</p>
-                      <p className="font-mono text-sm">{new Date(allowlistStatus.entry.expires_at * 1000).toLocaleString()}</p>
+                      <p className="font-mono text-sm">{formatDateTime(allowlistStatus.entry.expires_at * 1000)}</p>
                     </div>
                   )}
                 </>

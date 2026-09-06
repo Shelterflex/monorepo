@@ -24,6 +24,7 @@ import { StakeForm } from "./StakeForm";
 import { HistoryTable } from "./HistoryTable";
 import { DelegationPanel } from "./DelegationPanel";
 import { StakingClaimFlow } from "./StakingClaimFlow";
+import { EpochRewardsPanel } from "./EpochRewardsPanel";
 import { stellarWallet } from "@/lib/stellar-wallet";
 import { walletAuthManager } from "@/lib/wallet-auth";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -335,6 +336,8 @@ export default function StakingPage() {
           </div>
 
           <DelegationPanel walletAddress={walletAddress} />
+
+          <EpochRewardsPanel />
 
           <Card className="border-2 border-foreground/10 bg-card shadow-sm">
             <CardHeader className="pb-3">

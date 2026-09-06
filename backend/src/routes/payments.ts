@@ -12,7 +12,15 @@ import { TxType } from '../outbox/types.js'
 import { settleFullPaymentIncentive } from '../services/fullPaymentIncentiveSettlement.js'
 import { enqueueDelivery } from '../services/webhookDeliveryService.js'
 import { WebhookEventType } from '../models/webhookSubscription.js'
+import { dealStore } from '../models/dealStore.js'
+import { userStore } from '../models/authStore.js'
+import { normalizeStellarAddress } from '../utils/wallet.js'
 
+/** Convert a validated USDC decimal string to the contract's micro-USDC amount. */
+function parseUsdcAmount(amountUsdc: string): bigint {
+  const [whole, fraction = ''] = amountUsdc.split('.')
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
+}
 
 export function createPaymentsRouter(adapter: SorobanAdapter) {
   const router = Router()
@@ -122,26 +130,45 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
             fxRateNgnPerUsdc
           }, { requestId: req.requestId }).catch(err => logger.error('Failed to enqueue payment.received webhook:', err))
 
-          // Create rent payment receipt on rent_payments contract (deal-scoped receipt)
-          // TODO: Wire rent_payments contract integration - requires proper payer/recipient address resolution
-          // if (adapter.createRentPaymentReceipt) {
-          //   try {
-          //     const { dealStore } = await import('../models/dealStore.js')
-          //     const deal = await dealStore.findById(dealId)
-          //     if (deal) {
-          //       await adapter.createRentPaymentReceipt(
-          //         dealId,
-          //         BigInt(amountUsdc),
-          //         'GUNKNOWN', // Would need actual payer address from auth context
-          //         deal.landlordId || 'GUNKNOWN', // Recipient is landlord
-          //         Math.floor(Date.now() / 1000)
-          //       )
-          //       logger.info('Rent payment receipt created on rent_payments contract', { dealId })
-          //     }
-          //   } catch (err) {
-          //     logger.error('Failed to create rent payment receipt', { error: err instanceof Error ? err.message : String(err) })
-          //   }
-          // }
+          // A receipt mirrors an already accepted payment, so receipt failures are
+          // deliberately logged without changing the payment response or retry state.
+          if (adapter.createRentPaymentReceipt) {
+            try {
+              const deal = await dealStore.findById(dealId)
+              if (!deal) {
+                throw new Error(`Deal ${dealId} not found while creating rent payment receipt`)
+              }
+
+              const [tenant, landlord] = await Promise.all([
+                userStore.getById(deal.tenantId),
+                userStore.getById(deal.landlordId),
+              ])
+              if (!tenant?.walletAddress) {
+                throw new Error(`Tenant ${deal.tenantId} has no linked Stellar wallet address`)
+              }
+              if (!landlord?.walletAddress) {
+                throw new Error(`Landlord ${deal.landlordId} has no linked Stellar wallet address`)
+              }
+
+              await adapter.createRentPaymentReceipt(
+                dealId,
+                parseUsdcAmount(amountUsdc),
+                normalizeStellarAddress(tenant.walletAddress),
+                normalizeStellarAddress(landlord.walletAddress),
+                Math.floor(Date.now() / 1000),
+              )
+              logger.info('Rent payment receipt created on rent_payments contract', {
+                dealId,
+                requestId: req.requestId,
+              })
+            } catch (err) {
+              logger.error('Failed to create rent payment receipt', {
+                dealId,
+                requestId: req.requestId,
+                error: err instanceof Error ? err.message : String(err),
+              })
+            }
+          }
         } else if (txType === TxType.LANDLORD_PAYOUT) {
           await enqueueDelivery(WebhookEventType.PAYOUT_DISBURSED, {
             dealId,

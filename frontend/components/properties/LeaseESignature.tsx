@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { formatDate, formatDateTime, formatTime } from "@/lib/date";
 import {
   CheckCircle2,
   Loader2,
@@ -252,14 +253,14 @@ export function LeaseESignature({
                   <Clock className="h-3 w-3" />
                   <span>
                     <strong>Last modified:</strong>{" "}
-                    {new Date(documentIntegrity.lastModified).toLocaleString()}
+                    {formatDateTime(documentIntegrity.lastModified)}
                   </span>
                 </div>
                 {sessionExpiry && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
                     <span>
-                      Session expires: {sessionExpiry.toLocaleTimeString()}
+                      Session expires: {formatTime(sessionExpiry)}
                     </span>
                   </div>
                 )}
@@ -297,7 +298,7 @@ export function LeaseESignature({
                   </p>
                   <p>
                     <strong>Date:</strong>{" "}
-                    {new Date().toLocaleDateString("en-NG")}
+                    {formatDate(new Date())}
                   </p>
                   <div className="mt-4 space-y-2 text-xs leading-relaxed">
                     <p>

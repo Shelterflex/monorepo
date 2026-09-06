@@ -345,8 +345,8 @@ impl Pausable for TenantReputation {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke};
-    use soroban_sdk::{Address, Env, IntoVal, Symbol};
+    use soroban_sdk::testutils::{Address as _, Events, Ledger, MockAuth, MockAuthInvoke};
+    use soroban_sdk::{Address, Env, IntoVal, Symbol, TryIntoVal};
 
     fn sample_record(env: &Env) -> ReputationRecord {
         ReputationRecord {
@@ -821,5 +821,909 @@ mod test {
         // After revoke, reputation should be None regardless of prior score
         assert!(!client.has_reputation(&tenant));
         assert_eq!(client.get_reputation(&tenant), None);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Issue #1422 — added coverage for tenant_reputation.
+    //
+    // Step taxonomy referenced in comments:
+    //   A1 anchor / core invariant   A2 authorization
+    //   A3 initialization edges      A4 decay & clamp boundaries
+    //   A5 events
+    //
+    // The test env exposes only the MOST RECENT invocation's events, so event
+    // assertions below read `env.events()` immediately after the emitting call
+    // with no intervening `client.*` call.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fn m_update(
+        env: &Env,
+        cid: &Address,
+        caller: &Address,
+        tenant: &Address,
+        rec: &ReputationRecord,
+        r: &Symbol,
+    ) {
+        env.mock_auths(&[MockAuth {
+            address: caller,
+            invoke: &MockAuthInvoke {
+                contract: cid,
+                fn_name: "update_reputation",
+                args: (caller.clone(), tenant.clone(), rec.clone(), r.clone()).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+    }
+
+    fn m_revoke(env: &Env, cid: &Address, caller: &Address, tenant: &Address) {
+        env.mock_auths(&[MockAuth {
+            address: caller,
+            invoke: &MockAuthInvoke {
+                contract: cid,
+                fn_name: "revoke_reputation",
+                args: (caller.clone(), tenant.clone()).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+    }
+
+    fn m_set_decay(env: &Env, cid: &Address, caller: &Address, rate: u32, period: u64) {
+        env.mock_auths(&[MockAuth {
+            address: caller,
+            invoke: &MockAuthInvoke {
+                contract: cid,
+                fn_name: "set_decay_config",
+                args: (caller.clone(), rate, period).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+    }
+
+    fn m_set_bounds(env: &Env, cid: &Address, caller: &Address, lo: u32, hi: u32) {
+        env.mock_auths(&[MockAuth {
+            address: caller,
+            invoke: &MockAuthInvoke {
+                contract: cid,
+                fn_name: "set_score_bounds",
+                args: (caller.clone(), lo, hi).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+    }
+
+    fn m_pause(env: &Env, cid: &Address, caller: &Address) {
+        env.mock_auths(&[MockAuth {
+            address: caller,
+            invoke: &MockAuthInvoke {
+                contract: cid,
+                fn_name: "pause",
+                args: (caller.clone(),).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+    }
+
+    fn m_unpause(env: &Env, cid: &Address, caller: &Address) {
+        env.mock_auths(&[MockAuth {
+            address: caller,
+            invoke: &MockAuthInvoke {
+                contract: cid,
+                fn_name: "unpause",
+                args: (caller.clone(),).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+    }
+
+    fn last_topics(env: &Env) -> soroban_sdk::Vec<soroban_sdk::Val> {
+        env.events().all().last().unwrap().1
+    }
+
+    fn last_data(env: &Env) -> soroban_sdk::Vec<soroban_sdk::Val> {
+        env.events()
+            .all()
+            .last()
+            .unwrap()
+            .2
+            .try_into_val(env)
+            .unwrap()
+    }
+
+    // ── A1 · ANCHOR (B) — interested-party manipulation ─────────────────────
+    //
+    // Recon 3g established that tenant_reputation has NO writer<->tenant
+    // relationship model. `update_reputation` authorises the caller iff it is
+    // the single global admin OR the single global operator address; the
+    // `tenant` being scored is a free parameter with no checked link to the
+    // caller, and `composite_score` is caller-supplied (only clamped), not
+    // derived from the sub-scores.
+    //
+    // The four tests below PIN THAT CURRENT BEHAVIOUR pending a maintainer
+    // decision. They document what the contract allows today and are NOT an
+    // endorsement of it. Per the issue's own framing — "a reputation that can
+    // be manipulated by an interested party is worse than none at all" — this
+    // is the headline finding of the PR.
+
+    /// An authorised operator can write a score for an address it has no
+    /// relationship with whatsoever.
+    #[test]
+    fn anchor_b_operator_can_score_an_unrelated_address() {
+        let env = Env::default();
+        env.ledger().set_timestamp(100);
+        let (cid, client, _admin, operator) = setup(&env);
+        let unrelated_tenant = Address::generate(&env);
+        let rec = sample_record(&env);
+        let r = reason(&env);
+
+        m_update(&env, &cid, &operator, &unrelated_tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &unrelated_tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            client
+                .get_reputation(&unrelated_tenant)
+                .unwrap()
+                .composite_score,
+            750
+        );
+    }
+
+    /// An authorised operator can score ITSELF — there is no `caller == tenant`
+    /// guard — and hand itself the maximum composite score.
+    #[test]
+    fn anchor_b_operator_can_self_score_to_the_maximum() {
+        let env = Env::default();
+        env.ledger().set_timestamp(100);
+        let (cid, client, _admin, operator) = setup(&env);
+        let mut rec = sample_record(&env);
+        rec.composite_score = 5_000; // clamps to the default max of 1000
+        let r = reason(&env);
+
+        m_update(&env, &cid, &operator, &operator, &rec, &r);
+        client
+            .try_update_reputation(&operator, &operator, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            client.get_reputation(&operator).unwrap().composite_score,
+            1000
+        );
+    }
+
+    /// An operator can overwrite an existing, legitimate score with an
+    /// arbitrary new value. The overwrite invocation emits only the generic
+    /// `reputation_updated` event — there is no on-chain audit record of who
+    /// changed what (contrast rent_schedule's persisted `WaiverAudit`).
+    #[test]
+    fn anchor_b_operator_can_overwrite_a_legitimate_score_unaudited() {
+        let env = Env::default();
+        env.ledger().set_timestamp(100);
+        let (cid, client, _admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        let mut good = sample_record(&env);
+        good.composite_score = 800;
+        m_update(&env, &cid, &operator, &tenant, &good, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &good, &r)
+            .unwrap()
+            .unwrap();
+
+        let mut tanked = sample_record(&env);
+        tanked.composite_score = 100;
+        m_update(&env, &cid, &operator, &tenant, &tanked, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &tanked, &r)
+            .unwrap()
+            .unwrap();
+
+        // The overwrite produced exactly one event, and it is the generic
+        // update event — no distinct audit event exists.
+        let all = env.events().all();
+        assert_eq!(all.len(), 1);
+        let action: Symbol = all
+            .get(0)
+            .unwrap()
+            .1
+            .get(1)
+            .unwrap()
+            .try_into_val(&env)
+            .unwrap();
+        assert_eq!(action, Symbol::new(&env, "reputation_updated"));
+
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 100);
+    }
+
+    /// `composite_score` is caller-supplied and only clamped — it is NOT
+    /// derived from the sub-scores or from `total_ratings`. An operator can
+    /// store a perfect composite backed by zero ratings.
+    #[test]
+    fn anchor_b_operator_can_set_perfect_composite_with_zero_ratings() {
+        let env = Env::default();
+        env.ledger().set_timestamp(100);
+        let (cid, client, _admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        let rec = ReputationRecord {
+            composite_score: 1000,
+            payment_score: 0,
+            property_care_score: 0,
+            communication_score: 0,
+            total_ratings: 0,
+            last_updated: 0,
+        };
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        let stored = client.get_reputation(&tenant).unwrap();
+        assert_eq!(stored.composite_score, 1000);
+        assert_eq!(stored.total_ratings, 0);
+    }
+
+    // ── A2 · authorization ────────────────────────────────────────────────
+
+    #[test]
+    fn revoke_reputation_rejects_unauthorized_caller() {
+        let env = Env::default();
+        let (cid, client, _admin, _operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        m_revoke(&env, &cid, &stranger, &tenant);
+        let err = client
+            .try_revoke_reputation(&stranger, &tenant)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
+    }
+
+    /// `revoke_reputation` is admin-only — the operator cannot revoke.
+    #[test]
+    fn revoke_reputation_rejects_operator() {
+        let env = Env::default();
+        let (cid, client, _admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        m_revoke(&env, &cid, &operator, &tenant);
+        let err = client
+            .try_revoke_reputation(&operator, &tenant)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
+    }
+
+    #[test]
+    fn set_decay_config_rejects_unauthorized_caller() {
+        let env = Env::default();
+        let (cid, client, _admin, _operator) = setup(&env);
+        let stranger = Address::generate(&env);
+        m_set_decay(&env, &cid, &stranger, 10, 86_400);
+        let err = client
+            .try_set_decay_config(&stranger, &10u32, &86_400u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
+    }
+
+    /// `set_decay_config` is admin-only — the operator cannot change decay.
+    #[test]
+    fn set_decay_config_rejects_operator() {
+        let env = Env::default();
+        let (cid, client, _admin, operator) = setup(&env);
+        m_set_decay(&env, &cid, &operator, 10, 86_400);
+        let err = client
+            .try_set_decay_config(&operator, &10u32, &86_400u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
+    }
+
+    #[test]
+    fn set_score_bounds_rejects_unauthorized_caller() {
+        let env = Env::default();
+        let (cid, client, _admin, _operator) = setup(&env);
+        let stranger = Address::generate(&env);
+        m_set_bounds(&env, &cid, &stranger, 0, 1000);
+        let err = client
+            .try_set_score_bounds(&stranger, &0u32, &1000u32)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
+    }
+
+    #[test]
+    fn pause_rejects_unauthorized_caller() {
+        let env = Env::default();
+        let (cid, client, _admin, _operator) = setup(&env);
+        let stranger = Address::generate(&env);
+        m_pause(&env, &cid, &stranger);
+        let err = client.try_pause(&stranger).unwrap_err().unwrap();
+        assert_eq!(err, PausableError::NotAuthorized);
+    }
+
+    #[test]
+    fn unpause_rejects_unauthorized_caller() {
+        let env = Env::default();
+        let (cid, client, admin, _operator) = setup(&env);
+        m_pause(&env, &cid, &admin);
+        client.try_pause(&admin).unwrap().unwrap();
+        let stranger = Address::generate(&env);
+        m_unpause(&env, &cid, &stranger);
+        let err = client.try_unpause(&stranger).unwrap_err().unwrap();
+        assert_eq!(err, PausableError::NotAuthorized);
+    }
+
+    /// With no auth mocked at all, `require_auth()` inside `update_reputation`
+    /// must reject the call — proving the check is real, not a logic-level
+    /// address compare. (Mirrors soroban_access_control's own convention.)
+    #[test]
+    #[should_panic]
+    fn update_reputation_without_any_mocked_auth_fails() {
+        let env = Env::default();
+        let (_cid, client, _admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let rec = sample_record(&env);
+        let r = reason(&env);
+        client.update_reputation(&operator, &tenant, &rec, &r);
+    }
+
+    // ── A3 · initialization edges ─────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "admin not set")]
+    fn update_reputation_before_init_rejected() {
+        let env = Env::default();
+        let cid = env.register(TenantReputation, ());
+        let client = TenantReputationClient::new(&env, &cid);
+        let caller = Address::generate(&env);
+        let tenant = Address::generate(&env);
+        let rec = sample_record(&env);
+        let r = reason(&env);
+        client.update_reputation(&caller, &tenant, &rec, &r);
+    }
+
+    #[test]
+    #[should_panic(expected = "admin not set")]
+    fn revoke_reputation_before_init_rejected() {
+        let env = Env::default();
+        let cid = env.register(TenantReputation, ());
+        let client = TenantReputationClient::new(&env, &cid);
+        let caller = Address::generate(&env);
+        let tenant = Address::generate(&env);
+        client.revoke_reputation(&caller, &tenant);
+    }
+
+    #[test]
+    #[should_panic(expected = "admin not set")]
+    fn set_decay_config_before_init_rejected() {
+        let env = Env::default();
+        let cid = env.register(TenantReputation, ());
+        let client = TenantReputationClient::new(&env, &cid);
+        let caller = Address::generate(&env);
+        client.set_decay_config(&caller, &10u32, &86_400u64);
+    }
+
+    /// Read paths are safe before init — they never touch admin/operator.
+    #[test]
+    fn read_paths_before_init_do_not_panic() {
+        let env = Env::default();
+        let cid = env.register(TenantReputation, ());
+        let client = TenantReputationClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        assert_eq!(client.get_reputation(&tenant), None);
+        assert!(!client.has_reputation(&tenant));
+    }
+
+    // ── A4 · decay & clamp boundaries ────────────────────────────────────
+
+    /// Elapsed time shorter than one decay period does not decay (`periods
+    /// == 0` guard). Distinct from `no_decay_without_elapsed_time`, which
+    /// exercises the `now <= last_updated` guard.
+    #[test]
+    fn decay_does_not_apply_below_one_full_period() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 10, 86_400);
+        client
+            .try_set_decay_config(&admin, &10u32, &86_400u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env);
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(1_000 + 43_200); // +12h, < 1 day
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 750);
+    }
+
+    /// Partial periods are floored, not rounded: 2.5 elapsed periods -> 2.
+    #[test]
+    fn decay_floors_partial_periods() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 10, 86_400);
+        client
+            .try_set_decay_config(&admin, &10u32, &86_400u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env); // composite 750
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(1_000 + 2 * 86_400 + 43_200); // 2.5 periods
+                                                                 // floor(2.5) = 2 periods * 10 = 20  ->  750 - 20 = 730 (NOT 725)
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 730);
+    }
+
+    /// A `last_updated` in the future (clock skew) must not underflow or decay.
+    #[test]
+    fn decay_not_applied_when_now_is_before_last_updated() {
+        let env = Env::default();
+        env.ledger().set_timestamp(10_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 10, 86_400);
+        client
+            .try_set_decay_config(&admin, &10u32, &86_400u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env);
+        m_update(&env, &cid, &operator, &tenant, &rec, &r); // last_updated := 10_000
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(5_000); // now < last_updated
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 750);
+    }
+
+    /// Decay is computed on READ and never persisted: reading at a later time
+    /// returns the decayed score, but the stored record is untouched, so
+    /// reading again at the original time returns the original score.
+    #[test]
+    fn decay_is_read_only_and_never_persisted() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 10, 86_400);
+        client
+            .try_set_decay_config(&admin, &10u32, &86_400u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env); // composite 750
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(1_000 + 10 * 86_400);
+        assert_eq!(
+            client.get_reputation(&tenant).unwrap().composite_score,
+            650 // 750 - 100
+        );
+
+        env.ledger().set_timestamp(1_000); // back to the write time
+        assert_eq!(
+            client.get_reputation(&tenant).unwrap().composite_score,
+            750,
+            "stored record must be unchanged by a decayed read"
+        );
+    }
+
+    /// `update_reputation` does NOT apply decay before writing and resets
+    /// `last_updated` to now — re-submitting the same score refreshes the
+    /// decay clock (recon flag #6, pinned pending a maintainer decision).
+    #[test]
+    fn update_does_not_apply_decay_and_resets_the_clock() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 10, 86_400);
+        client
+            .try_set_decay_config(&admin, &10u32, &86_400u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env); // composite 750
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(1_000 + 5 * 86_400); // 5 periods elapsed
+
+        // Operator re-submits the SAME composite score.
+        let again = sample_record(&env);
+        m_update(&env, &cid, &operator, &tenant, &again, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &again, &r)
+            .unwrap()
+            .unwrap();
+
+        // Stored value is the submitted 750 (clamped), not 750 - 50; and since
+        // last_updated was reset to now, an immediate read shows no decay.
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 750);
+    }
+
+    /// Clamp on write applies ONLY to `composite_score`; the sub-scores are
+    /// stored verbatim, even outside the configured bounds.
+    #[test]
+    fn sub_scores_are_not_clamped() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_bounds(&env, &cid, &admin, 0, 1000);
+        client
+            .try_set_score_bounds(&admin, &0u32, &1000u32)
+            .unwrap()
+            .unwrap();
+
+        let rec = ReputationRecord {
+            composite_score: 500,
+            payment_score: 9_999,
+            property_care_score: 8_888,
+            communication_score: 7_777,
+            total_ratings: 42,
+            last_updated: 0,
+        };
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        let stored = client.get_reputation(&tenant).unwrap();
+        assert_eq!(stored.composite_score, 500);
+        assert_eq!(stored.payment_score, 9_999);
+        assert_eq!(stored.property_care_score, 8_888);
+        assert_eq!(stored.communication_score, 7_777);
+    }
+
+    /// FINDING (recon flag #3, promoted): `set_score_bounds` does not enforce
+    /// `min <= max`. With min > max the clamp `s.max(lo).min(hi)` collapses
+    /// EVERY score to `max`, silently.
+    #[test]
+    fn score_bounds_with_min_greater_than_max_collapse_every_score_to_max() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1);
+        let (cid, client, admin, operator) = setup(&env);
+        let r = reason(&env);
+
+        m_set_bounds(&env, &cid, &admin, 800, 200); // min > max, accepted
+        client
+            .try_set_score_bounds(&admin, &800u32, &200u32)
+            .unwrap()
+            .unwrap();
+
+        for input in [50u32, 500u32, 5_000u32] {
+            let tenant = Address::generate(&env);
+            let mut rec = sample_record(&env);
+            rec.composite_score = input;
+            m_update(&env, &cid, &operator, &tenant, &rec, &r);
+            client
+                .try_update_reputation(&operator, &tenant, &rec, &r)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                client.get_reputation(&tenant).unwrap().composite_score,
+                200,
+                "min > max makes the clamp collapse every score to max"
+            );
+        }
+    }
+
+    /// `period_secs == 0` disables decay (guarded), regardless of elapsed time.
+    #[test]
+    fn decay_period_of_zero_disables_decay() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 50, 0);
+        client
+            .try_set_decay_config(&admin, &50u32, &0u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env);
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(1_000 + 100 * 86_400);
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 750);
+    }
+
+    /// A huge elapsed time saturates rather than panicking: `saturating_mul`
+    /// caps the decay amount and `saturating_sub` floors the score at
+    /// `score_min`.
+    #[test]
+    fn decay_saturates_and_does_not_panic_on_huge_elapsed() {
+        let env = Env::default();
+        env.ledger().set_timestamp(0);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 1_000, 1); // 1000 points per second
+        client
+            .try_set_decay_config(&admin, &1_000u32, &1u64)
+            .unwrap()
+            .unwrap();
+
+        let rec = sample_record(&env); // composite 750
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(10_000_000); // decay_amount overflows u32 -> saturates
+        assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 0);
+    }
+
+    // ── A5 · events ─────────────────────────────────────────────────────
+
+    #[test]
+    fn update_reputation_emits_reputation_updated_event() {
+        let env = Env::default();
+        env.ledger().set_timestamp(777);
+        let (cid, client, _admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let rec = sample_record(&env);
+        let r = reason(&env);
+
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        let topics = last_topics(&env);
+        let cat: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        let ev_tenant: Address = topics.get(2).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(cat, Symbol::new(&env, "tenant_reputation"));
+        assert_eq!(action, Symbol::new(&env, "reputation_updated"));
+        assert_eq!(ev_tenant, tenant);
+
+        let data = last_data(&env);
+        let composite: u32 = data.get(0).unwrap().try_into_val(&env).unwrap();
+        let total_ratings: u32 = data.get(1).unwrap().try_into_val(&env).unwrap();
+        let last_updated: u64 = data.get(2).unwrap().try_into_val(&env).unwrap();
+        let ev_reason: Symbol = data.get(3).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(composite, 750);
+        assert_eq!(total_ratings, 5);
+        assert_eq!(last_updated, 777);
+        assert_eq!(ev_reason, r);
+    }
+
+    /// The decayed-read path emits a `reputation_decayed` event — an event
+    /// produced by what is otherwise a query.
+    #[test]
+    fn get_reputation_emits_reputation_decayed_event_on_decay() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1_000);
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let r = reason(&env);
+
+        m_set_decay(&env, &cid, &admin, 10, 86_400);
+        client
+            .try_set_decay_config(&admin, &10u32, &86_400u64)
+            .unwrap()
+            .unwrap();
+        let rec = sample_record(&env);
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+
+        env.ledger().set_timestamp(1_000 + 3 * 86_400);
+        let got = client.get_reputation(&tenant).unwrap();
+        assert_eq!(got.composite_score, 720);
+
+        let topics = last_topics(&env);
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        let ev_tenant: Address = topics.get(2).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(action, Symbol::new(&env, "reputation_decayed"));
+        assert_eq!(ev_tenant, tenant);
+        let data = last_data(&env);
+        let old_score: u32 = data.get(0).unwrap().try_into_val(&env).unwrap();
+        let new_score: u32 = data.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(old_score, 750);
+        assert_eq!(new_score, 720);
+    }
+
+    #[test]
+    fn revoke_reputation_emits_revoked_event() {
+        let env = Env::default();
+        let (cid, client, admin, operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let rec = sample_record(&env);
+        let r = reason(&env);
+
+        m_update(&env, &cid, &operator, &tenant, &rec, &r);
+        client
+            .try_update_reputation(&operator, &tenant, &rec, &r)
+            .unwrap()
+            .unwrap();
+        m_revoke(&env, &cid, &admin, &tenant);
+        client
+            .try_revoke_reputation(&admin, &tenant)
+            .unwrap()
+            .unwrap();
+
+        let topics = last_topics(&env);
+        let cat: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        let ev_tenant: Address = topics.get(2).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(cat, Symbol::new(&env, "tenant_reputation"));
+        assert_eq!(action, Symbol::new(&env, "revoked"));
+        assert_eq!(ev_tenant, tenant);
+    }
+
+    /// Revoking an address that was never scored is a silent no-op: it returns
+    /// Ok and emits nothing (recon flag #4, pinned pending a maintainer
+    /// decision).
+    #[test]
+    fn revoke_of_nonexistent_record_is_a_silent_noop() {
+        let env = Env::default();
+        let (cid, client, admin, _operator) = setup(&env);
+        let ghost = Address::generate(&env);
+
+        m_revoke(&env, &cid, &admin, &ghost);
+        client
+            .try_revoke_reputation(&admin, &ghost)
+            .unwrap()
+            .unwrap();
+
+        assert!(
+            env.events().all().is_empty(),
+            "no event should be emitted when revoking a nonexistent record"
+        );
+    }
+
+    #[test]
+    fn set_decay_config_emits_event() {
+        let env = Env::default();
+        let (cid, client, admin, _operator) = setup(&env);
+        m_set_decay(&env, &cid, &admin, 25, 3_600);
+        client
+            .try_set_decay_config(&admin, &25u32, &3_600u64)
+            .unwrap()
+            .unwrap();
+
+        let topics = last_topics(&env);
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(action, Symbol::new(&env, "decay_config_updated"));
+        let data = last_data(&env);
+        let rate: u32 = data.get(0).unwrap().try_into_val(&env).unwrap();
+        let period: u64 = data.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(rate, 25);
+        assert_eq!(period, 3_600);
+    }
+
+    #[test]
+    fn set_score_bounds_emits_event() {
+        let env = Env::default();
+        let (cid, client, admin, _operator) = setup(&env);
+        m_set_bounds(&env, &cid, &admin, 100, 900);
+        client
+            .try_set_score_bounds(&admin, &100u32, &900u32)
+            .unwrap()
+            .unwrap();
+
+        let topics = last_topics(&env);
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(action, Symbol::new(&env, "score_bounds_updated"));
+        let data = last_data(&env);
+        let lo: u32 = data.get(0).unwrap().try_into_val(&env).unwrap();
+        let hi: u32 = data.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(lo, 100);
+        assert_eq!(hi, 900);
+    }
+
+    /// A denied call emits the standard access_control `unauthorized` event
+    /// carrying the caller and the operation name.
+    #[test]
+    fn unauthorized_update_emits_access_control_unauthorized_event() {
+        let env = Env::default();
+        let (cid, client, _admin, _operator) = setup(&env);
+        let tenant = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        let rec = sample_record(&env);
+        let r = reason(&env);
+
+        m_update(&env, &cid, &stranger, &tenant, &rec, &r);
+        let err = client
+            .try_update_reputation(&stranger, &tenant, &rec, &r)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
+
+        let ev = env.events().all().last().unwrap();
+        let cat: Symbol = ev.1.get(0).unwrap().try_into_val(&env).unwrap();
+        let kind: Symbol = ev.1.get(1).unwrap().try_into_val(&env).unwrap();
+        let denied: Address = ev.1.get(2).unwrap().try_into_val(&env).unwrap();
+        let op: Symbol = ev.2.try_into_val(&env).unwrap();
+        assert_eq!(cat, Symbol::new(&env, "access_control"));
+        assert_eq!(kind, Symbol::new(&env, "unauthorized"));
+        assert_eq!(denied, stranger);
+        assert_eq!(op, Symbol::new(&env, "update_reputation"));
+    }
+
+    #[test]
+    fn pause_emits_event_and_unpause_does_not() {
+        let env = Env::default();
+        let (cid, client, admin, _operator) = setup(&env);
+
+        m_pause(&env, &cid, &admin);
+        client.try_pause(&admin).unwrap().unwrap();
+        let topics = last_topics(&env);
+        let cat: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(cat, Symbol::new(&env, "Pausable"));
+        assert_eq!(action, Symbol::new(&env, "pause"));
+
+        m_unpause(&env, &cid, &admin);
+        client.try_unpause(&admin).unwrap().unwrap();
+        assert!(env.events().all().is_empty(), "unpause emits no event");
+    }
+
+    /// Contrast rent_schedule::init (which emits a `rent_schedule/init`
+    /// event): tenant_reputation::init is silent.
+    #[test]
+    fn init_emits_no_event() {
+        let env = Env::default();
+        let cid = env.register(TenantReputation, ());
+        let client = TenantReputationClient::new(&env, &cid);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        client.try_init(&admin, &operator).unwrap().unwrap();
+        assert!(env.events().all().is_empty());
     }
 }

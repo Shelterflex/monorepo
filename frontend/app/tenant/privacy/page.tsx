@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import useAuthStore from "@/store/useAuthStore";
+import { formatDate } from "@/lib/date";
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
 
@@ -274,7 +275,7 @@ export default function TenantPrivacyPage() {
                   {erasureConfirmBy && (
                     <> Expected by:{" "}
                       <strong>
-                        {new Date(erasureConfirmBy).toLocaleDateString("en-NG", { dateStyle: "long" })}
+                        {formatDate(erasureConfirmBy, { dateStyle: "long" })}
                       </strong>
                     </>
                   )}

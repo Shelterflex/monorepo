@@ -2,6 +2,7 @@ import React from "react";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatUsdc } from "@/lib/currency";
+import { formatDate } from "@/lib/date";
 
 // Type definitions
 export interface StakingPosition {
@@ -86,14 +87,6 @@ interface ConfirmedStatusProps {
 }
 
 function ConfirmedStatus({ position }: ConfirmedStatusProps) {
-  const formatDate = (isoDate: string) => {
-    return new Date(isoDate).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
   return (
     <Card className="border-green-200 bg-green-50/50">
       <CardContent className="space-y-4 py-6">

@@ -7,8 +7,11 @@ import {
   DollarSign,
   CheckCircle,
   Clock,
+  Wallet,
+  Loader2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   EmptyState,
   ErrorState,
@@ -18,9 +21,15 @@ import {
   StatCardSkeleton,
 } from "@/components/ui/data-state";
 import useAuthStore from "@/store/useAuthStore";
-import { getWhistleblowerEarnings, type EarningsResponse } from "@/lib/api/whistleblowerApplications";
+import { 
+  getWhistleblowerEarnings, 
+  getClaimableReward, 
+  claimReward,
+  type EarningsResponse 
+} from "@/lib/api/whistleblowerApplications";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { formatDual } from "@/lib/currency";
+import { formatDual, formatNgn } from "@/lib/currency";
+import { formatDate } from "@/lib/date";
 
 export default function WhistleblowerEarningsPage() {
   const { user } = useAuthStore();
@@ -28,6 +37,9 @@ export default function WhistleblowerEarningsPage() {
   const [earningsData, setEarningsData] = useState<EarningsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [claimableAmount, setClaimableAmount] = useState<string | null>(null);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const fetchEarnings = useCallback(async () => {
     if (!user?.id) {
@@ -40,6 +52,16 @@ export default function WhistleblowerEarningsPage() {
       const data = await getWhistleblowerEarnings(user.id);
       setEarningsData(data);
       setError(null);
+      
+      // Fetch claimable on-chain rewards
+      try {
+        const claimableData = await getClaimableReward(user.id);
+        setClaimableAmount(claimableData.claimableAmount);
+      } catch (claimableErr) {
+        // Don't fail the whole page if claimable endpoint fails
+        console.warn("Failed to fetch claimable rewards:", claimableErr);
+        setClaimableAmount("0");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load earnings");
     } finally {
@@ -57,6 +79,24 @@ export default function WhistleblowerEarningsPage() {
     fetchEarnings();
   }, [fetchEarnings]);
 
+  const handleClaimReward = useCallback(async () => {
+    if (!user?.id) return;
+    
+    setIsClaiming(true);
+    setClaimError(null);
+    
+    try {
+      const result = await claimReward(user.id);
+      setClaimableAmount("0"); // Reset after successful claim
+      // Refresh earnings data to show updated status
+      await fetchEarnings();
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : "Failed to claim reward");
+    } finally {
+      setIsClaiming(false);
+    }
+  }, [user?.id, fetchEarnings]);
+
   // Amounts stay null until the server sends them, so an unreachable earnings
   // service dashes out rather than reporting a ₦0 balance.
   const totalEarnings = earningsData?.totals.totalNgn ?? null;
@@ -70,22 +110,12 @@ export default function WhistleblowerEarningsPage() {
       : "ready";
 
   /** Pairs an NGN figure with its USDC counterpart for the dual-currency display. */
-  const formatPair = (usdc: number | undefined) => (ngn: number) =>
-    formatAmount(ngn, usdc ?? 0);
+  const formatPair = (usdc: number | null | undefined) => (ngn: number) =>
+    typeof usdc === "number" ? formatAmount(ngn, usdc) : formatNgn(ngn);
 
   // Map backend status to frontend status
   const mapStatus = (status: string): "completed" | "pending" => {
     return status === "paid" ? "completed" : "pending";
-  };
-
-  // Format date for display
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
   };
 
   return (
@@ -161,7 +191,9 @@ export default function WhistleblowerEarningsPage() {
                           status={moneyStatus}
                           amount={totalEarnings}
                           format={(ngn) =>
-                            formatDual(ngn, earningsData.totals.totalUsdc ?? 0)
+                            typeof earningsData.totals.totalUsdc === "number"
+                              ? formatDual(ngn, earningsData.totals.totalUsdc)
+                              : formatNgn(ngn)
                           }
                           skeletonClassName="h-3 w-24"
                           unavailableLabel="Total earnings unavailable"
@@ -216,6 +248,50 @@ export default function WhistleblowerEarningsPage() {
                 </Card>
               </div>
 
+              {/* On-Chain Claimable Rewards */}
+              {claimableAmount && claimableAmount !== "0" && (
+                <Card className="border-3 border-foreground p-4 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] md:p-6 mb-8 bg-gradient-to-r from-primary/10 to-accent/10">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center border-3 border-foreground bg-primary md:h-14 md:w-14">
+                        <Wallet className="h-6 w-6 md:h-7 md:w-7" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground md:text-sm">
+                          On-Chain Claimable
+                        </p>
+                        <p className="text-2xl font-black md:text-3xl text-primary">
+                          {claimableAmount} USDC
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Allocated on-chain, ready to claim
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleClaimReward}
+                      disabled={isClaiming}
+                      className="border-3 border-foreground bg-primary font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
+                    >
+                      {isClaiming ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Claiming...
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="h-4 w-4 mr-2" />
+                          Claim On-Chain
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {claimError && (
+                    <p className="text-sm text-destructive mt-2">{claimError}</p>
+                  )}
+                </Card>
+              )}
+
               {/* Earnings List */}
               <div>
                 <h2 className="font-mono text-lg font-bold mb-4 md:text-xl">
@@ -235,10 +311,11 @@ export default function WhistleblowerEarningsPage() {
                   <div className="space-y-3">
                     {earningsData.history.map((earning) => {
                       const status = mapStatus(earning.status);
+                      const isOnChainAllocated = earning.onChainAllocated;
                       return (
                         <Card
                           key={earning.rewardId}
-                          className="border-3 border-foreground p-4 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] md:p-6"
+                          className={`border-3 border-foreground p-4 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] md:p-6 ${isOnChainAllocated ? "bg-gradient-to-r from-primary/5 to-accent/5" : ""}`}
                         >
                           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                             <div className="flex-1">
@@ -248,6 +325,11 @@ export default function WhistleblowerEarningsPage() {
                               <p className="text-xs text-muted-foreground mt-1">
                                 Deal: {earning.dealId.slice(0, 8)}... • Posted: {formatDate(earning.createdAt)}
                               </p>
+                              {isOnChainAllocated && (
+                                <p className="text-xs text-primary font-bold mt-1">
+                                  ✓ Allocated on-chain
+                                </p>
+                              )}
                             </div>
 
                             <div className="flex items-center justify-between gap-4 pt-3 border-t-2 border-foreground md:border-t-0 md:border-l-2 md:pl-4">
@@ -258,7 +340,11 @@ export default function WhistleblowerEarningsPage() {
                                 <p className="text-xs text-muted-foreground">
                                   {formatDual(earning.amountNgn, earning.amountUsdc)}
                                 </p>
-                                {status === "pending" ? (
+                                {isOnChainAllocated ? (
+                                  <p className="text-xs text-primary font-bold">
+                                    Ready to claim on-chain
+                                  </p>
+                                ) : status === "pending" ? (
                                   <p className="text-xs text-muted-foreground">
                                     Pending
                                   </p>
@@ -269,19 +355,49 @@ export default function WhistleblowerEarningsPage() {
                                 )}
                               </div>
 
-                              <div
-                                className={`flex items-center gap-1 px-3 py-1 border-2 border-foreground font-bold text-xs whitespace-nowrap ${status === "completed" ? "bg-secondary" : "bg-accent"}`}
-                              >
-                                {status === "completed" ? (
-                                  <>
-                                    <CheckCircle className="h-4 w-4" />
-                                    Completed
-                                  </>
-                                ) : (
-                                  <>
-                                    <Clock className="h-4 w-4" />
-                                    Pending
-                                  </>
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`flex items-center gap-1 px-3 py-1 border-2 border-foreground font-bold text-xs whitespace-nowrap ${
+                                    isOnChainAllocated 
+                                      ? "bg-primary text-background" 
+                                      : status === "completed" 
+                                        ? "bg-secondary" 
+                                        : "bg-accent"
+                                  }`}
+                                >
+                                  {isOnChainAllocated ? (
+                                    <>
+                                      <Wallet className="h-4 w-4" />
+                                      Claimable
+                                    </>
+                                  ) : status === "completed" ? (
+                                    <>
+                                      <CheckCircle className="h-4 w-4" />
+                                      Completed
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="h-4 w-4" />
+                                      Pending
+                                    </>
+                                  )}
+                                </div>
+                                {isOnChainAllocated && (
+                                  <Button
+                                    onClick={handleClaimReward}
+                                    disabled={isClaiming}
+                                    size="sm"
+                                    className="border-2 border-foreground bg-primary font-bold shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0px_0px_rgba(26,26,26,1)]"
+                                  >
+                                    {isClaiming ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                        Claiming
+                                      </>
+                                    ) : (
+                                      "Claim"
+                                    )}
+                                  </Button>
                                 )}
                               </div>
                             </div>

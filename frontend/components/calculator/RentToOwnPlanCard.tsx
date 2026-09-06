@@ -3,6 +3,7 @@
 import { TrendingUp, Home, CalendarClock, AlertCircle } from "lucide-react";
 import type { RentToOwnResult } from "@/lib/rentToOwnCalc";
 import { formatNgn } from "@/lib/currency";
+import { formatDate } from "@/lib/date";
 
 interface Props {
   result: RentToOwnResult;
@@ -22,7 +23,7 @@ export default function RentToOwnPlanCard({ result, propertyPrice }: Props) {
     canAfford,
   } = result;
 
-  const ownershipDateStr = ownershipDate.toLocaleDateString("en-NG", {
+  const ownershipDateStr = formatDate(ownershipDate, {
     month: "long",
     year: "numeric",
   });

@@ -12,12 +12,10 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-- The frontend currently contains both `package-lock.json` and `pnpm-lock.yaml`.
-- `pnpm-lock.yaml` is authoritative for this project; do not use `npm install` here.
+- `pnpm-lock.yaml` is the only lockfile for this project; do not use `npm install` here.
 
 ## Notes
 
-- This frontend is currently UI-first and uses mock data under `lib/mockData/`.
 - Backend integration should be centralized under `lib/` (avoid scattering raw `fetch` calls in components).
 - Form validation/error-handling standards: `FORM_VALIDATION_CONVENTION.md`.
 

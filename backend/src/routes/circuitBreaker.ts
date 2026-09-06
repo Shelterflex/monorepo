@@ -10,6 +10,7 @@ import { AppError } from "../errors/AppError.js";
 import { ErrorCode } from "../errors/errorCodes.js";
 import { validate } from "../middleware/validate.js";
 import { requireAdminSecret } from "../middleware/adminSecret.js";
+import { auditLog, extractAuditContext } from "../utils/auditLogger.js";
 import { z } from "zod";
 
 // Validation schemas
@@ -42,6 +43,13 @@ export function createCircuitBreakerRouter(adapter: SorobanAdapter) {
         }
 
         const txHash = await adapter.freeze();
+
+        await auditLog(
+          "ADMIN_CIRCUIT_BREAKER_FREEZE",
+          extractAuditContext(req, "admin"),
+          { action: "freeze", txHash },
+          { durable: true }
+        );
 
         logger.info("Deal escrow frozen", { txHash });
 
@@ -110,6 +118,13 @@ export function createCircuitBreakerRouter(adapter: SorobanAdapter) {
 
         const txHash = await adapter.proposeDrain(destination);
 
+        await auditLog(
+          "ADMIN_CIRCUIT_BREAKER_PROPOSE_DRAIN",
+          extractAuditContext(req, "admin"),
+          { action: "propose-drain", destination, txHash },
+          { durable: true }
+        );
+
         logger.info("Drain proposed", { destination, txHash });
 
         res.json({
@@ -141,6 +156,13 @@ export function createCircuitBreakerRouter(adapter: SorobanAdapter) {
         }
 
         const txHash = await adapter.executeDrain();
+
+        await auditLog(
+          "ADMIN_CIRCUIT_BREAKER_EXECUTE_DRAIN",
+          extractAuditContext(req, "admin"),
+          { action: "execute-drain", txHash },
+          { durable: true }
+        );
 
         logger.info("Drain executed", { txHash });
 
@@ -176,6 +198,13 @@ export function createCircuitBreakerRouter(adapter: SorobanAdapter) {
         }
 
         const txHash = await adapter.setRecoveryDelay(delaySeconds);
+
+        await auditLog(
+          "ADMIN_CIRCUIT_BREAKER_SET_RECOVERY_DELAY",
+          extractAuditContext(req, "admin"),
+          { action: "set-recovery-delay", delaySeconds, txHash },
+          { durable: true }
+        );
 
         logger.info("Recovery delay set", { delaySeconds, txHash });
 

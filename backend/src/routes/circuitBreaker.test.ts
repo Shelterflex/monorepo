@@ -4,12 +4,24 @@ import { errorHandler } from '../middleware/errorHandler.js'
 import { createCircuitBreakerRouter } from './circuitBreaker.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { auditLog, extractAuditContext } from '../utils/auditLogger.js'
 
 // Mock the env module
 vi.mock('../schemas/env.js', () => ({
   env: {
     MANUAL_ADMIN_SECRET: 'test-secret',
   },
+}))
+
+vi.mock('../utils/auditLogger.js', () => ({
+  auditLog: vi.fn().mockResolvedValue(undefined),
+  extractAuditContext: vi.fn(() => ({
+    userId: 'admin-1',
+    requestId: 'request-1',
+    ip: '127.0.0.1',
+    actorType: 'admin',
+    httpMethod: 'POST',
+  })),
 }))
 
 class MockSorobanAdapter implements SorobanAdapter {
@@ -134,6 +146,7 @@ describe('Circuit Breaker Routes', () => {
   let mockAdapter: MockSorobanAdapter
 
   beforeEach(() => {
+    vi.clearAllMocks()
     app = express()
     app.use(express.json())
     mockAdapter = new MockSorobanAdapter()
@@ -197,6 +210,17 @@ describe('Circuit Breaker Routes', () => {
       expect(response.body.txHash).toBe('test_tx_hash')
       expect(response.body.message).toBe('Drain proposed successfully')
       expect(mockAdapter.proposeDrain).toHaveBeenCalledWith('GDESTINATION123456')
+      expect(extractAuditContext).toHaveBeenCalledWith(expect.anything(), 'admin')
+      expect(auditLog).toHaveBeenCalledWith(
+        'ADMIN_CIRCUIT_BREAKER_PROPOSE_DRAIN',
+        expect.objectContaining({ userId: 'admin-1', actorType: 'admin' }),
+        {
+          action: 'propose-drain',
+          destination: 'GDESTINATION123456',
+          txHash: 'test_tx_hash',
+        },
+        { durable: true },
+      )
     })
 
     it('should reject propose-drain without admin secret', async () => {
@@ -221,6 +245,13 @@ describe('Circuit Breaker Routes', () => {
       expect(response.body.txHash).toBe('test_tx_hash')
       expect(response.body.message).toBe('Drain executed successfully')
       expect(mockAdapter.executeDrain).toHaveBeenCalled()
+      expect(extractAuditContext).toHaveBeenCalledWith(expect.anything(), 'admin')
+      expect(auditLog).toHaveBeenCalledWith(
+        'ADMIN_CIRCUIT_BREAKER_EXECUTE_DRAIN',
+        expect.objectContaining({ userId: 'admin-1', actorType: 'admin' }),
+        { action: 'execute-drain', txHash: 'test_tx_hash' },
+        { durable: true },
+      )
     })
 
     it('should reject execute-drain without admin secret', async () => {

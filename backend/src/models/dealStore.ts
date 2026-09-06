@@ -29,6 +29,7 @@ export interface StoredDeal extends Deal {
 interface DealStorePort {
   create(input: CreateDealInput): Promise<DealWithSchedule>
   findById(dealId: string): Promise<DealWithSchedule | null>
+  findByIds(dealIds: string[]): Promise<DealWithSchedule[]>
   findMany(filters?: DealFilters): Promise<PaginatedDeals>
   listActiveDealsWithSchedules(): Promise<DealWithSchedule[]>
   updateStatus(dealId: string, status: DealStatus): Promise<DealWithSchedule | null>
@@ -118,6 +119,20 @@ class InMemoryDealStore implements DealStorePort {
       ...deal,
       schedule: [...deal.schedule],
     }
+  }
+
+  async findByIds(dealIds: string[]): Promise<DealWithSchedule[]> {
+    const result: DealWithSchedule[] = []
+    for (const dealId of new Set(dealIds)) {
+      const deal = this.deals.get(dealId)
+      if (deal) {
+        result.push({
+          ...deal,
+          schedule: [...deal.schedule],
+        })
+      }
+    }
+    return result
   }
 
   async listActiveDealsWithSchedules(): Promise<DealWithSchedule[]> {
@@ -337,7 +352,21 @@ class PostgresDealStore implements DealStorePort {
 
       const row = dealResult.rows[0] as DealRow
 
-      for (const item of schedule) {
+      if (schedule.length > 0) {
+        const columnsPerRow = 5
+        const valuesClause = schedule
+          .map((_, i) => {
+            const base = i * columnsPerRow
+            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`
+          })
+          .join(', ')
+        const scheduleParams = schedule.flatMap((item) => [
+          dealId,
+          item.period,
+          new Date(item.dueDate),
+          item.amountNgn,
+          item.status,
+        ])
         await client.query(
           `INSERT INTO tenant_deal_schedules (
             deal_id,
@@ -345,8 +374,8 @@ class PostgresDealStore implements DealStorePort {
             due_date,
             amount_ngn,
             status
-          ) VALUES ($1, $2, $3, $4, $5)`,
-          [dealId, item.period, new Date(item.dueDate), item.amountNgn, item.status],
+          ) VALUES ${valuesClause}`,
+          scheduleParams,
         )
       }
 
@@ -367,6 +396,50 @@ class PostgresDealStore implements DealStorePort {
   async findById(dealId: string): Promise<DealWithSchedule | null> {
     const pool = await this.pool()
     return this.fetchDealWithSchedule(pool, dealId)
+  }
+
+  async findByIds(dealIds: string[]): Promise<DealWithSchedule[]> {
+    const uniqueIds = [...new Set(dealIds)]
+    if (uniqueIds.length === 0) {
+      return []
+    }
+
+    const pool = await this.pool()
+    const placeholders = uniqueIds.map((_, i) => `$${i + 1}`).join(', ')
+    const { rows } = await pool.query(
+      `SELECT
+        td.deal_id, td.tenant_id, td.landlord_id, td.listing_id,
+        td.annual_rent_ngn, td.deposit_ngn, td.financed_amount_ngn,
+        td.term_months, td.status AS deal_status, td.created_at, td.updated_at,
+        tds.period, tds.due_date, tds.amount_ngn, tds.status AS schedule_status
+      FROM tenant_deals td
+      LEFT JOIN tenant_deal_schedules tds ON tds.deal_id = td.deal_id
+      WHERE td.deal_id IN (${placeholders})
+        AND td.deleted_at IS NULL
+      ORDER BY td.deal_id, tds.period ASC`,
+      uniqueIds,
+    )
+
+    const dealMap = new Map<string, DealWithSchedule>()
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const dealId = row.deal_id as string
+      if (!dealMap.has(dealId)) {
+        dealMap.set(dealId, {
+          ...this.mapDeal({ ...row, status: row.deal_status } as DealRow),
+          schedule: [],
+        })
+      }
+      if (row.period != null) {
+        const entry = dealMap.get(dealId)!
+        entry.schedule.push({
+          period: row.period as number,
+          dueDate: new Date(row.due_date as string).toISOString(),
+          amountNgn: toNumber(row.amount_ngn as string | number),
+          status: row.schedule_status as ScheduleItemStatus,
+        })
+      }
+    }
+    return Array.from(dealMap.values())
   }
 
   async listActiveDealsWithSchedules(): Promise<DealWithSchedule[]> {
@@ -637,6 +710,11 @@ class HybridDealStore implements DealStorePort {
   async findById(dealId: string): Promise<DealWithSchedule | null> {
     const adapter = await this.adapter()
     return adapter.findById(dealId)
+  }
+
+  async findByIds(dealIds: string[]): Promise<DealWithSchedule[]> {
+    const adapter = await this.adapter()
+    return adapter.findByIds(dealIds)
   }
 
   async findMany(filters: DealFilters = {}): Promise<PaginatedDeals> {

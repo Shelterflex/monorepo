@@ -165,6 +165,7 @@ import { createKycRouter } from "./routes/kyc.js";
 import { createAdminRolesRouter } from "./routes/adminRoles.js";
 import { createAbuseRouter } from "./routes/abuse.js";
 import { createInspectorJobsRouter, createAdminInspectorJobsRouter } from "./routes/inspectorJobs.js";
+import { createInspectorOnboardingRouter } from "./routes/inspectorOnboarding.js";
 import { createPropertyInspectionsRouter } from "./routes/propertyInspections.js";
 import { createGovernanceRouter } from "./routes/governance.js";
 import { createRentGuaranteeRouter } from "./routes/rentGuarantee.js";
@@ -173,7 +174,10 @@ import { createRentGuaranteeProviderFromEnv } from "./services/insurance/rentGua
 import { createAdminCreditScoreRouter, createCreditScoreRouter } from "./routes/creditScore.js";
 import { createSorobanContractsRouter } from "./routes/sorobanContracts.js";
 import { createContractEventsRouter } from "./routes/contractEvents.js";
-import { createVestingScheduleRouter } from "./routes/vestingSchedule.js";
+import {
+  createAdminVestingScheduleRouter,
+  createVestingScheduleRouter,
+} from "./routes/vestingSchedule.js";
 import { createWhistleblowerRewardsRouter } from "./routes/whistleblowerRewards.js";
 import { createCircuitBreakerRouter } from "./routes/circuitBreaker.js";
 
@@ -694,7 +698,7 @@ export function createApp() {
   app.use('/api/v1/admin/contract-access', createAdminContractAccessRouter(sorobanAdapter))
   app.use('/api/v1/admin/upgradeable-proxy', createAdminUpgradeableProxyRouter(sorobanAdapter))
   app.use('/api/v1/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService))
-  app.use('/api/v1/admin/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
+  app.use('/api/v1/admin/vesting-schedule', createAdminVestingScheduleRouter(sorobanAdapter))
   app.use('/api/v1/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
   app.use('/api/v1/whistleblower-rewards', createWhistleblowerRewardsRouter(sorobanAdapter))
   app.use('/api/v1/admin/circuit-breaker', createCircuitBreakerRouter(sorobanAdapter))
@@ -737,7 +741,7 @@ export function createApp() {
     app.use('/api/admin/contract-access', createAdminContractAccessRouter(sorobanAdapter))
     app.use('/api/admin/upgradeable-proxy', createAdminUpgradeableProxyRouter(sorobanAdapter))
     app.use('/api/admin/reconciliation', createAdminReconciliationRouter(ngnWalletService))
-    app.use('/api/admin/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
+    app.use('/api/admin/vesting-schedule', createAdminVestingScheduleRouter(sorobanAdapter))
     app.use('/api/vesting-schedule', createVestingScheduleRouter(sorobanAdapter))
     app.use('/api/whistleblower-rewards', createWhistleblowerRewardsRouter(sorobanAdapter))
     app.use('/api/admin/circuit-breaker', createCircuitBreakerRouter(sorobanAdapter))
@@ -853,6 +857,7 @@ export function createApp() {
     app.use("/api/reports", createWhistleblowerReportsRouter());
     app.use("/api/tenant/data-export", createTenantDataExportRouter());
     app.use("/api/tenant/erasure", createTenantErasureRouter());
+    app.use("/api/inspector/onboarding", createInspectorOnboardingRouter());
   }
 
   app.use(
@@ -972,6 +977,7 @@ export function createApp() {
   // Inspector job routes — gated by INSPECTOR_DASHBOARD_ENABLED flag
   app.use('/api/v1/inspector', authenticateToken, requireFlag('INSPECTOR_DASHBOARD_ENABLED'), createInspectorJobsRouter(sorobanAdapter))
   app.use('/api/v1/admin/inspector', authenticateToken, requireFlag('INSPECTOR_DASHBOARD_ENABLED'), createAdminInspectorJobsRouter())
+  app.use('/api/v1/inspector/onboarding', createInspectorOnboardingRouter())
 
   // Property inspection routes
   app.use('/api/v1', createPropertyInspectionsRouter())
