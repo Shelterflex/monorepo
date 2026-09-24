@@ -50,8 +50,6 @@ lib/
 
 components/
 └── analytics-dashboard.tsx # Analytics visualization UI
-
-test-analytics.js           # Browser validation script
 ```
 
 ## Quick Start
@@ -220,12 +218,6 @@ consentManager.deleteUserData()
 ```
 
 ## Testing
-
-### Browser Console Testing
-
-1. Open browser developer console
-2. Copy and paste the contents of `test-analytics.js`
-3. Run `runAnalyticsTests()` to validate the implementation
 
 ### Individual Component Tests
 

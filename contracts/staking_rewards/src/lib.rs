@@ -55,7 +55,6 @@ const PENDING_DUST: &str = "DUST";
 const TOTAL_FUNDED: &str = "FUNDED";
 const SCALE: i128 = 1_000_000_000;
 
-pub mod formal_properties;
 #[contract]
 pub struct StakingRewards;
 

@@ -143,12 +143,6 @@ POST /api/deals
 - Error handling verification
 - Pagination and filtering tests
 
-### Example Script (`examples/deal-example.js`)
-- Demonstrates deal creation
-- Shows rounding strategy
-- Examples of filtering and retrieval
-- Validation rule documentation
-
 ## Build and Quality
 
 ✅ **TypeScript compilation**: `npm run build`  
