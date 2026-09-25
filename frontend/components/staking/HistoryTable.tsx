@@ -101,6 +101,7 @@ export function HistoryTable({ walletAddress }: HistoryTableProps) {
           disabled={isLoading}
           className="p-2 text-muted-foreground hover:text-foreground rounded-lg border border-foreground/10 hover:bg-muted transition-all disabled:opacity-50"
           title="Refresh History"
+          aria-label="Refresh history"
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
         </button>
