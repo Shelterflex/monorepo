@@ -28,7 +28,7 @@ If you're looking for tasks to pick up, start with `docs/ISSUES_CATALOG.md`.
 
 ## Development setup
 
-This repository has three independently tool-chained projects. Use the package manager and version below that matches CI.
+This repository has three independent projects, each with its own toolchain. Use the package manager and version below that matches CI.
 
 ### Prerequisites
 
