@@ -37,6 +37,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { TopUpModal } from "@/components/wallet/TopUpModal";
 import { WithdrawalModal } from "@/components/wallet/WithdrawalModal";
 import { WithdrawalHistory } from "@/components/wallet/WithdrawalHistory";
+import { WalletStatusBadge } from "@/components/wallet/WalletStatusBadge";
 
 import {
   getNgnBalance,
@@ -480,7 +481,10 @@ function WalletPageContent() {
               <Wallet className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold md:text-3xl">Wallet</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold md:text-3xl">Wallet</h1>
+                <WalletStatusBadge />
+              </div>
               <p className="text-sm text-muted-foreground">
                 Manage your NGN balance and view recent activity.
               </p>
