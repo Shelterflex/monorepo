@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUnreadMessageCount } from "@/hooks/useUnreadMessageCount";
 import {
   Home,
   Building2,
@@ -71,11 +72,6 @@ const NAV_ITEMS: Record<Role, NavItem[]> = {
       href: "/messages",
       label: "Messages",
       icon: MessageSquare,
-      badge: (
-        <span className="ml-auto flex h-6 w-6 items-center justify-center border-2 border-foreground bg-destructive text-xs font-bold text-destructive-foreground">
-          2
-        </span>
-      ),
     },
     { href: "/dashboard/tenant/settings", label: "Settings", icon: Settings },
   ],
@@ -96,11 +92,6 @@ const NAV_ITEMS: Record<Role, NavItem[]> = {
       href: "/messages",
       label: "Messages",
       icon: MessageSquare,
-      badge: (
-        <span className="ml-auto flex h-6 w-6 items-center justify-center border-2 border-foreground bg-destructive text-xs font-bold text-destructive-foreground">
-          3
-        </span>
-      ),
     },
     { href: "/dashboard/landlord/settings", label: "Settings", icon: Settings },
   ],
@@ -151,8 +142,23 @@ export function DashboardSidebar({ role, userInfo }: DashboardSidebarProps) {
   const pathname = usePathname();
   const { cardBg, cardLabel } = ROLE_CONFIG[role];
   const isInspector = role === "inspector";
+  const { unreadCount } = useUnreadMessageCount();
 
-  const mainItems = NAV_ITEMS[role].filter((item) => !item.footer);
+  const withMessageBadge = (item: NavItem): NavItem =>
+    item.href === "/messages" && unreadCount > 0
+      ? {
+          ...item,
+          badge: (
+            <span className="ml-auto flex h-6 w-6 items-center justify-center border-2 border-foreground bg-destructive text-xs font-bold text-destructive-foreground">
+              {unreadCount}
+            </span>
+          ),
+        }
+      : item;
+
+  const mainItems = NAV_ITEMS[role]
+    .filter((item) => !item.footer)
+    .map(withMessageBadge);
   const footerItems = NAV_ITEMS[role].filter((item) => item.footer);
 
   useEffect(() => {
