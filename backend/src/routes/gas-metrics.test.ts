@@ -148,9 +148,18 @@ describe('Gas Metrics API', () => {
   })
 
   describe('GET /api/gas-metrics/estimate/:functionName', () => {
-    it('should return gas estimate for a specific function without authentication', async () => {
+    it('should return 401 without authentication', async () => {
       const response = await request(app)
         .get('/api/gas-metrics/estimate/test_function')
+        .expect(401)
+
+      expect(response.body.error).toBeDefined()
+    })
+
+    it('should return gas estimate for a specific function with authentication', async () => {
+      const response = await request(app)
+        .get('/api/gas-metrics/estimate/test_function')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body.success).toBe(true)
@@ -165,6 +174,7 @@ describe('Gas Metrics API', () => {
     it('should support complexity parameter', async () => {
       const response = await request(app)
         .get('/api/gas-metrics/estimate/test_function?complexity=simple')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body.success).toBe(true)
@@ -174,10 +184,11 @@ describe('Gas Metrics API', () => {
     it('should handle invalid complexity parameter gracefully', async () => {
       const response = await request(app)
         .get('/api/gas-metrics/estimate/test_function?complexity=invalid')
+        .set('Authorization', `Bearer ${authToken}`)
 
       // Accept 200 (graceful handling) or 500 (validation error)
       expect([200, 500]).toContain(response.status)
-      
+
       if (response.status === 200) {
         expect(response.body.success).toBe(true)
       }
@@ -196,6 +207,7 @@ describe('Gas Metrics API', () => {
 
       const response = await request(app)
         .get('/api/gas-metrics/estimate/test_function')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body.success).toBe(true)
@@ -205,6 +217,7 @@ describe('Gas Metrics API', () => {
     it('should return null benchmark when no data exists', async () => {
       const response = await request(app)
         .get('/api/gas-metrics/estimate/unknown_function')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200)
 
       expect(response.body.success).toBe(true)

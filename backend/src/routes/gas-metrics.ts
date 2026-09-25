@@ -65,7 +65,7 @@ export function createGasMetricsRouter(): Router {
    * GET /api/gas-metrics/estimate/:functionName
    * Estimates gas cost for a specific function
    */
-  router.get('/estimate/:functionName', async (req: Request, res: Response) => {
+  router.get('/estimate/:functionName', authenticateToken, async (req: Request, res: Response) => {
     try {
       const { functionName } = req.params
       const complexity = (req.query.complexity as 'simple' | 'moderate' | 'complex') || 'moderate'
