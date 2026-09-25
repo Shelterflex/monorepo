@@ -58,6 +58,8 @@ export function PropertyInfo({
         <div className="flex gap-2">
           <button
             onClick={onFavoriteToggle}
+            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            aria-pressed={isFavorite}
             className={`flex h-10 w-10 items-center justify-center border-3 border-foreground bg-background shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] sm:h-12 sm:w-12 ${
               isFavorite ? "text-destructive" : ""
             }`}
@@ -68,6 +70,7 @@ export function PropertyInfo({
           </button>
           <button
             onClick={handleShare}
+            aria-label="Share property"
             className="flex h-10 w-10 items-center justify-center border-3 border-foreground bg-background shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] sm:h-12 sm:w-12"
           >
             <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />

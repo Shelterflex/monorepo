@@ -39,10 +39,26 @@ interface DropOffPoint {
   reasons: string[]
 }
 
+interface CompletedStep {
+  step: string
+  completedAt: number
+  properties: Record<string, any>
+}
+
+interface UserFunnelData {
+  startedAt: number
+  currentStep: number
+  completedSteps: CompletedStep[]
+  properties: Record<string, any>
+  droppedAt: number | null
+  completedAt?: number
+  dropOffReason?: string
+}
+
 class FunnelAnalysis {
   private static instance: FunnelAnalysis
   private funnels: Map<string, FunnelDefinition> = new Map()
-  private funnelData: Map<string, Map<string, any>> = new Map()
+  private funnelData: Map<string, Map<string, UserFunnelData>> = new Map()
 
   constructor() {
     this.initializeDefaultFunnels()
@@ -272,21 +288,21 @@ class FunnelAnalysis {
 
     // Step analytics
     const stepAnalytics: StepAnalytics[] = funnel.steps.map((step, index) => {
-      const usersAtStep = allUserData.filter((data: any) => 
-        data.currentStep >= index || data.completedSteps.some((cs: any) => cs.step === step.name)
+      const usersAtStep = allUserData.filter((data) => 
+        data.currentStep >= index || data.completedSteps.some((cs) => cs.step === step.name)
       )
       
-      const stepTime = usersAtStep.reduce((acc: number, data: any) => {
-        const stepData = data.completedSteps.find((cs: any) => cs.step === step.name)
+      const stepTime = usersAtStep.reduce((acc, data) => {
+        const stepData = data.completedSteps.find((cs) => cs.step === step.name)
         if (stepData && data.startedAt) {
           return acc + (stepData.completedAt - data.startedAt)
         }
         return acc
       }, 0)
 
-      const usersAtStepPlusOne = allUserData.filter((data: any) => 
+      const usersAtStepPlusOne = allUserData.filter((data) => 
         data.currentStep >= index + 1 || 
-        (index + 1 < funnel.steps.length && data.completedSteps.some((cs: any) => cs.step === funnel.steps[index + 1].name))
+        (index + 1 < funnel.steps.length && data.completedSteps.some((cs) => cs.step === funnel.steps[index + 1].name))
       )
 
       return {
@@ -305,12 +321,12 @@ class FunnelAnalysis {
       const currentStep = funnel.steps[i]
       const nextStep = funnel.steps[i + 1]
       
-      const usersAtCurrent = allUserData.filter((data: any) => 
-        data.currentStep >= i || data.completedSteps.some((cs: any) => cs.step === currentStep.name)
+      const usersAtCurrent = allUserData.filter((data) => 
+        data.currentStep >= i || data.completedSteps.some((cs) => cs.step === currentStep.name)
       )
       
-      const usersAtNext = allUserData.filter((data: any) => 
-        data.currentStep >= i + 1 || data.completedSteps.some((cs: any) => cs.step === nextStep.name)
+      const usersAtNext = allUserData.filter((data) => 
+        data.currentStep >= i + 1 || data.completedSteps.some((cs) => cs.step === nextStep.name)
       )
 
       const dropOffCount = usersAtCurrent.length - usersAtNext.length
@@ -329,7 +345,7 @@ class FunnelAnalysis {
       }
     }
 
-    const totalTime = completedUserData.reduce((acc: number, data: any) => 
+    const totalTime = completedUserData.reduce((acc, data) => 
       acc + (data.completedAt! - data.startedAt), 0
     )
 

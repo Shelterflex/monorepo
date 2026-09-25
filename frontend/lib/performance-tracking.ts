@@ -35,6 +35,12 @@ interface ResourceMetric {
   startTime: number
 }
 
+// Layout Instability API entry; not yet part of TypeScript's DOM lib.
+interface LayoutShift extends PerformanceEntry {
+  value: number
+  hadRecentInput: boolean
+}
+
 interface PerformanceThreshold {
   metric: keyof PerformanceMetrics
   warning: number
@@ -110,7 +116,7 @@ class PerformanceTracking {
       // Largest Contentful Paint
       const lcpObserver = new PerformanceObserver((list) => {
         const entries = list.getEntries()
-        const lastEntry = entries[entries.length - 1] as any
+        const lastEntry = entries[entries.length - 1] as LargestContentfulPaint
         this.metrics.lcp = lastEntry.startTime
         
         analytics.track('performance_lcp', {
@@ -123,8 +129,8 @@ class PerformanceTracking {
 
       // First Input Delay
       const fidObserver = new PerformanceObserver((list) => {
-        const entries = list.getEntries()
-        entries.forEach((entry: any) => {
+        const entries = list.getEntries() as PerformanceEventTiming[]
+        entries.forEach((entry) => {
           this.metrics.fid = entry.processingStart - entry.startTime
           
           analytics.track('performance_fid', {
@@ -139,7 +145,7 @@ class PerformanceTracking {
       // Cumulative Layout Shift
       let clsValue = 0
       const clsObserver = new PerformanceObserver((list) => {
-        list.getEntries().forEach((entry: any) => {
+        (list.getEntries() as LayoutShift[]).forEach((entry) => {
           if (!entry.hadRecentInput) {
             clsValue += entry.value
             this.metrics.cls = clsValue

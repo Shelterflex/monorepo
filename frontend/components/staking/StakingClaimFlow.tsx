@@ -255,6 +255,7 @@ export function StakingClaimFlow({
                         </code>
                         <button
                           onClick={copyHash}
+                          aria-label="Copy transaction hash"
                           className="p-1 hover:bg-background rounded"
                         >
                           <Copy className="h-4 w-4" />
