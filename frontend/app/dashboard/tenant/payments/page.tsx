@@ -39,6 +39,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { PaymentHistoryItem } from "@/lib/tenantApi"
+import { summarizePayments } from "@/lib/installmentSchedule"
+import type { InstalmentInput } from "@/lib/installmentSchedule"
 
 type ActiveTab = "schedule" | "history"
 
@@ -57,6 +59,7 @@ export default function TenantPaymentsPage() {
   const [disputeDialogPayment, setDisputeDialogPayment] = useState<PaymentHistoryItem | null>(null)
   const [viewDispute, setViewDispute] = useState<PaymentDispute | null>(null)
   const [fullPaymentModalOpen, setFullPaymentModalOpen] = useState(false)
+  const [paymentSummary, setPaymentSummary] = useState<ReturnType<typeof summarizePayments> | null>(null)
 
   const {
     payments,
@@ -84,6 +87,17 @@ export default function TenantPaymentsPage() {
         setSelectedDeal(
           scheduleRes.data.dealId || scheduleRes.data.deals?.[0]?.dealId || null,
         )
+
+        const instalments: InstalmentInput[] = scheduleRes.data.schedule.map(
+          (item: PaymentScheduleItem) => ({
+            period: item.period,
+            dueDate: item.dueDate,
+            amountNgn: item.amount,
+            paid: item.status === "paid",
+          })
+        )
+        const summary = summarizePayments(instalments)
+        setPaymentSummary(summary)
       }
 
       if (walletRes.success) {
@@ -249,9 +263,9 @@ export default function TenantPaymentsPage() {
                   <AlertCircle className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Next Payment</p>
+                  <p className="text-sm text-muted-foreground">Outstanding</p>
                   <p className="text-xl font-bold">
-                    {nextPayment ? formatNgn(nextPayment.amount) : "N/A"}
+                    {paymentSummary ? formatNgn(paymentSummary.outstanding) : "N/A"}
                   </p>
                 </div>
               </div>
@@ -265,9 +279,9 @@ export default function TenantPaymentsPage() {
                   <Calendar className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Due Date</p>
+                  <p className="text-sm text-muted-foreground">Progress</p>
                   <p className="text-xl font-bold">
-                    {nextPayment ? nextPayment.dueDate : "N/A"}
+                    {paymentSummary ? `${paymentSummary.progressPercent}%` : "N/A"}
                   </p>
                 </div>
               </div>
