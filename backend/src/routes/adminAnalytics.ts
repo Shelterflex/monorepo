@@ -8,6 +8,8 @@ import { dealStore } from "../models/dealStore.js";
 import { listingStore } from "../models/listingStore.js";
 import { userStore } from "../models/authStore.js";
 
+export type DataSource = "live" | "mock";
+
 // Cache for analytics endpoints (60 seconds TTL)
 const analyticsCache = new MemoryCacheLayer<any>({
   max: 100,
@@ -117,6 +119,7 @@ export function createAdminAnalyticsRouter(): Router {
               revenueMtd,
               defaultRate: parseFloat(defaultRate.toFixed(2)),
               period: "MTD",
+              dataSource: "live" as DataSource,
             },
           };
         } else {
@@ -142,6 +145,7 @@ export function createAdminAnalyticsRouter(): Router {
               revenueMtd: 3850000, // mock MTD revenue (3.85M NGN)
               defaultRate: parseFloat(defaultRate.toFixed(2)),
               period: "MTD",
+              dataSource: "mock" as DataSource,
             },
           };
         }
@@ -196,7 +200,10 @@ export function createAdminAnalyticsRouter(): Router {
 
           payload = {
             success: true,
-            data: funnel,
+            data: {
+              ...funnel,
+              dataSource: "live" as DataSource,
+            },
           };
         } else {
           // Fallback mock counts
@@ -226,7 +233,10 @@ export function createAdminAnalyticsRouter(): Router {
 
           payload = {
             success: true,
-            data: funnel,
+            data: {
+              ...funnel,
+              dataSource: "mock" as DataSource,
+            },
           };
         }
 
@@ -286,7 +296,10 @@ export function createAdminAnalyticsRouter(): Router {
 
           payload = {
             success: true,
-            data: formattedData,
+            data: {
+              series: formattedData,
+              dataSource: "live" as DataSource,
+            },
           };
         } else {
           // Fallback mock time-series data
@@ -315,7 +328,10 @@ export function createAdminAnalyticsRouter(): Router {
 
           payload = {
             success: true,
-            data: mockData,
+            data: {
+              series: mockData,
+              dataSource: "mock" as DataSource,
+            },
           };
         }
 
@@ -395,6 +411,7 @@ export function createAdminAnalyticsRouter(): Router {
               inspectionPassRate: parseFloat(inspectionPassRate.toFixed(2)),
               averageListingScore: averageListingScore || 85.0,
               whistleblowerReportRate: parseFloat(whistleblowerReportRate.toFixed(2)),
+              dataSource: "live" as DataSource,
             },
           };
         } else {
@@ -405,6 +422,7 @@ export function createAdminAnalyticsRouter(): Router {
               inspectionPassRate: 92.5,
               averageListingScore: 88.4,
               whistleblowerReportRate: 4.2, // 4.2% of listings have issues reported
+              dataSource: "mock" as DataSource,
             },
           };
         }

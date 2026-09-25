@@ -17,6 +17,7 @@ interface ListingStorePort {
   suggest(query: string): Promise<string[]>
   updateStatus(listingId: string, status: ListingStatus, rejectionReason?: string): Promise<Listing | null>
   lockToDeal(listingId: string, dealId: string): Promise<Listing | null>
+  tryLockToDeal(listingId: string, dealId: string): Promise<{ listing: Listing | null; error?: string }>
   hasReachedMonthlyLimit(whistleblowerId: string): Promise<boolean>
   getMonthlyReportCount(whistleblowerId: string): Promise<number>
   moderate(
@@ -165,6 +166,31 @@ class InMemoryListingStore implements ListingStorePort {
     listing.updatedAt = new Date()
     this.listings.set(listingId, listing)
     return listing
+  }
+
+  async tryLockToDeal(listingId: string, dealId: string): Promise<{ listing: Listing | null; error?: string }> {
+    const listing = this.listings.get(listingId)
+    if (!listing) {
+      return { listing: null, error: 'Listing not found' }
+    }
+
+    if (listing.status === ListingStatus.RENTED) {
+      return { listing: null, error: 'Listing already rented' }
+    }
+
+    if (listing.dealId) {
+      return { listing: null, error: `Listing already linked to deal ${listing.dealId}` }
+    }
+
+    if (listing.status !== ListingStatus.APPROVED) {
+      return { listing: null, error: `Listing must be approved to create a deal. Current status: ${listing.status}` }
+    }
+
+    listing.status = ListingStatus.RENTED
+    listing.dealId = dealId
+    listing.updatedAt = new Date()
+    this.listings.set(listingId, listing)
+    return { listing }
   }
 
   async hasReachedMonthlyLimit(whistleblowerId: string): Promise<boolean> {
@@ -470,6 +496,67 @@ class PostgresListingStore implements ListingStorePort {
     return this.mapRow(rows[0] as ListingRow)
   }
 
+  async tryLockToDeal(listingId: string, dealId: string): Promise<{ listing: Listing | null; error?: string }> {
+    const pool = await this.pool()
+    const client = await pool.connect()
+
+    try {
+      await client.query('BEGIN')
+
+      const { rows } = await client.query(
+        `SELECT * FROM whistleblower_listings
+         WHERE listing_id = $1 AND deleted_at IS NULL
+         FOR UPDATE`,
+        [listingId],
+      )
+
+      if (rows.length === 0) {
+        await client.query('ROLLBACK')
+        return { listing: null, error: 'Listing not found' }
+      }
+
+      const row = rows[0] as ListingRow
+
+      if (row.status === ListingStatus.RENTED) {
+        await client.query('ROLLBACK')
+        return { listing: null, error: 'Listing already rented' }
+      }
+
+      if (row.deal_id) {
+        await client.query('ROLLBACK')
+        return { listing: null, error: `Listing already linked to deal ${row.deal_id}` }
+      }
+
+      if (row.status !== ListingStatus.APPROVED) {
+        await client.query('ROLLBACK')
+        return { listing: null, error: `Listing must be approved to create a deal. Current status: ${row.status}` }
+      }
+
+      const { rows: updateRows } = await client.query(
+        `UPDATE whistleblower_listings
+         SET status = $2,
+             deal_id = $3,
+             updated_at = NOW()
+         WHERE listing_id = $1
+         RETURNING *`,
+        [listingId, ListingStatus.RENTED, dealId],
+      )
+
+      await client.query('COMMIT')
+
+      if (updateRows.length === 0) {
+        return { listing: null, error: 'Listing not found' }
+      }
+
+      return { listing: this.mapRow(updateRows[0] as ListingRow) }
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
   async hasReachedMonthlyLimit(whistleblowerId: string): Promise<boolean> {
     const count = await this.getMonthlyReportCount(whistleblowerId)
     return count >= 2
@@ -629,6 +716,11 @@ class HybridListingStore implements ListingStorePort {
   async lockToDeal(listingId: string, dealId: string): Promise<Listing | null> {
     const adapter = await this.adapter()
     return adapter.lockToDeal(listingId, dealId)
+  }
+
+  async tryLockToDeal(listingId: string, dealId: string): Promise<{ listing: Listing | null; error?: string }> {
+    const adapter = await this.adapter()
+    return adapter.tryLockToDeal(listingId, dealId)
   }
 
   async hasReachedMonthlyLimit(whistleblowerId: string): Promise<boolean> {
