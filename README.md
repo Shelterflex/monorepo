@@ -12,12 +12,12 @@ The platform combines three layers:
 
  
 
-| Role | Description |
-|---|---|
-| **Tenant** | Browses listings, pays a 20–40% deposit upfront, repays the balance over time |
-| **Landlord** | Lists properties directly, receives guaranteed/partial payments, avoids agent fees |
-| **Whistleblower** | Reports fraudulent or inaccurate listings and earns on-chain rewards — functioning as a decentralized trust layer and organic quality-signal for the platform |
-| **Freelance Inspector** | Physically verifies property conditions and submits structured inspection reports |
+| Role                    | Description                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tenant**              | Browses listings, pays a 20–40% deposit upfront, repays the balance over time                                                                                 |
+| **Landlord**            | Lists properties directly, receives guaranteed/partial payments, avoids agent fees                                                                            |
+| **Whistleblower**       | Reports fraudulent or inaccurate listings and earns on-chain rewards — functioning as a decentralized trust layer and organic quality-signal for the platform |
+| **Freelance Inspector** | Physically verifies property conditions and submits structured inspection reports                                                                             |
 
 Whistleblowers are a first-class participant in the Shelterflex ecosystem. By surfacing fake listings and bad actors, they improve the overall listing quality, protect tenants from fraud, and make Shelterflex more attractive to both sides of the market. In this sense they serve an **advertising function**: every verified listing they help maintain increases platform credibility and drives organic adoption.
 
@@ -41,11 +41,11 @@ Revenue is generated through:
 
 ### Payment Plan Reference
 
-| Plan | Deposit | Interest | Monthly Payment (on ₦840k balance) |
-|---|---|---|---|
-| 3 months | 30% | 8% | ≈ ₦302,400 |
-| 6 months | 30% | 12% | ≈ ₦156,800 |
-| 12 months | 30% | 15% | ≈ ₦80,500 |
+| Plan      | Deposit | Interest | Monthly Payment (on ₦840k balance) |
+| --------- | ------- | -------- | ---------------------------------- |
+| 3 months  | 30%     | 8%       | ≈ ₦302,400                         |
+| 6 months  | 30%     | 12%      | ≈ ₦156,800                         |
+| 12 months | 30%     | 15%      | ≈ ₦80,500                          |
 
 ## Risk Management
 
@@ -118,12 +118,12 @@ Run the frontend, backend, and PostgreSQL together with hot-reload — no local 
 docker compose --env-file .env.docker up --build
 ```
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:4000 |
-| Health check | http://localhost:4000/health |
-| PostgreSQL | `localhost:5432` (user/password/db: `postgres` / `postgres` / `shelterflex_dev`) |
+| Service      | URL                                                                              |
+| ------------ | -------------------------------------------------------------------------------- |
+| Frontend     | http://localhost:3000                                                            |
+| Backend API  | http://localhost:4000                                                            |
+| Health check | http://localhost:4000/health                                                     |
+| PostgreSQL   | `localhost:5432` (user/password/db: `postgres` / `postgres` / `shelterflex_dev`) |
 
 **Database migrations** run automatically when the backend starts. After adding new SQL files to `backend/migrations/`, restart the backend:
 
@@ -163,10 +163,10 @@ For details on proposing and approving contract upgrades, see **[Contract Upgrad
 ### Node version issues
 
 ```bash
-node --version  # Should be 20+
+node --version  # Should be 22
 ```
 
-If you have an older version, upgrade via [nodejs.org](https://nodejs.org/) or use a version manager like `nvm`.
+If you have an older version, upgrade via [nodejs.org](https://nodejs.org/) or use a version manager like `nvm` or `fnm`.
 
 ### Missing environment variables (backend)
 
