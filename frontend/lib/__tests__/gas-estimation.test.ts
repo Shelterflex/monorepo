@@ -12,13 +12,15 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-vi.mock("../api-client", () => ({
-  apiClient: {
-    get: vi.fn(),
-  },
-}));
+vi.mock("../apiClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../apiClient")>();
+  return {
+    ...actual,
+    apiGet: vi.fn(),
+  };
+});
 
-import { apiClient } from "../api-client";
+import { apiGet } from "../apiClient";
 
 describe("computeBuffer", () => {
   it("adds a 3x buffer for low confidence", () => {
@@ -91,7 +93,7 @@ describe("estimateNgnEquivalent", () => {
 
 describe("estimateGas", () => {
   it("returns estimate and benchmark on success", async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({
+    vi.mocked(apiGet).mockResolvedValue({
       success: true,
       functionName: "invoke_contract",
       estimate: { estimatedFee: "500000", confidence: "high" },
@@ -100,7 +102,7 @@ describe("estimateGas", () => {
 
     const result = await estimateGas("invoke_contract", "simple");
 
-    expect(apiClient.get).toHaveBeenCalledWith(
+    expect(apiGet).toHaveBeenCalledWith(
       "/api/gas-metrics/estimate/invoke_contract?complexity=simple",
     );
     expect(result.estimatedFee).toBe("500000");
@@ -109,7 +111,7 @@ describe("estimateGas", () => {
   });
 
   it("returns fallback on network error", async () => {
-    vi.mocked(apiClient.get).mockRejectedValue(new Error("Network error"));
+    vi.mocked(apiGet).mockRejectedValue(new Error("Network error"));
 
     const result = await estimateGas("invoke_contract");
 
@@ -119,7 +121,7 @@ describe("estimateGas", () => {
   });
 
   it("defaults complexity to moderate", async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({
+    vi.mocked(apiGet).mockResolvedValue({
       success: true,
       functionName: "invoke_contract",
       estimate: { estimatedFee: "500000", confidence: "medium" },
@@ -128,13 +130,13 @@ describe("estimateGas", () => {
 
     await estimateGas("invoke_contract");
 
-    expect(apiClient.get).toHaveBeenCalledWith(
+    expect(apiGet).toHaveBeenCalledWith(
       "/api/gas-metrics/estimate/invoke_contract?complexity=moderate",
     );
   });
 
   it("returns fallback on API error response", async () => {
-    vi.mocked(apiClient.get).mockRejectedValue(new Error("API Error: 500"));
+    vi.mocked(apiGet).mockRejectedValue(new Error("API Error: 500"));
 
     const result = await estimateGas("invoke_contract", "complex");
 
@@ -146,7 +148,7 @@ describe("estimateGas", () => {
 
 describe("getFeeDisplay", () => {
   it("returns formatted fee display on success", async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({
+    vi.mocked(apiGet).mockResolvedValue({
       success: true,
       functionName: "invoke_contract",
       estimate: { estimatedFee: "10000000", confidence: "high" },
@@ -163,7 +165,7 @@ describe("getFeeDisplay", () => {
   });
 
   it("marks as fallback when benchmark is null and confidence is low", async () => {
-    vi.mocked(apiClient.get).mockRejectedValue(new Error("fail"));
+    vi.mocked(apiGet).mockRejectedValue(new Error("fail"));
 
     const result = await getFeeDisplay("invoke_contract");
 
@@ -172,7 +174,7 @@ describe("getFeeDisplay", () => {
   });
 
   it("isFallback is false when benchmark exists even with low confidence", async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({
+    vi.mocked(apiGet).mockResolvedValue({
       success: true,
       functionName: "invoke_contract",
       estimate: { estimatedFee: "500000", confidence: "low" },
@@ -185,7 +187,7 @@ describe("getFeeDisplay", () => {
   });
 
   it("computes max fee with correct buffer", async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({
+    vi.mocked(apiGet).mockResolvedValue({
       success: true,
       functionName: "invoke_contract",
       estimate: { estimatedFee: "1000000", confidence: "medium" },
