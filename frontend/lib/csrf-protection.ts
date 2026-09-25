@@ -23,11 +23,8 @@ class CSRFProtection {
       globalThis.crypto.getRandomValues(array)
       return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
     }
-    
-    // Fallback for environments without crypto
-    return Math.random().toString(36).substring(2, 15) + 
-           Math.random().toString(36).substring(2, 15) + 
-           Date.now().toString(36)
+
+    throw new Error('Crypto API not available for secure token generation')
   }
 
   private storeToken(token: string): void {
