@@ -125,6 +125,41 @@ describe('Deals API', () => {
 
       expect(response.body.error.code).toBe('VALIDATION_ERROR')
     })
+
+    it('should prevent race condition: only one deal created for concurrent requests on same listing', async () => {
+      const dealData = {
+        tenantId: 'tenant-001',
+        landlordId: 'landlord-001',
+        listingId: approvedListingId,
+        annualRentNgn: 1200000,
+        depositNgn: 240000,
+        termMonths: 12
+      }
+
+      // Fire two concurrent requests
+      const [response1, response2] = await Promise.all([
+        request(app).post('/api/deals').send({ ...dealData, tenantId: 'tenant-001' }),
+        request(app).post('/api/deals').send({ ...dealData, tenantId: 'tenant-002' }),
+      ])
+
+      // Exactly one should succeed (201), one should fail (409)
+      const statuses = [response1.status, response2.status].sort()
+      expect(statuses).toEqual([201, 409])
+
+      // The successful response should have the deal
+      const successResponse = response1.status === 201 ? response1 : response2
+      expect(successResponse.body.success).toBe(true)
+      expect(successResponse.body.data.listingId).toBe(approvedListingId)
+
+      // The failed response should have the correct error
+      const failResponse = response1.status === 409 ? response1 : response2
+      expect(failResponse.body.error.code).toBe('LISTING_ALREADY_RENTED')
+      expect(failResponse.body.error.message).toContain('already')
+
+      // Verify only one deal exists for this listing
+      const deals = await dealStore.findMany({ listingId: approvedListingId })
+      expect(deals.total).toBe(1)
+    })
   })
 
   describe('GET /api/deals/:dealId', () => {

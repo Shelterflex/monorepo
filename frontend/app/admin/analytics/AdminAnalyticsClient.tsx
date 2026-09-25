@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Award,
+  Database,
+  FlaskConical,
 } from "lucide-react";
 import { KPICard } from "@/components/admin/KPICard";
 import { ErrorState, MoneyValue } from "@/components/ui/data-state";
@@ -21,7 +23,7 @@ import {
   getListingQuality,
   type AnalyticsOverview,
   type DealFunnel,
-  type RevenueTimelineItem,
+  type RevenueTimelineData,
   type ListingQualityMetrics,
 } from "@/lib/adminAnalyticsApi";
 
@@ -70,7 +72,7 @@ export function AdminAnalyticsClient() {
 
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [funnel, setFunnel] = useState<DealFunnel | null>(null);
-  const [revenue, setRevenue] = useState<RevenueTimelineItem[]>([]);
+  const [revenue, setRevenue] = useState<RevenueTimelineData | null>(null);
   const [quality, setQuality] = useState<ListingQualityMetrics | null>(null);
   const [revenueRange, setRevenueRange] = useState<"7d" | "30d" | "90d">("30d");
 
@@ -138,8 +140,8 @@ export function AdminAnalyticsClient() {
   const kpiStatus: "loading" | "error" | "ready" = loading
     ? "loading"
     : error || !overview
-      ? "error"
-      : "ready";
+    ? "error"
+    : "ready";
 
   /** Non-monetary KPIs still refuse to invent a value; they just dash out. */
   const renderMetric = (value: number | null | undefined, suffix = "") =>
@@ -157,6 +159,12 @@ export function AdminAnalyticsClient() {
     }).format(val);
   };
 
+  // Determine if any data is from mock source
+  const isMockData = overview?.dataSource === "mock" || 
+    funnel?.dataSource === "mock" || 
+    revenue?.dataSource === "mock" || 
+    quality?.dataSource === "mock";
+
   return (
     <div className="space-y-8 p-1">
       {/* Header and Controls */}
@@ -169,14 +177,28 @@ export function AdminAnalyticsClient() {
             Real-time business intelligence, financial performance, and quality metrics
           </p>
         </div>
-        <button
-          onClick={handleRefreshClick}
-          disabled={loading || refreshing}
-          className="flex items-center gap-2 border-3 border-foreground bg-primary hover:bg-primary/90 text-black px-4 py-2 font-mono text-xs font-black uppercase shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] hover:shadow-[1px_1px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Refreshing..." : "Refresh Data"}
-        </button>
+        <div className="flex items-center gap-3">
+          {isMockData && (
+            <div className="flex items-center gap-1.5 bg-yellow-100 border-2 border-yellow-400 text-yellow-900 px-3 py-1.5 font-mono text-[10px] font-bold uppercase shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+              <FlaskConical className="w-3 h-3" />
+              <span>Mock Data</span>
+            </div>
+          )}
+          {!isMockData && overview && (
+            <div className="flex items-center gap-1.5 bg-green-100 border-2 border-green-400 text-green-900 px-3 py-1.5 font-mono text-[10px] font-bold uppercase shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+              <Database className="w-3 h-3" />
+              <span>Live Data</span>
+            </div>
+          )}
+          <button
+            onClick={handleRefreshClick}
+            disabled={loading || refreshing}
+            className="flex items-center gap-2 border-3 border-foreground bg-primary hover:bg-primary/90 text-black px-4 py-2 font-mono text-xs font-black uppercase shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] hover:shadow-[1px_1px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing..." : "Refresh Data"}
+          </button>
+        </div>
       </div>
 
       {/* Error state */}
@@ -240,7 +262,7 @@ export function AdminAnalyticsClient() {
       {/* Interactive Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RevenueChart
-          data={revenue}
+          data={revenue || undefined}
           isLoading={loading}
           onRangeChange={handleRangeChange}
         />

@@ -1,5 +1,7 @@
 import { apiGet } from "./apiClient";
 
+export type DataSource = "live" | "mock";
+
 export interface UsersByRole {
   tenant: number;
   landlord: number;
@@ -13,6 +15,7 @@ export interface AnalyticsOverview {
   revenueMtd: number;
   defaultRate: number;
   period: string;
+  dataSource: DataSource;
 }
 
 export interface DealFunnel {
@@ -21,6 +24,7 @@ export interface DealFunnel {
   at_risk: number;
   completed: number;
   defaulted: number;
+  dataSource: DataSource;
 }
 
 export interface RevenueTimelineItem {
@@ -29,10 +33,16 @@ export interface RevenueTimelineItem {
   amount: number;
 }
 
+export interface RevenueTimelineData {
+  series: RevenueTimelineItem[];
+  dataSource: DataSource;
+}
+
 export interface ListingQualityMetrics {
   inspectionPassRate: number;
   averageListingScore: number;
   whistleblowerReportRate: number;
+  dataSource: DataSource;
 }
 
 export interface AnalyticsOverviewResponse {
@@ -47,7 +57,7 @@ export interface DealFunnelResponse {
 
 export interface RevenueTimelineResponse {
   success: boolean;
-  data: RevenueTimelineItem[];
+  data: RevenueTimelineData;
 }
 
 export interface ListingQualityResponse {
