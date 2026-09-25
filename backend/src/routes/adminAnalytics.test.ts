@@ -69,11 +69,14 @@ describe("Admin Analytics Router - Endpoints", () => {
         .query({ range: "30d" });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      if (res.body.data.length > 0) {
-        expect(res.body.data[0].date).toBeDefined();
-        expect(res.body.data[0].feeType).toBeDefined();
-        expect(res.body.data[0].amount).toBeDefined();
+      expect(res.body.data.series).toBeDefined();
+      expect(Array.isArray(res.body.data.series)).toBe(true);
+      expect(res.body.data.dataSource).toBeDefined();
+      expect(["live", "mock"]).toContain(res.body.data.dataSource);
+      if (res.body.data.series.length > 0) {
+        expect(res.body.data.series[0].date).toBeDefined();
+        expect(res.body.data.series[0].feeType).toBeDefined();
+        expect(res.body.data.series[0].amount).toBeDefined();
       }
     });
 
@@ -83,6 +86,8 @@ describe("Admin Analytics Router - Endpoints", () => {
         .query({ range: "7d" });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      expect(res.body.data.series).toBeDefined();
+      expect(res.body.data.dataSource).toBeDefined();
     });
 
     it("rejects non-admin roles with 403", async () => {
