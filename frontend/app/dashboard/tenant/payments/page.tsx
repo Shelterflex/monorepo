@@ -27,6 +27,8 @@ import { PaymentTimeline } from "@/components/payment/PaymentTimeline"
 import { UpcomingScheduleTable } from "@/components/payment/UpcomingScheduleTable"
 import { DisputeDialog } from "@/components/payment/DisputeDialog"
 import { DisputeStatusTimeline } from "@/components/payment/DisputeStatusTimeline"
+import { FullPaymentModal } from "@/components/payment/FullPaymentModal"
+import type { FullPaymentReceipt } from "@/lib/paymentApi"
 import { canFileDispute } from "@/lib/disputeTimeline"
 import { formatNgn } from "@/lib/currency"
 import {
@@ -54,6 +56,7 @@ export default function TenantPaymentsPage() {
   const [disputes, setDisputes] = useState<PaymentDispute[]>([])
   const [disputeDialogPayment, setDisputeDialogPayment] = useState<PaymentHistoryItem | null>(null)
   const [viewDispute, setViewDispute] = useState<PaymentDispute | null>(null)
+  const [fullPaymentModalOpen, setFullPaymentModalOpen] = useState(false)
 
   const {
     payments,
@@ -179,6 +182,11 @@ export default function TenantPaymentsPage() {
   }
 
   const handleDisputeFiled = () => {
+    void loadData()
+  }
+
+  const handleFullPaymentSuccess = (receipt: FullPaymentReceipt) => {
+    showSuccessToast(`Full payment confirmed (ref ${receipt.reference})`)
     void loadData()
   }
 
@@ -336,10 +344,20 @@ export default function TenantPaymentsPage() {
                   </p>
                 </div>
                 {nextPayment ? (
-                  <div className="rounded-3xl border-2 border-foreground/20 bg-muted p-4">
-                    <p className="text-sm text-muted-foreground">Next due installment</p>
-                    <p className="text-2xl font-bold">{formatNgn(nextPayment.amount)}</p>
-                    <p className="text-sm text-muted-foreground">Due {nextPayment.dueDate}</p>
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                    <div className="rounded-3xl border-2 border-foreground/20 bg-muted p-4">
+                      <p className="text-sm text-muted-foreground">Next due installment</p>
+                      <p className="text-2xl font-bold">{formatNgn(nextPayment.amount)}</p>
+                      <p className="text-sm text-muted-foreground">Due {nextPayment.dueDate}</p>
+                    </div>
+                    {selectedDeal ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => setFullPaymentModalOpen(true)}
+                      >
+                        Pay in Full
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -434,6 +452,15 @@ export default function TenantPaymentsPage() {
           {viewDispute ? <DisputeStatusTimeline dispute={viewDispute} /> : null}
         </DialogContent>
       </Dialog>
+
+      {selectedDeal ? (
+        <FullPaymentModal
+          paymentId={selectedDeal}
+          open={fullPaymentModalOpen}
+          onOpenChange={setFullPaymentModalOpen}
+          onSuccess={handleFullPaymentSuccess}
+        />
+      ) : null}
     </div>
   )
 }
