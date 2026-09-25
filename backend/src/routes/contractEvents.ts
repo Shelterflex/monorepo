@@ -7,6 +7,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { getPool } from '../db.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
+import { assertAdminSecret } from '../middleware/adminSecret.js'
 import { logger } from '../utils/logger.js'
 
 const router = Router()
@@ -17,6 +18,8 @@ const router = Router()
  */
 router.get('/admin/contract-events', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    assertAdminSecret(req)
+
     const { contract, eventType, startDate, endDate, page = '1', pageSize = '20' } = req.query
 
     const pool = await getPool()
@@ -106,6 +109,8 @@ router.get('/admin/contract-events', async (req: Request, res: Response, next: N
  */
 router.get('/deals/:dealId/on-chain-events', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    assertAdminSecret(req)
+
     const { dealId } = req.params
 
     if (!dealId) {

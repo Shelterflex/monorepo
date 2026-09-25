@@ -10,47 +10,45 @@ describe('Contract Events API', () => {
   })
 
   describe('GET /api/admin/contract-events', () => {
-    it('should handle database unavailability gracefully', async () => {
-      // This route requires a database connection for indexed contract events
-      // In test environment without database, it should return an appropriate error
+    it('should reject requests without a valid admin secret', async () => {
       const response = await request(app)
         .get('/api/admin/contract-events')
 
-      // Accept 500 (DB unavailable) or 404 (route not found)
-      expect([500, 404]).toContain(response.status)
-      
-      if (response.status === 500) {
+      // Accept 403 (missing/invalid admin secret) or 404 (route not found)
+      expect([403, 404]).toContain(response.status)
+
+      if (response.status === 403) {
         expect(response.body.error).toBeDefined()
       }
     })
 
-    it('should accept filter parameters when database is available', async () => {
+    it('should reject requests with filter parameters but no admin secret', async () => {
       const response = await request(app)
         .get('/api/admin/contract-events?contract=test-contract-123&eventType=DealCreated')
 
-      // Accept 500 (DB unavailable) or 404 (route not found)
-      expect([500, 404]).toContain(response.status)
+      // Accept 403 (missing/invalid admin secret) or 404 (route not found)
+      expect([403, 404]).toContain(response.status)
     })
 
-    it('should accept pagination parameters', async () => {
+    it('should reject requests with pagination parameters but no admin secret', async () => {
       const response = await request(app)
         .get('/api/admin/contract-events?page=2&pageSize=10')
 
-      // Accept 500 (DB unavailable) or 404 (route not found)
-      expect([500, 404]).toContain(response.status)
+      // Accept 403 (missing/invalid admin secret) or 404 (route not found)
+      expect([403, 404]).toContain(response.status)
     })
   })
 
   describe('GET /api/deals/:dealId/on-chain-events', () => {
-    it('should handle database unavailability gracefully', async () => {
+    it('should reject requests without a valid admin secret', async () => {
       const dealId = 'test-deal-123'
       const response = await request(app)
         .get(`/api/deals/${dealId}/on-chain-events`)
 
-      // Accept 500 (DB unavailable) or 404 (route not found)
-      expect([500, 404]).toContain(response.status)
-      
-      if (response.status === 500) {
+      // Accept 403 (missing/invalid admin secret) or 404 (route not found)
+      expect([403, 404]).toContain(response.status)
+
+      if (response.status === 403) {
         expect(response.body.error).toBeDefined()
       }
     })
