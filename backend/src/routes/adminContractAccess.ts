@@ -4,6 +4,7 @@ import {
   type Response,
   type NextFunction,
 } from "express";
+import { z } from "zod";
 import { SorobanAdapter } from "../soroban/adapter.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../errors/AppError.js";
@@ -11,59 +12,28 @@ import { ErrorCode } from "../errors/errorCodes.js";
 import { validate } from "../middleware/validate.js";
 import { env } from "../schemas/env.js";
 
-// Schema definitions for validation
-const proposeAssignRoleSchema = {
-  body: {
-    type: "object",
-    required: ["subject", "role"],
-    properties: {
-      subject: { type: "string" },
-      role: { type: "number", minimum: 0, maximum: 3 },
-    },
-  },
-};
+const proposeAssignRoleSchema = z.object({
+  subject: z.string(),
+  role: z.number().int().min(0).max(3),
+});
 
-const confirmAssignRoleSchema = {
-  body: {
-    type: "object",
-    required: ["subject"],
-    properties: {
-      subject: { type: "string" },
-    },
-  },
-};
+const confirmAssignRoleSchema = z.object({
+  subject: z.string(),
+});
 
-const delegatePermissionSchema = {
-  body: {
-    type: "object",
-    required: ["delegatee", "permission"],
-    properties: {
-      delegatee: { type: "string" },
-      permission: { type: "number", minimum: 0 },
-    },
-  },
-};
+const delegatePermissionSchema = z.object({
+  delegatee: z.string(),
+  permission: z.number().int().min(0),
+});
 
-const getRoleSchema = {
-  query: {
-    type: "object",
-    required: ["address"],
-    properties: {
-      address: { type: "string" },
-    },
-  },
-};
+const getRoleSchema = z.object({
+  address: z.string(),
+});
 
-const hasPermissionSchema = {
-  query: {
-    type: "object",
-    required: ["address", "permission"],
-    properties: {
-      address: { type: "string" },
-      permission: { type: "number", minimum: 0 },
-    },
-  },
-};
+const hasPermissionSchema = z.object({
+  address: z.string(),
+  permission: z.number().int().min(0),
+});
 
 export function createAdminContractAccessRouter(adapter: SorobanAdapter) {
   const router = Router();
@@ -83,7 +53,7 @@ export function createAdminContractAccessRouter(adapter: SorobanAdapter) {
   router.post(
     "/propose-assign-role",
     requireAdminSecret,
-    validate(proposeAssignRoleSchema),
+    validate(proposeAssignRoleSchema, "body"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { subject, role } = req.body;
@@ -116,7 +86,7 @@ export function createAdminContractAccessRouter(adapter: SorobanAdapter) {
   router.post(
     "/confirm-assign-role",
     requireAdminSecret,
-    validate(confirmAssignRoleSchema),
+    validate(confirmAssignRoleSchema, "body"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { subject } = req.body;
@@ -149,7 +119,7 @@ export function createAdminContractAccessRouter(adapter: SorobanAdapter) {
   router.post(
     "/delegate-permission",
     requireAdminSecret,
-    validate(delegatePermissionSchema),
+    validate(delegatePermissionSchema, "body"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { delegatee, permission } = req.body;
@@ -182,7 +152,7 @@ export function createAdminContractAccessRouter(adapter: SorobanAdapter) {
   router.get(
     "/role",
     requireAdminSecret,
-    validate(getRoleSchema),
+    validate(getRoleSchema, "query"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { address } = req.query as { address: string };
@@ -215,7 +185,7 @@ export function createAdminContractAccessRouter(adapter: SorobanAdapter) {
   router.get(
     "/permission",
     requireAdminSecret,
-    validate(hasPermissionSchema),
+    validate(hasPermissionSchema, "query"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { address, permission } = req.query as { address: string; permission: string };

@@ -4,6 +4,7 @@ import {
   type Response,
   type NextFunction,
 } from "express";
+import { z } from "zod";
 import { SorobanAdapter } from "../soroban/adapter.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../errors/AppError.js";
@@ -11,36 +12,17 @@ import { ErrorCode } from "../errors/errorCodes.js";
 import { validate } from "../middleware/validate.js";
 import { env } from "../schemas/env.js";
 
-// Schema definitions for validation
-const proposeUpgradeSchema = {
-  body: {
-    type: "object",
-    required: ["newWasmHash"],
-    properties: {
-      newWasmHash: { type: "string", pattern: "^[0-9a-fA-F]{64}$" },
-    },
-  },
-};
+const proposeUpgradeSchema = z.object({
+  newWasmHash: z.string().regex(/^[0-9a-fA-F]{64}$/),
+});
 
-const confirmUpgradeSchema = {
-  body: {
-    type: "object",
-    required: ["newWasmHash"],
-    properties: {
-      newWasmHash: { type: "string", pattern: "^[0-9a-fA-F]{64}$" },
-    },
-  },
-};
+const confirmUpgradeSchema = z.object({
+  newWasmHash: z.string().regex(/^[0-9a-fA-F]{64}$/),
+});
 
-const transferAdminSchema = {
-  body: {
-    type: "object",
-    required: ["newAdminAddress"],
-    properties: {
-      newAdminAddress: { type: "string" },
-    },
-  },
-};
+const transferAdminSchema = z.object({
+  newAdminAddress: z.string(),
+});
 
 export function createAdminUpgradeableProxyRouter(adapter: SorobanAdapter) {
   const router = Router();
@@ -60,7 +42,7 @@ export function createAdminUpgradeableProxyRouter(adapter: SorobanAdapter) {
   router.post(
     "/propose-upgrade",
     requireAdminSecret,
-    validate(proposeUpgradeSchema),
+    validate(proposeUpgradeSchema, "body"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { newWasmHash } = req.body;
@@ -93,7 +75,7 @@ export function createAdminUpgradeableProxyRouter(adapter: SorobanAdapter) {
   router.post(
     "/confirm-upgrade",
     requireAdminSecret,
-    validate(confirmUpgradeSchema),
+    validate(confirmUpgradeSchema, "body"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { newWasmHash } = req.body;
@@ -156,7 +138,7 @@ export function createAdminUpgradeableProxyRouter(adapter: SorobanAdapter) {
   router.post(
     "/transfer-admin",
     requireAdminSecret,
-    validate(transferAdminSchema),
+    validate(transferAdminSchema, "body"),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const { newAdminAddress } = req.body;

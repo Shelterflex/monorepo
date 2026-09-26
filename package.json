@@ -3,6 +3,10 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "test:ci": "npm run test:ci --prefix backend"
+        "test:ci": "npm run test:ci --prefix backend",
+        "test:ci:backend": "npm run test:ci --prefix backend",
+        "lint:backend": "npm run lint --prefix backend",
+        "typecheck:backend": "npm run typecheck --prefix backend",
+        "ci:backend": "npm run lint:backend && npm run test:ci:backend"
     }
 }

@@ -90,6 +90,9 @@ export enum ErrorCode {
   // Service unavailable (transient)
   SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
 
+  // Not implemented
+  NOT_IMPLEMENTED = "NOT_IMPLEMENTED",
+
   // Idempotency
   DUPLICATE_REQUEST = "DUPLICATE_REQUEST",
   REQUEST_IN_FLIGHT = "REQUEST_IN_FLIGHT",
@@ -127,6 +130,7 @@ export const ERROR_CLASSIFICATION: Record<string, ErrorClassification> = {
   [ErrorCode.INTERNAL_ERROR]: "transient",
   [ErrorCode.ACCOUNT_FROZEN]: "permanent",
   [ErrorCode.SERVICE_UNAVAILABLE]: "transient",
+  [ErrorCode.NOT_IMPLEMENTED]: "permanent",
   [ErrorCode.DUPLICATE_REQUEST]: "permanent",
   [ErrorCode.REQUEST_IN_FLIGHT]: "transient",
   [ErrorCode.NO_SCORE_YET]: "permanent",

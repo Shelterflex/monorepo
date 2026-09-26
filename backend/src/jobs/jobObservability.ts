@@ -344,8 +344,8 @@ export function getJobHealthReport(): JobHealthReport {
  * records-processed figure, so each job reports work done without having to
  * hand-maintain a count.
  */
-export function sumCounts(result: Record<string, unknown>): number {
-  return Object.values(result).reduce<number>(
+export function sumCounts(result: Record<string, unknown> | object): number {
+  return Object.values(result as Record<string, unknown>).reduce<number>(
     (total, value) => (typeof value === 'number' && Number.isFinite(value) ? total + value : total),
     0,
   )
