@@ -5,6 +5,7 @@ use soroban_sdk::testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke
 use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal};
 
 fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Address, Address) {
+    env.mock_all_auths();
     let contract_id = env.register(StakingPool, ());
     let client = StakingPoolClient::new(env, &contract_id);
 
@@ -193,8 +194,8 @@ fn non_admin_initialize_unauthorized() {
     let token_contract = env.register_stellar_asset_contract_v2(token_admin);
     let token_contract_id = token_contract.address();
 
-    // Try to initialize with non-admin (should succeed since init doesn't check admin)
-    // But let's test that only the admin can perform admin operations after init
+    // Initialize with mocked admin auth
+    env.mock_all_auths();
     client.init(&admin, &token_contract_id);
 
     // Now try pause with non-admin
@@ -210,6 +211,19 @@ fn non_admin_initialize_unauthorized() {
 
     let result = client.try_pause(&non_admin);
     assert!(result.is_err());
+}
+
+#[test]
+#[should_panic]
+fn test_init_fails_without_admin_auth() {
+    let env = Env::default();
+    let contract_id = env.register(StakingPool, ());
+    let client = StakingPoolClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(token_admin);
+    // No mock_all_auths — require_auth() must fail
+    client.init(&admin, &token_contract.address());
 }
 
 #[test]

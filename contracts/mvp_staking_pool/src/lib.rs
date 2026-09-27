@@ -193,6 +193,8 @@ impl StakingPool {
             panic!("already initialized");
         }
 
+        admin.require_auth();
+
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage()
@@ -612,6 +614,7 @@ mod test {
     use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal};
 
     fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Address, Address) {
+        env.mock_all_auths();
         let contract_id = env.register(StakingPool, ());
         let client = StakingPoolClient::new(env, &contract_id);
 
@@ -627,6 +630,19 @@ mod test {
         client.init(&admin, &token_contract_id);
 
         (contract_id, client, admin, user, token_contract_id)
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(StakingPool, ());
+        let client = StakingPoolClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+        let token_contract = env.register_stellar_asset_contract_v2(token_admin);
+        // No env.mock_all_auths() — require_auth() must fail
+        client.init(&admin, &token_contract.address());
     }
 
     #[test]

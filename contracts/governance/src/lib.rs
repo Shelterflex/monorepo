@@ -135,6 +135,7 @@ impl Governance {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -445,6 +446,17 @@ mod tests {
         stake: i128,
     ) {
         client.set_voter_stake(admin, voter, &stake);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let id = env.register(Governance, ());
+        let client = GovernanceClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        // No mock_all_auths configured — require_auth() must fail
+        client.init(&admin, &1_000_000);
     }
 
     #[test]
