@@ -60,6 +60,8 @@ impl Timelock {
             return Err(TimelockError::AlreadyInitialized);
         }
 
+        admin.require_auth();
+
         if min_delay > max_delay {
             return Err(TimelockError::InvalidDelay);
         }

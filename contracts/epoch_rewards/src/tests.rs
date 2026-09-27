@@ -15,6 +15,17 @@ fn setup(env: &Env, duration: u64) -> (Address, EpochRewardsClient<'_>) {
     (admin, client)
 }
 
+#[test]
+#[should_panic]
+fn test_init_fails_without_admin_auth() {
+    let env = Env::default();
+    let id = env.register(EpochRewards, ());
+    let client = EpochRewardsClient::new(&env, &id);
+    let admin = Address::generate(&env);
+    // Without mocked auth, init must fail
+    client.init(&admin, &100u64);
+}
+
 // ── 1. Happy path ─────────────────────────────────────────────────────────────
 
 #[test]

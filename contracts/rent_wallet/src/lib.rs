@@ -142,6 +142,8 @@ impl RentWallet {
             return Err(ContractError::AlreadyInitialized);
         }
 
+        admin.require_auth();
+
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -558,6 +560,7 @@ mod test {
 
         let non_admin = Address::generate(env);
 
+        env.mock_all_auths();
         client.try_init(&admin).unwrap().unwrap();
 
         (contract_id, client, admin, user, non_admin)
@@ -574,6 +577,7 @@ mod test {
         let client = RentWalletClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
 
+        env.mock_all_auths();
         client.try_init(&admin).unwrap().unwrap();
 
         assert_eq!(client.contract_version(), 1u32);
@@ -591,6 +595,17 @@ mod test {
         }]);
         client.try_credit(&admin, &user, &100i128).unwrap().unwrap();
         assert_eq!(client.balance(&user), 100i128);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(RentWallet, ());
+        let client = RentWalletClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        // Without mocked auth, init must fail
+        client.init(&admin);
     }
 
     #[test]

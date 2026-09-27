@@ -36,6 +36,7 @@ mod tests {
         let mut members = Vec::new(env);
         members.push_back(member.clone());
         members.push_back(member.clone());
+        env.mock_all_auths();
         client.init(&admin, &3600u64, &604800u64, &members);
         (timelock_id, client, admin, member)
     }
@@ -284,6 +285,7 @@ mod tests {
         members.push_back(member.clone());
         members.push_back(member);
 
+        env.mock_all_auths();
         let result = client.try_init(&admin, &0u64, &604800u64, &members);
         assert!(matches!(result, Err(Ok(TimelockError::InvalidDelay))));
     }

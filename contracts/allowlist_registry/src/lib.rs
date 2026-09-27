@@ -93,6 +93,7 @@ impl AllowlistRegistry {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         Ok(())
     }
@@ -339,20 +340,16 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// `initialize` takes no `caller` argument and never calls `require_auth`
-    /// on the admin it is given, so any invocation succeeds even with zero
-    /// authorizations mocked. Documenting current behavior; flagged in the
-    /// PR as worth maintainer confirmation (is bootstrap meant to be
-    /// permissionless, relying on deploy-time control instead?).
     #[test]
-    fn test_initialize_succeeds_without_any_mocked_auth() {
+    #[should_panic]
+    fn test_initialize_fails_without_admin_auth() {
         let env = Env::default();
         let id = env.register(AllowlistRegistry, ());
         let client = AllowlistRegistryClient::new(&env, &id);
         let admin = Address::generate(&env);
 
+        // Without mocked auth, initialize must fail
         client.initialize(&admin);
-        assert_eq!(client.member_count(), 0);
     }
 
     #[test]

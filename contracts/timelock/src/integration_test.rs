@@ -46,6 +46,7 @@ mod integration_test {
         members.push_back(multisig_member.clone());
         members.push_back(multisig_member.clone()); // Simplification
 
+        env.mock_all_auths();
         timelock_client.init(&admin, &3600, &86400, &members);
 
         (timelock_client, target_id, admin, multisig_member)

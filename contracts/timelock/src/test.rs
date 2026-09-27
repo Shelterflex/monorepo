@@ -16,6 +16,7 @@ mod test {
         members.push_back(multisig_member1.clone());
         members.push_back(multisig_member2.clone());
 
+        env.mock_all_auths();
         client.init(&admin, &86400, &604800, &members); // 1 day min, 1 week max
 
         (contract_id, client, admin, members)
@@ -26,6 +27,19 @@ mod test {
         let env = Env::default();
         let (_, _client, _admin, _) = setup(&env);
         // Initialization happened in setup
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(Timelock, ());
+        let client = TimelockClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        let mut members = Vec::new(&env);
+        members.push_back(Address::generate(&env));
+        // Without mocked auth, init must fail
+        client.init(&admin, &86400, &604800, &members);
     }
 
     #[test]

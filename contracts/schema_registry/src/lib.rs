@@ -116,6 +116,7 @@ impl SchemaRegistry {
         if env.storage().persistent().has(&DataKey::Admin) {
             panic!("already initialized");
         }
+        admin.require_auth();
         let initial = SchemaVersion {
             major: 1,
             minor: 0,
@@ -406,6 +407,17 @@ mod tests {
         let admin = Address::generate(&env);
         client.initialize(&admin);
         (env, client, admin)
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_initialize_fails_without_admin_auth() {
+        let env = Env::default();
+        let id = env.register(SchemaRegistry, ());
+        let client = SchemaRegistryClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        // Without mocked auth, initialize must fail
+        client.initialize(&admin);
     }
 
     fn v(major: u32, minor: u32, patch: u32) -> SchemaVersion {

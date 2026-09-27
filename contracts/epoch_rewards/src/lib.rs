@@ -102,6 +102,8 @@ impl EpochRewards {
             return Err(ContractError::AlreadyInitialized);
         }
 
+        admin.require_auth();
+
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::CurrentEpoch, &1u64);
         env.storage()

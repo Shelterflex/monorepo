@@ -165,6 +165,7 @@ impl OraclePriceFeeds {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         let threshold = if staleness_threshold == 0 {
             DEFAULT_STALENESS_SECONDS
         } else {
@@ -633,11 +634,24 @@ mod test {
         let admin = Address::generate(env);
         let operator = Address::generate(env);
         let p = pair(env);
+        env.mock_all_auths();
         client
             .try_init(&admin, &operator, &600u64, &500u64)
             .unwrap()
             .unwrap();
         (contract_id, client, admin, operator, p)
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let id = env.register(OraclePriceFeeds, ());
+        let client = OraclePriceFeedsClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        // Without mocked auth, init must fail
+        client.init(&admin, &operator, &600u64, &500u64);
     }
 
     #[test]

@@ -97,6 +97,7 @@ impl StakeDelegation {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -1246,6 +1247,17 @@ mod tests {
         let admin = Address::generate(env);
         client.init(&admin, &100u64);
         (admin, client)
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let id = env.register(StakeDelegation, ());
+        let client = StakeDelegationClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        // Without mocked auth, init must fail
+        client.init(&admin, &100u64);
     }
 
     // ── basic delegation ──────────────────────────────────────────────────────

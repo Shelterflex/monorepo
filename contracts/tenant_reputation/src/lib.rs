@@ -151,6 +151,7 @@ impl TenantReputation {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Operator, &operator);
         env.storage().instance().set(&DataKey::Paused, &false);
@@ -364,6 +365,7 @@ mod test {
         let client = TenantReputationClient::new(env, &contract_id);
         let admin = Address::generate(env);
         let operator = Address::generate(env);
+        env.mock_all_auths();
         client.try_init(&admin, &operator).unwrap().unwrap();
         (contract_id, client, admin, operator)
     }
@@ -378,6 +380,18 @@ mod test {
         let (_id, client, admin, operator) = setup(&env);
         assert!(!client.is_paused());
         let _ = (admin, operator);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let id = env.register(TenantReputation, ());
+        let client = TenantReputationClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        // Without mocked auth, init must fail
+        client.init(&admin, &operator);
     }
 
     #[test]

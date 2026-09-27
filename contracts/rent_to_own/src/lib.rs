@@ -129,6 +129,7 @@ impl RentToOwn {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         if forfeiture_bps > 10_000 {
             return Err(ContractError::InvalidAmount);
         }
@@ -476,6 +477,17 @@ mod tests {
         // Default: 20% forfeiture on default
         client.init(&admin, &2000u32);
         (admin, client)
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_init_fails_without_admin_auth() {
+        let env = Env::default();
+        let id = env.register(RentToOwn, ());
+        let client = RentToOwnClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        // Without mocked auth, init must fail
+        client.init(&admin, &2000u32);
     }
 
     fn make_deal_id(env: &Env, seed: u8) -> BytesN<32> {
