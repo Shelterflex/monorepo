@@ -12,6 +12,16 @@ const DEFAULT_MAX_DEVIATION_BPS: u64 = 500; // 5% in basis points
 const PRICE_DECIMALS: u32 = 7;
 const DEFAULT_QUORUM: u32 = 1;
 
+/// Minimum allowed staleness threshold in seconds (1s)
+pub const MIN_STALENESS_SECONDS: u64 = 1;
+/// Maximum allowed staleness threshold in seconds (24 hours / 86,400s)
+pub const MAX_STALENESS_SECONDS: u64 = 86_400;
+
+/// Minimum allowed max deviation in basis points (1 bps = 0.01%)
+pub const MIN_MAX_DEVIATION_BPS: u64 = 1;
+/// Maximum allowed max deviation in basis points (10,000 bps = 100%)
+pub const MAX_MAX_DEVIATION_BPS: u64 = 10_000;
+
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PriceFeed {
@@ -75,6 +85,10 @@ pub enum ContractError {
     NoQuorum = 7,
     /// Source is not registered for this feed
     UnknownSource = 8,
+    /// Staleness threshold is out of allowed bounds (zero or too large)
+    InvalidStalenessThreshold = 9,
+    /// Max deviation bps is out of allowed bounds (zero or too large)
+    InvalidMaxDeviationBps = 10,
 }
 
 #[contract]
@@ -168,11 +182,17 @@ impl OraclePriceFeeds {
         let threshold = if staleness_threshold == 0 {
             DEFAULT_STALENESS_SECONDS
         } else {
+            if staleness_threshold > MAX_STALENESS_SECONDS {
+                return Err(ContractError::InvalidStalenessThreshold);
+            }
             staleness_threshold
         };
         let deviation = if max_deviation_bps == 0 {
             DEFAULT_MAX_DEVIATION_BPS
         } else {
+            if max_deviation_bps > MAX_MAX_DEVIATION_BPS {
+                return Err(ContractError::InvalidMaxDeviationBps);
+            }
             max_deviation_bps
         };
         env.storage().instance().set(&DataKey::Admin, &admin);
@@ -541,6 +561,9 @@ impl OraclePriceFeeds {
             &caller,
             "set_staleness_threshold",
         )?;
+        if !(MIN_STALENESS_SECONDS..=MAX_STALENESS_SECONDS).contains(&threshold) {
+            return Err(ContractError::InvalidStalenessThreshold);
+        }
         env.storage()
             .instance()
             .set(&DataKey::StalenessThreshold, &threshold);
@@ -558,6 +581,9 @@ impl OraclePriceFeeds {
             &caller,
             "set_max_deviation_bps",
         )?;
+        if !(MIN_MAX_DEVIATION_BPS..=MAX_MAX_DEVIATION_BPS).contains(&max_deviation_bps) {
+            return Err(ContractError::InvalidMaxDeviationBps);
+        }
         env.storage()
             .instance()
             .set(&DataKey::MaxDeviationBps, &max_deviation_bps);
@@ -1582,5 +1608,124 @@ mod test {
 
         client.remove_source(&admin, &p, &src);
         assert_eq!(client.get_sources(&p).len(), 0);
+    }
+
+    #[test]
+    fn set_max_deviation_bps_rejects_zero() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        let err = client
+            .try_set_max_deviation_bps(&admin, &0u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidMaxDeviationBps);
+    }
+
+    #[test]
+    fn set_max_deviation_bps_rejects_unreasonably_large() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        // 10,001 bps (> 100%)
+        let err1 = client
+            .try_set_max_deviation_bps(&admin, &(MAX_MAX_DEVIATION_BPS + 1))
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err1, ContractError::InvalidMaxDeviationBps);
+
+        // u64::MAX
+        let err2 = client
+            .try_set_max_deviation_bps(&admin, &u64::MAX)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err2, ContractError::InvalidMaxDeviationBps);
+    }
+
+    #[test]
+    fn set_staleness_threshold_rejects_zero() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        let err = client
+            .try_set_staleness_threshold(&admin, &0u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::InvalidStalenessThreshold);
+    }
+
+    #[test]
+    fn set_staleness_threshold_rejects_unreasonably_large() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        // 86,401s (> 24 hours)
+        let err1 = client
+            .try_set_staleness_threshold(&admin, &(MAX_STALENESS_SECONDS + 1))
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err1, ContractError::InvalidStalenessThreshold);
+
+        // u64::MAX
+        let err2 = client
+            .try_set_staleness_threshold(&admin, &u64::MAX)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err2, ContractError::InvalidStalenessThreshold);
+    }
+
+    #[test]
+    fn set_bounds_valid_updates_succeed() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        // Boundary tests: min and max allowed bounds
+        assert!(client
+            .try_set_staleness_threshold(&admin, &MIN_STALENESS_SECONDS)
+            .is_ok());
+        assert!(client
+            .try_set_staleness_threshold(&admin, &MAX_STALENESS_SECONDS)
+            .is_ok());
+        assert!(client.try_set_staleness_threshold(&admin, &3600u64).is_ok());
+
+        assert!(client
+            .try_set_max_deviation_bps(&admin, &MIN_MAX_DEVIATION_BPS)
+            .is_ok());
+        assert!(client
+            .try_set_max_deviation_bps(&admin, &MAX_MAX_DEVIATION_BPS)
+            .is_ok());
+        assert!(client.try_set_max_deviation_bps(&admin, &2000u64).is_ok());
+    }
+
+    #[test]
+    fn init_rejects_out_of_bounds_parameters() {
+        let env = Env::default();
+        let contract_id = env.register(OraclePriceFeeds, ());
+        let client = OraclePriceFeedsClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+
+        // Reject staleness > MAX_STALENESS_SECONDS
+        let res1 = client.try_init(
+            &admin,
+            &operator,
+            &(MAX_STALENESS_SECONDS + 1),
+            &DEFAULT_MAX_DEVIATION_BPS,
+        );
+        assert_eq!(res1, Err(Ok(ContractError::InvalidStalenessThreshold)));
+
+        // Reject deviation > MAX_MAX_DEVIATION_BPS
+        let res2 = client.try_init(
+            &admin,
+            &operator,
+            &DEFAULT_STALENESS_SECONDS,
+            &(MAX_MAX_DEVIATION_BPS + 1),
+        );
+        assert_eq!(res2, Err(Ok(ContractError::InvalidMaxDeviationBps)));
     }
 }
