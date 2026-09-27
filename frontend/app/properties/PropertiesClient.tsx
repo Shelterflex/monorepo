@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PropertyCardSkeleton } from "@/components/property-card-skeleton";
 import { VirtualizedPropertyList } from "@/components/virtualized-property-list";
-import { EmptyState, LoadingState } from "@/components/ui/data-state";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/data-state";
 import useAuthStore from "@/store/useAuthStore";
 import {
   fetchSavedListingIds,
@@ -48,6 +48,8 @@ function PropertiesContent() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState(
     searchParams.get("query") || "",
   );
@@ -137,6 +139,7 @@ function PropertiesContent() {
       (async () => {
         if (!cancelled) {
           setIsLoading(true);
+          setHasError(false);
           try {
             const filters: PropertySearchFilters = {
               sortBy: (sortBy as PropertySearchFilters["sortBy"]) || "newest",
@@ -165,12 +168,14 @@ function PropertiesContent() {
               setProperties(result.data);
               setTotal(result.total);
               setTotalPages(result.totalPages);
+              setHasError(false);
             }
           } catch (error) {
             if (!cancelled) {
               console.error("Failed to fetch properties:", error);
               setProperties([]);
               setTotal(0);
+              setHasError(true);
             }
           } finally {
             if (!cancelled) {
@@ -196,6 +201,7 @@ function PropertiesContent() {
     maxAnnualRent,
     sortBy,
     page,
+    retryCount,
   ]);
 
   useEffect(() => {
@@ -610,6 +616,13 @@ function PropertiesContent() {
                 <PropertyCardSkeleton key={i} />
               ))}
             </LoadingState>
+          ) : hasError ? (
+            <ErrorState
+              title="Failed to load properties"
+              description="An error occurred while fetching properties. Please check your connection and try again."
+              onRetry={() => setRetryCount((c) => c + 1)}
+              retryLabel="Try again"
+            />
           ) : properties.length === 0 ? (
             <EmptyState
               icon={SearchX}
