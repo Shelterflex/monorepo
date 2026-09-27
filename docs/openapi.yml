@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Landlord Payout Schedule API
+  version: 1.0.0
+paths:
+  /api/landlord/payout/preferences:
+    patch:
+      summary: Update landlord payout schedule preference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schedule:
+                  type: string
+      responses:
+        '200':
+          description: Success

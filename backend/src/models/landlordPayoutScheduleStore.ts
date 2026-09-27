@@ -18,6 +18,8 @@ export interface LandlordPayoutScheduleStore {
     propertyId?: string; status?: PayoutStatus; channel?: PayoutChannel
     grouping?: PayoutGrouping; from?: string; to?: string
   }): Promise<{ periods: PayoutPeriod[]; summary: PayoutScheduleSummary }>
+  getPreference(landlordId: string): Promise<string>
+  savePreference(landlordId: string, schedule: string): Promise<string>
 }
 
 function getWeekNumber(d: Date): number {
@@ -76,6 +78,7 @@ function filterPayouts(payouts: LandlordPayout[], landlordId: string, filters?: 
 
 export class InMemoryLandlordPayoutScheduleStore implements LandlordPayoutScheduleStore {
   private payouts: Map<string, LandlordPayout> = new Map()
+  private preferences: Map<string, string> = new Map()
   seed(payout: LandlordPayout): void { this.payouts.set(payout.id, payout) }
 
   async listPayouts(landlordId: string, filters?: {
@@ -99,6 +102,15 @@ export class InMemoryLandlordPayoutScheduleStore implements LandlordPayoutSchedu
   }): Promise<{ periods: PayoutPeriod[]; summary: PayoutScheduleSummary }> {
     const results = filterPayouts(Array.from(this.payouts.values()), landlordId, filters)
     return { periods: groupPayouts(results, filters?.grouping ?? 'monthly'), summary: computeSummary(results) }
+  }
+
+  async getPreference(landlordId: string): Promise<string> {
+    return this.preferences.get(landlordId) || 'monthly'
+  }
+
+  async savePreference(landlordId: string, schedule: string): Promise<string> {
+    this.preferences.set(landlordId, schedule)
+    return schedule
   }
 }
 
@@ -156,6 +168,25 @@ export class PostgresLandlordPayoutScheduleStore implements LandlordPayoutSchedu
     const all = await this.listPayouts(landlordId, { ...filters, page: 1, pageSize: 1000 })
     const payouts = all.payouts
     return { periods: groupPayouts(payouts, filters?.grouping ?? 'monthly'), summary: computeSummary(payouts) }
+  }
+
+  async getPreference(landlordId: string): Promise<string> {
+    const pool = await getPool()
+    if (!pool) return 'monthly'
+    const { rows } = await pool.query('SELECT schedule_preference FROM landlord_payout_preferences WHERE landlord_id = $1', [landlordId])
+    return rows.length > 0 ? rows[0].schedule_preference : 'monthly'
+  }
+
+  async savePreference(landlordId: string, schedule: string): Promise<string> {
+    const pool = await getPool()
+    if (!pool) throw new Error('Database not configured')
+    await pool.query(
+      `INSERT INTO landlord_payout_preferences (landlord_id, schedule_preference, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (landlord_id) DO UPDATE SET schedule_preference = $2, updated_at = NOW()`,
+      [landlordId, schedule]
+    )
+    return schedule
   }
 }
 

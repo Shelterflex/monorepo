@@ -65,6 +65,15 @@ describe('Landlord Payout Schedule - Schema', () => {
   })
 })
 
+describe('Landlord Payout Preferences API', () => {
+  it('persists and retrieves payout schedule preference', async () => {
+    const store = new InMemoryLandlordPayoutScheduleStore()
+    await store.savePreference('landlord-1', 'weekly')
+    const pref = await store.getPreference('landlord-1')
+    expect(pref).toBe('weekly')
+  })
+})
+
 describe('groupPayouts', () => {
   it('groups payouts by month', () => {
     const payouts = [
