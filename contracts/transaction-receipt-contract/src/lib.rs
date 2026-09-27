@@ -41,6 +41,9 @@ pub const ALLOWED_TX_TYPES: [&str; 7] = [
     "CONVERSION",
 ];
 
+/// Maximum number of receipts returned in a single paginated query
+pub const MAX_PAGINATION_LIMIT: u32 = 100;
+
 /// Input parameters for recording a receipt (to avoid 10-parameter limit)
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -579,11 +582,22 @@ impl TransactionReceiptContract {
         let deal_count_key = StorageKey::DealCount(deal_id.clone());
         let total_count: u32 = env.storage().persistent().get(&deal_count_key).unwrap_or(0);
 
+        // Clamp limit to MAX_PAGINATION_LIMIT
+        let safe_limit = limit.min(MAX_PAGINATION_LIMIT);
+
         // Calculate start index from cursor (default 0)
         let start_index = cursor.unwrap_or(0);
 
-        // Calculate end index (start + limit, capped at total_count)
-        let end_index = core::cmp::min(start_index + limit, total_count);
+        // If start_index is past total_count, return empty results
+        if start_index >= total_count {
+            return results;
+        }
+
+        // Calculate end index with checked_add to prevent overflow, capped at total_count
+        let end_index = start_index
+            .checked_add(safe_limit)
+            .unwrap_or(total_count)
+            .min(total_count);
 
         // Iterate through deal index to load receipts
         for index in start_index..end_index {
@@ -632,8 +646,21 @@ impl TransactionReceiptContract {
         let user_count_key = StorageKey::UserCount(user.clone());
         let total_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
 
+        // Clamp limit to MAX_PAGINATION_LIMIT
+        let safe_limit = limit.min(MAX_PAGINATION_LIMIT);
+
         let start_index = cursor.unwrap_or(0);
-        let end_index = core::cmp::min(start_index + limit, total_count);
+
+        // If start_index is past total_count, return empty results
+        if start_index >= total_count {
+            return results;
+        }
+
+        // Calculate end index with checked_add to prevent overflow, capped at total_count
+        let end_index = start_index
+            .checked_add(safe_limit)
+            .unwrap_or(total_count)
+            .min(total_count);
 
         for index in start_index..end_index {
             let user_index_key = StorageKey::UserIndex(user.clone(), index);

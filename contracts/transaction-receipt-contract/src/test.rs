@@ -9,7 +9,7 @@ use alloc::string::ToString;
 use crate::{
     generate_tx_id, validate_tx_type, ContractError, Receipt, ReceiptInput, StorageKey,
     TransactionReceiptContract, TransactionReceiptContractClient, ALLOWED_SOURCES,
-    ALLOWED_TX_TYPES,
+    ALLOWED_TX_TYPES, MAX_PAGINATION_LIMIT,
 };
 use soroban_sdk::{
     testutils::{Address as _, Events as _},
@@ -1281,4 +1281,77 @@ fn test_invalid_input_does_not_emit_event() {
 
     // No receipt events should be emitted when validation fails
     assert_eq!(env.events().all().len(), 0);
+}
+
+#[test]
+fn test_pagination_overflow_and_limit_bounds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let user_a = Address::generate(&env);
+    let user_b = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.init(&admin, &operator);
+
+    assert_eq!(MAX_PAGINATION_LIMIT, 100);
+
+    let deal_id = String::from_str(&env, "deal_bounds_test");
+
+    // Record 3 receipts
+    for i in 1..=3 {
+        let input = ReceiptInput {
+            external_ref_source: Symbol::new(&env, "stellar"),
+            external_ref: String::from_str(&env, &alloc::format!("ref_overflow_{}", i)),
+            tx_type: Symbol::new(&env, "TENANT_REPAYMENT"),
+            amount_usdc: 100_000 * i as i128,
+            token: token.clone(),
+            deal_id: deal_id.clone(),
+            listing_id: None,
+            from: Some(user_a.clone()),
+            to: Some(user_b.clone()),
+            amount_ngn: None,
+            fx_rate_ngn_per_usdc: None,
+            fx_provider: None,
+            metadata_hash: None,
+        };
+        client.record_receipt(&operator, &input);
+    }
+
+    // 1. list_receipts_by_deal: overflow input (cursor = 1, limit = u32::MAX)
+    let deal_page_overflow = client.list_receipts_by_deal(&deal_id, &u32::MAX, &Some(1));
+    assert_eq!(deal_page_overflow.len(), 2);
+
+    // 2. list_receipts_by_deal: extreme cursor and limit (cursor = u32::MAX, limit = u32::MAX)
+    let deal_page_extreme = client.list_receipts_by_deal(&deal_id, &u32::MAX, &Some(u32::MAX));
+    assert_eq!(deal_page_extreme.len(), 0);
+
+    // 3. list_receipts_by_deal: excessive limit clamped gracefully
+    let deal_page_excessive = client.list_receipts_by_deal(&deal_id, &1000, &None);
+    assert_eq!(deal_page_excessive.len(), 3);
+
+    // 4. list_receipts_by_deal: cursor past total_count
+    let deal_page_past = client.list_receipts_by_deal(&deal_id, &10, &Some(3));
+    assert_eq!(deal_page_past.len(), 0);
+
+    // 5. list_receipts_by_user: overflow input (cursor = 1, limit = u32::MAX)
+    let user_page_overflow = client.list_receipts_by_user(&user_a, &u32::MAX, &Some(1));
+    assert_eq!(user_page_overflow.len(), 2);
+
+    // 6. list_receipts_by_user: extreme cursor and limit (cursor = u32::MAX, limit = u32::MAX)
+    let user_page_extreme = client.list_receipts_by_user(&user_a, &u32::MAX, &Some(u32::MAX));
+    assert_eq!(user_page_extreme.len(), 0);
+
+    // 7. list_receipts_by_user: excessive limit clamped gracefully
+    let user_page_excessive = client.list_receipts_by_user(&user_a, &1000, &None);
+    assert_eq!(user_page_excessive.len(), 3);
+
+    // 8. list_receipts_by_user: cursor past total_count
+    let user_page_past = client.list_receipts_by_user(&user_a, &10, &Some(5));
+    assert_eq!(user_page_past.len(), 0);
 }
