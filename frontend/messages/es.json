@@ -91,6 +91,26 @@
     "thisWeek": "Esta semana",
     "thisMonth": "Este mes"
   },
+  "payment": {
+    "fullPayment": "Pago completo",
+    "reviewDistribution": "Revisa cómo se distribuirá tu pago antes de confirmar.",
+    "rewardDistribution": "Distribución de recompensas",
+    "platformFee": "Comisión de la plataforma",
+    "platformFeeSubLabel": "Cubre las operaciones de la plataforma",
+    "reporterReward": "Recompensa del informador",
+    "reporterRewardSubLabel": "Pagada al informador de la propiedad",
+    "noReporter": "Sin informador en esta publicación",
+    "landlordPayout": "Pago al propietario",
+    "totalCharged": "Total cobrado",
+    "confirmPayment": "Confirmar pago",
+    "processing": "Procesando…",
+    "receipt": "Recibo de pago",
+    "reference": "Referencia",
+    "paymentConfirmed": "Pago confirmado",
+    "loadingDetails": "Cargando detalles del pago…",
+    "somethingWentWrong": "Algo salió mal",
+    "tryAgain": "Intentar de nuevo"
+  },
   "errors": {
     "generic": "Algo salió mal",
     "networkError": "Error de red. Por favor verifica tu conexión.",

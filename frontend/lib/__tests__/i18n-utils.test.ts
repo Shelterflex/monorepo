@@ -20,4 +20,31 @@ describe('i18n utilities', () => {
     expect(getTextDirection('ar')).toBe('rtl')
     expect(getLocaleDisplayName('fr')).toBeTruthy()
   })
+
+  it('contains all 18 payment translation keys in all non-English locales matching en.json', async () => {
+    const fs = await import('fs')
+    const path = await import('path')
+    const locales = ['fr', 'es', 'ar', 'zh']
+    const enData = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../messages/en.json'), 'utf8')
+    )
+    const enKeys = Object.keys(enData.payment).sort()
+    expect(enKeys).toHaveLength(18)
+
+    for (const locale of locales) {
+      const data = JSON.parse(
+        fs.readFileSync(
+          path.resolve(__dirname, `../../messages/${locale}.json`),
+          'utf8'
+        )
+      )
+      const targetKeys = Object.keys(data.payment || {}).sort()
+      expect(targetKeys).toEqual(enKeys)
+      for (const key of enKeys) {
+        expect(data.payment[key]).toBeTruthy()
+        expect(typeof data.payment[key]).toBe('string')
+      }
+    }
+  })
 })
+

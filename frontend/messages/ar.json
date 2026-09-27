@@ -91,6 +91,26 @@
     "thisWeek": "هذا الأسبوع",
     "thisMonth": "هذا الشهر"
   },
+  "payment": {
+    "fullPayment": "الدفع الكامل",
+    "reviewDistribution": "راجع كيفية توزيع دفعتك قبل التأكيد.",
+    "rewardDistribution": "توزيع المكافآت",
+    "platformFee": "رسوم المنصة",
+    "platformFeeSubLabel": "تغطي العمليات التشغيلية للمنصة",
+    "reporterReward": "مكافأة المبلغ",
+    "reporterRewardSubLabel": "تدفع لمبلغ العقار",
+    "noReporter": "لا يوجد مبلغ لهذا العقار",
+    "landlordPayout": "مستحقات المالك",
+    "totalCharged": "المبلغ الإجمالي المخصوم",
+    "confirmPayment": "تأكيد الدفع",
+    "processing": "جارٍ المعالجة…",
+    "receipt": "إيصال الدفع",
+    "reference": "المرجع",
+    "paymentConfirmed": "تم تأكيد الدفع",
+    "loadingDetails": "جارٍ تحميل تفاصيل الدفع…",
+    "somethingWentWrong": "حدث خطأ ما",
+    "tryAgain": "حاول مرة أخرى"
+  },
   "errors": {
     "generic": "حدث خطأ ما",
     "networkError": "خطأ في الشبكة. يرجى التحقق من اتصالك.",
