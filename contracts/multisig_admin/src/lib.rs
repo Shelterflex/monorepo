@@ -1,14 +1,35 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Bytes, Env, Symbol, Vec};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Bytes, Env, Symbol, Vec,
+};
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum ContractError {
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    InvalidThreshold = 3,
+    NotASigner = 4,
+    ProposalExpired = 5,
+    NotPending = 6,
+    AlreadyApproved = 7,
+    NotApproved = 8,
+    NotEnoughApprovals = 9,
+    UnknownProposal = 10,
+}
+
+pub type MultisigError = ContractError;
 
 #[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     pub signers: Vec<Address>,
     pub threshold: u32,
 }
 
 #[contracttype]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProposalStatus {
     Pending,
     Executed,
@@ -17,7 +38,7 @@ pub enum ProposalStatus {
 }
 
 #[contracttype]
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Proposal {
     pub proposer: Address,
     pub operation: OperationType,
@@ -28,7 +49,7 @@ pub struct Proposal {
 }
 
 #[contracttype]
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OperationType {
     ForceReleaseEscrow,
     ExecuteSlash,
@@ -51,12 +72,12 @@ pub struct MultisigAdmin;
 
 #[contractimpl]
 impl MultisigAdmin {
-    pub fn init(env: Env, signers: Vec<Address>, threshold: u32) {
+    pub fn init(env: Env, signers: Vec<Address>, threshold: u32) -> Result<(), ContractError> {
         if env.storage().instance().has(&DataKey::Config) {
-            panic!("AlreadyInitialized");
+            return Err(ContractError::AlreadyInitialized);
         }
-        if threshold == 0 || (threshold > signers.len() as u32) {
-            panic!("InvalidThreshold");
+        if threshold == 0 || (threshold > signers.len()) {
+            return Err(ContractError::InvalidThreshold);
         }
         let cfg = Config {
             signers: signers.clone(),
@@ -73,6 +94,7 @@ impl MultisigAdmin {
             ),
             (),
         );
+        Ok(())
     }
 
     pub fn propose(
@@ -81,20 +103,20 @@ impl MultisigAdmin {
         operation: OperationType,
         params: Bytes,
         expiry: u64,
-    ) -> u64 {
+    ) -> Result<u64, ContractError> {
         proposer.require_auth();
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(ContractError::NotInitialized)?;
         if !cfg.signers.contains(&proposer) {
-            panic!("NotASigner");
+            return Err(ContractError::NotASigner);
         }
         // Reject proposals with an expiry already in the past
         let now = env.ledger().timestamp();
         if expiry != 0 && now >= expiry {
-            panic!("ProposalExpired");
+            return Err(ContractError::ProposalExpired);
         }
         let id: u64 = env
             .storage()
@@ -124,27 +146,27 @@ impl MultisigAdmin {
             ),
             id,
         );
-        id
+        Ok(id)
     }
 
-    pub fn approve(env: Env, signer: Address, proposal_id: u64) {
+    pub fn approve(env: Env, signer: Address, proposal_id: u64) -> Result<(), ContractError> {
         signer.require_auth();
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(ContractError::NotInitialized)?;
         if !cfg.signers.contains(&signer) {
-            panic!("NotASigner");
+            return Err(ContractError::NotASigner);
         }
         let prop: Proposal = env
             .storage()
             .instance()
             .get(&DataKey::Proposal(proposal_id))
-            .expect("UnknownProposal");
+            .ok_or(ContractError::UnknownProposal)?;
         if let ProposalStatus::Pending = prop.status {
         } else {
-            panic!("NotPending");
+            return Err(ContractError::NotPending);
         }
         // Reject approval on expired proposals and emit the expired event
         let now = env.ledger().timestamp();
@@ -161,7 +183,7 @@ impl MultisigAdmin {
                 ),
                 proposal_id,
             );
-            panic!("ProposalExpired");
+            return Err(ContractError::ProposalExpired);
         }
         let mut approvals: Vec<Address> = env
             .storage()
@@ -169,11 +191,11 @@ impl MultisigAdmin {
             .get(&DataKey::Approvals(proposal_id))
             .unwrap_or_else(|| Vec::new(&env));
         if approvals.contains(&signer) {
-            panic!("AlreadyApproved");
+            return Err(ContractError::AlreadyApproved);
         }
         approvals.push_back(signer.clone());
         let mut updated_prop = prop;
-        updated_prop.approval_count = approvals.len() as u32;
+        updated_prop.approval_count = approvals.len();
         env.storage()
             .instance()
             .set(&DataKey::Approvals(proposal_id), &approvals);
@@ -187,6 +209,7 @@ impl MultisigAdmin {
             ),
             (proposal_id, signer),
         );
+        Ok(())
     }
 
     /// Revoke a prior approval from `signer` for `proposal_id`.
@@ -194,29 +217,33 @@ impl MultisigAdmin {
     /// Lowers the live approval count. If count drops below threshold the
     /// proposal cannot be executed until re-approved. The proposal must still
     /// be Pending and not expired.
-    pub fn revoke_approval(env: Env, signer: Address, proposal_id: u64) {
+    pub fn revoke_approval(
+        env: Env,
+        signer: Address,
+        proposal_id: u64,
+    ) -> Result<(), ContractError> {
         signer.require_auth();
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(ContractError::NotInitialized)?;
         if !cfg.signers.contains(&signer) {
-            panic!("NotASigner");
+            return Err(ContractError::NotASigner);
         }
         let prop: Proposal = env
             .storage()
             .instance()
             .get(&DataKey::Proposal(proposal_id))
-            .expect("UnknownProposal");
+            .ok_or(ContractError::UnknownProposal)?;
         if let ProposalStatus::Pending = prop.status {
         } else {
-            panic!("NotPending");
+            return Err(ContractError::NotPending);
         }
         // Reject revocation on already-expired proposals
         let now = env.ledger().timestamp();
         if prop.expiry != 0 && now > prop.expiry {
-            panic!("ProposalExpired");
+            return Err(ContractError::ProposalExpired);
         }
         let approvals: Vec<Address> = env
             .storage()
@@ -224,7 +251,7 @@ impl MultisigAdmin {
             .get(&DataKey::Approvals(proposal_id))
             .unwrap_or_else(|| Vec::new(&env));
         if !approvals.contains(&signer) {
-            panic!("NotApproved");
+            return Err(ContractError::NotApproved);
         }
         // Rebuild the approvals list without the revoking signer
         let mut new_approvals: Vec<Address> = Vec::new(&env);
@@ -235,7 +262,7 @@ impl MultisigAdmin {
             }
         }
         let mut updated_prop = prop;
-        updated_prop.approval_count = new_approvals.len() as u32;
+        updated_prop.approval_count = new_approvals.len();
         env.storage()
             .instance()
             .set(&DataKey::Approvals(proposal_id), &new_approvals);
@@ -249,28 +276,29 @@ impl MultisigAdmin {
             ),
             (proposal_id, signer),
         );
+        Ok(())
     }
 
-    pub fn execute(env: Env, executor: Address, proposal_id: u64) {
+    pub fn execute(env: Env, executor: Address, proposal_id: u64) -> Result<(), ContractError> {
         executor.require_auth();
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(ContractError::NotInitialized)?;
         if !cfg.signers.contains(&executor) {
-            panic!("NotASigner");
+            return Err(ContractError::NotASigner);
         }
         let mut prop: Proposal = env
             .storage()
             .instance()
             .get(&DataKey::Proposal(proposal_id))
-            .expect("UnknownProposal");
+            .ok_or(ContractError::UnknownProposal)?;
         if let ProposalStatus::Pending = prop.status {
         } else {
-            panic!("NotPending");
+            return Err(ContractError::NotPending);
         }
-        let now: u64 = env.ledger().timestamp() as u64;
+        let now: u64 = env.ledger().timestamp();
         if prop.expiry != 0 && now > prop.expiry {
             prop.status = ProposalStatus::Expired;
             env.storage()
@@ -283,7 +311,7 @@ impl MultisigAdmin {
                 ),
                 proposal_id,
             );
-            panic!("ProposalExpired");
+            return Err(ContractError::ProposalExpired);
         }
         // Re-check live approval count (may have been lowered by revocations)
         let approvals: Vec<Address> = env
@@ -291,8 +319,8 @@ impl MultisigAdmin {
             .instance()
             .get(&DataKey::Approvals(proposal_id))
             .unwrap_or_else(|| Vec::new(&env));
-        if (approvals.len() as u32) < cfg.threshold {
-            panic!("NotEnoughApprovals");
+        if approvals.len() < cfg.threshold {
+            return Err(ContractError::NotEnoughApprovals);
         }
         prop.status = ProposalStatus::Executed;
         env.storage()
@@ -305,26 +333,27 @@ impl MultisigAdmin {
             ),
             proposal_id,
         );
+        Ok(())
     }
 
-    pub fn cancel(env: Env, caller: Address, proposal_id: u64) {
+    pub fn cancel(env: Env, caller: Address, proposal_id: u64) -> Result<(), ContractError> {
         caller.require_auth();
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(ContractError::NotInitialized)?;
         if !cfg.signers.contains(&caller) {
-            panic!("NotASigner");
+            return Err(ContractError::NotASigner);
         }
         let mut prop: Proposal = env
             .storage()
             .instance()
             .get(&DataKey::Proposal(proposal_id))
-            .expect("UnknownProposal");
+            .ok_or(ContractError::UnknownProposal)?;
         if let ProposalStatus::Pending = prop.status {
         } else {
-            panic!("NotPending");
+            return Err(ContractError::NotPending);
         }
         prop.status = ProposalStatus::Cancelled;
         env.storage()
@@ -337,13 +366,14 @@ impl MultisigAdmin {
             ),
             proposal_id,
         );
+        Ok(())
     }
 
-    pub fn get_proposal(env: Env, proposal_id: u64) -> Proposal {
+    pub fn get_proposal(env: Env, proposal_id: u64) -> Result<Proposal, ContractError> {
         env.storage()
             .instance()
             .get(&DataKey::Proposal(proposal_id))
-            .expect("UnknownProposal")
+            .ok_or(ContractError::UnknownProposal)
     }
 
     /// List all proposal IDs, optionally filtered by status.
@@ -413,14 +443,10 @@ mod test {
         client.approve(&b, &id);
         client.execute(&a, &id);
         let prop = client.get_proposal(&id);
-        match prop.status {
-            ProposalStatus::Executed => {}
-            _ => panic!("expected executed"),
-        }
+        assert_eq!(prop.status, ProposalStatus::Executed);
     }
 
     #[test]
-    #[should_panic(expected = "NotEnoughApprovals")]
     fn threshold_not_reached_execute_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -436,12 +462,12 @@ mod test {
             &0u64,
         );
         client.approve(&a, &id);
-        // only 1 of 2 required approvals — execute must panic
-        client.execute(&a, &id);
+        // only 1 of 2 required approvals — execute must fail with NotEnoughApprovals
+        let res = client.try_execute(&a, &id);
+        assert_eq!(res, Err(Ok(ContractError::NotEnoughApprovals)));
     }
 
     #[test]
-    #[should_panic(expected = "ProposalExpired")]
     fn expired_proposal_execute_fails() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
@@ -462,11 +488,11 @@ mod test {
         client.approve(&b, &id);
         // Advance ledger past expiry
         env.ledger().set_timestamp(expiry + 1);
-        client.execute(&a, &id);
+        let res = client.try_execute(&a, &id);
+        assert_eq!(res, Err(Ok(ContractError::ProposalExpired)));
     }
 
     #[test]
-    #[should_panic(expected = "AlreadyApproved")]
     fn duplicate_approval_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -481,29 +507,29 @@ mod test {
             &0u64,
         );
         client.approve(&a, &id);
-        client.approve(&a, &id); // must panic
+        let res = client.try_approve(&a, &id);
+        assert_eq!(res, Err(Ok(ContractError::AlreadyApproved)));
     }
 
     #[test]
-    #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_propose() {
         let env = Env::default();
-        let (a, b, _c, signers) = setup(&env);
+        let (_a, _b, _c, signers) = setup(&env);
         env.mock_all_auths();
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
         client.init(&signers, &2u32);
         let outsider = Address::generate(&env);
-        client.propose(
+        let res = client.try_propose(
             &outsider,
             &OperationType::FreezeAccount,
             &Bytes::from_slice(&env, b"{}"),
             &0u64,
         );
+        assert_eq!(res, Err(Ok(ContractError::NotASigner)));
     }
 
     #[test]
-    #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_approve() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -518,11 +544,11 @@ mod test {
             &0u64,
         );
         let outsider = Address::generate(&env);
-        client.approve(&outsider, &id);
+        let res = client.try_approve(&outsider, &id);
+        assert_eq!(res, Err(Ok(ContractError::NotASigner)));
     }
 
     #[test]
-    #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_execute() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
@@ -539,7 +565,8 @@ mod test {
         client.approve(&a, &id);
         client.approve(&b, &id);
         let outsider = Address::generate(&env);
-        client.execute(&outsider, &id);
+        let res = client.try_execute(&outsider, &id);
+        assert_eq!(res, Err(Ok(ContractError::NotASigner)));
     }
 
     #[test]
@@ -558,14 +585,10 @@ mod test {
         );
         client.cancel(&a, &id);
         let prop = client.get_proposal(&id);
-        match prop.status {
-            ProposalStatus::Cancelled => {}
-            _ => panic!("expected cancelled"),
-        }
+        assert_eq!(prop.status, ProposalStatus::Cancelled);
     }
 
     #[test]
-    #[should_panic(expected = "NotPending")]
     fn execute_cancelled_proposal_fails() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
@@ -582,7 +605,8 @@ mod test {
         client.approve(&a, &id);
         client.approve(&b, &id);
         client.cancel(&a, &id);
-        client.execute(&a, &id); // must panic: NotPending
+        let res = client.try_execute(&a, &id);
+        assert_eq!(res, Err(Ok(ContractError::NotPending)));
     }
 
     #[test]
@@ -647,7 +671,6 @@ mod test {
     // ── TTL / expiry on approve ───────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "ProposalExpired")]
     fn expiry_blocks_approve() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
@@ -665,14 +688,14 @@ mod test {
         );
         // Advance past expiry
         env.ledger().set_timestamp(expiry + 1);
-        // Approve on an expired proposal must panic
-        client.approve(&b, &id);
+        // Approve on an expired proposal must fail with ProposalExpired
+        let res = client.try_approve(&b, &id);
+        assert_eq!(res, Err(Ok(ContractError::ProposalExpired)));
     }
 
     // ── Revocation ───────────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "NotEnoughApprovals")]
     fn revoke_below_threshold_blocks_execute() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
@@ -696,7 +719,8 @@ mod test {
         assert_eq!(client.get_proposal(&id).approval_count, 1);
 
         // Execute must fail: only 1 of 2 required approvals
-        client.execute(&a, &id);
+        let res = client.try_execute(&a, &id);
+        assert_eq!(res, Err(Ok(ContractError::NotEnoughApprovals)));
     }
 
     #[test]
@@ -728,15 +752,11 @@ mod test {
         // Execute must now succeed
         client.execute(&a, &id);
         let prop = client.get_proposal(&id);
-        match prop.status {
-            ProposalStatus::Executed => {}
-            _ => panic!("expected executed"),
-        }
+        assert_eq!(prop.status, ProposalStatus::Executed);
     }
 
     #[test]
-    #[should_panic(expected = "NotApproved")]
-    fn revoke_without_prior_approval_panics() {
+    fn revoke_without_prior_approval_fails() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
         env.mock_all_auths();
@@ -750,12 +770,14 @@ mod test {
             &Bytes::from_slice(&env, b"{}"),
             &0u64,
         );
-        // B never approved — revoke must panic
-        client.revoke_approval(&b, &id);
+        // B never approved — revoke must return NotApproved
+        assert_eq!(
+            client.try_revoke_approval(&b, &id),
+            Err(Ok(ContractError::NotApproved))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_revoke() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -772,7 +794,10 @@ mod test {
         );
         client.approve(&a, &id);
         let outsider = Address::generate(&env);
-        client.revoke_approval(&outsider, &id);
+        assert_eq!(
+            client.try_revoke_approval(&outsider, &id),
+            Err(Ok(ContractError::NotASigner))
+        );
     }
 
     #[test]
@@ -793,7 +818,7 @@ mod test {
         client.approve(&a, &id);
         // Second approve from same signer is rejected (count stays at 1)
         let res = client.try_approve(&a, &id);
-        assert!(res.is_err(), "duplicate approve must be rejected");
+        assert_eq!(res, Err(Ok(ContractError::AlreadyApproved)));
         assert_eq!(client.get_proposal(&id).approval_count, 1);
 
         // Proposal is still live — another signer can still approve
@@ -805,7 +830,6 @@ mod test {
     // ── init validation ───────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "AlreadyInitialized")]
     fn double_init_fails() {
         let env = Env::default();
         let (_a, _b, _c, signers) = setup(&env);
@@ -813,31 +837,38 @@ mod test {
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
         client.init(&signers, &2u32);
-        // Second init must panic
-        client.init(&signers, &2u32);
+        // Second init must panic / fail with AlreadyInitialized
+        assert_eq!(
+            client.try_init(&signers, &2u32),
+            Err(Ok(ContractError::AlreadyInitialized))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "InvalidThreshold")]
     fn init_zero_threshold_fails() {
         let env = Env::default();
         let (_a, _b, _c, signers) = setup(&env);
         env.mock_all_auths();
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
-        client.init(&signers, &0u32);
+        assert_eq!(
+            client.try_init(&signers, &0u32),
+            Err(Ok(ContractError::InvalidThreshold))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "InvalidThreshold")]
     fn init_threshold_exceeds_signers_fails() {
         let env = Env::default();
         let (_a, _b, _c, signers) = setup(&env);
         env.mock_all_auths();
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
-        // 3 signers, threshold 4 — must panic
-        client.init(&signers, &4u32);
+        // 3 signers, threshold 4 — must fail with InvalidThreshold
+        assert_eq!(
+            client.try_init(&signers, &4u32),
+            Err(Ok(ContractError::InvalidThreshold))
+        );
     }
 
     #[test]
@@ -860,33 +891,31 @@ mod test {
         client.approve(&a, &id);
         // A single approval meets the threshold of 1
         client.execute(&a, &id);
-        match client.get_proposal(&id).status {
-            ProposalStatus::Executed => {}
-            _ => panic!("expected executed"),
-        }
+        assert_eq!(client.get_proposal(&id).status, ProposalStatus::Executed);
     }
 
     // ── propose guards ─────────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn propose_before_init_fails() {
         let env = Env::default();
         let (a, _b, _c, _signers) = setup(&env);
         env.mock_all_auths();
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
-        // No init — propose must panic on missing config
-        client.propose(
-            &a,
-            &OperationType::FreezeAccount,
-            &Bytes::from_slice(&env, b"{}"),
-            &0u64,
+        // No init — propose must fail with NotInitialized
+        assert_eq!(
+            client.try_propose(
+                &a,
+                &OperationType::FreezeAccount,
+                &Bytes::from_slice(&env, b"{}"),
+                &0u64,
+            ),
+            Err(Ok(ContractError::NotInitialized))
         );
     }
 
     #[test]
-    #[should_panic(expected = "ProposalExpired")]
     fn propose_with_past_expiry_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -896,11 +925,14 @@ mod test {
         client.init(&signers, &2u32);
         // Advance the ledger so a non-zero expiry lands in the past
         env.ledger().set_timestamp(100);
-        client.propose(
-            &a,
-            &OperationType::FreezeAccount,
-            &Bytes::from_slice(&env, b"{}"),
-            &50u64,
+        assert_eq!(
+            client.try_propose(
+                &a,
+                &OperationType::FreezeAccount,
+                &Bytes::from_slice(&env, b"{}"),
+                &50u64,
+            ),
+            Err(Ok(ContractError::ProposalExpired))
         );
     }
 
@@ -931,7 +963,6 @@ mod test {
     // ── approve / execute / cancel error paths ─────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "UnknownProposal")]
     fn approve_unknown_proposal_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -939,11 +970,13 @@ mod test {
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
         client.init(&signers, &2u32);
-        client.approve(&a, &999u64);
+        assert_eq!(
+            client.try_approve(&a, &999u64),
+            Err(Ok(ContractError::UnknownProposal))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "NotPending")]
     fn approve_executed_proposal_fails() {
         let env = Env::default();
         let (a, b, _c, signers) = setup(&env);
@@ -960,12 +993,14 @@ mod test {
         client.approve(&a, &id);
         client.approve(&b, &id);
         client.execute(&a, &id);
-        // Approving an already-executed proposal must panic
-        client.approve(&b, &id);
+        // Approving an already-executed proposal must fail with NotPending
+        assert_eq!(
+            client.try_approve(&b, &id),
+            Err(Ok(ContractError::NotPending))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "UnknownProposal")]
     fn execute_unknown_proposal_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -973,11 +1008,13 @@ mod test {
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
         client.init(&signers, &2u32);
-        client.execute(&a, &999u64);
+        assert_eq!(
+            client.try_execute(&a, &999u64),
+            Err(Ok(ContractError::UnknownProposal))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "UnknownProposal")]
     fn cancel_unknown_proposal_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -985,11 +1022,13 @@ mod test {
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
         client.init(&signers, &2u32);
-        client.cancel(&a, &999u64);
+        assert_eq!(
+            client.try_cancel(&a, &999u64),
+            Err(Ok(ContractError::UnknownProposal))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "NotPending")]
     fn cancel_already_cancelled_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -1004,12 +1043,14 @@ mod test {
             &0u64,
         );
         client.cancel(&a, &id);
-        // Cancelling twice must panic
-        client.cancel(&a, &id);
+        // Cancelling twice must fail with NotPending
+        assert_eq!(
+            client.try_cancel(&a, &id),
+            Err(Ok(ContractError::NotPending))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "NotASigner")]
     fn non_signer_cannot_cancel() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -1024,11 +1065,13 @@ mod test {
             &0u64,
         );
         let outsider = Address::generate(&env);
-        client.cancel(&outsider, &id);
+        assert_eq!(
+            client.try_cancel(&outsider, &id),
+            Err(Ok(ContractError::NotASigner))
+        );
     }
 
     #[test]
-    #[should_panic(expected = "UnknownProposal")]
     fn get_unknown_proposal_fails() {
         let env = Env::default();
         let (_a, _b, _c, signers) = setup(&env);
@@ -1036,13 +1079,15 @@ mod test {
         let contract_id = env.register(MultisigAdmin, ());
         let client = MultisigAdminClient::new(&env, &contract_id);
         client.init(&signers, &2u32);
-        client.get_proposal(&42u64);
+        assert_eq!(
+            client.try_get_proposal(&42u64),
+            Err(Ok(ContractError::UnknownProposal))
+        );
     }
 
     // ── revoke error paths ─────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "NotPending")]
     fn revoke_on_cancelled_proposal_fails() {
         let env = Env::default();
         let (a, _b, _c, signers) = setup(&env);
@@ -1058,8 +1103,11 @@ mod test {
         );
         client.approve(&a, &id);
         client.cancel(&a, &id);
-        // Revoking an approval on a cancelled proposal must panic
-        client.revoke_approval(&a, &id);
+        // Revoking an approval on a cancelled proposal must fail with NotPending
+        assert_eq!(
+            client.try_revoke_approval(&a, &id),
+            Err(Ok(ContractError::NotPending))
+        );
     }
 
     // ── threshold boundary: extra approvals & duplicate signer ────────────────
@@ -1088,10 +1136,7 @@ mod test {
         assert_eq!(client.get_proposal(&id).approval_count, 3);
 
         client.execute(&a, &id);
-        match client.get_proposal(&id).status {
-            ProposalStatus::Executed => {}
-            _ => panic!("expected executed with threshold+1 approvals"),
-        }
+        assert_eq!(client.get_proposal(&id).status, ProposalStatus::Executed);
     }
 
     #[test]
@@ -1114,10 +1159,7 @@ mod test {
         );
         client.approve(&a, &id);
         let dup = client.try_approve(&a, &id);
-        assert!(
-            dup.is_err(),
-            "duplicate approval by same signer must be rejected"
-        );
+        assert_eq!(dup, Err(Ok(ContractError::AlreadyApproved)));
         assert_eq!(
             client.get_proposal(&id).approval_count,
             1,
@@ -1126,10 +1168,7 @@ mod test {
 
         // Confirm the proposal is genuinely still under threshold: execute fails.
         let exec = client.try_execute(&a, &id);
-        assert!(
-            exec.is_err(),
-            "one distinct signer must not satisfy a threshold of 2"
-        );
+        assert_eq!(exec, Err(Ok(ContractError::NotEnoughApprovals)));
     }
 
     // ── event assertions ─────────────────────────────────────────────────────────
