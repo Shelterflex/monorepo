@@ -36,6 +36,7 @@ pub enum ContractError {
     UpgradeAlreadyPending = 4,
     NoUpgradePending = 5,
     UpgradeDelayNotMet = 6,
+    GuardianNotSet = 8,
 }
 
 #[contracttype]
@@ -574,13 +575,12 @@ impl StakingRewards {
         if admin != stored_admin {
             return Err(ContractError::NotAuthorized);
         }
-        if let Some(guardian) = env
+        let guardian = env
             .storage()
             .instance()
             .get::<_, Address>(&StorageKey::Guardian)
-        {
-            guardian.require_auth();
-        }
+            .ok_or(ContractError::GuardianNotSet)?;
+        guardian.require_auth();
         env.storage()
             .instance()
             .remove(&StorageKey::PendingUpgradeHash);

@@ -89,6 +89,8 @@ pub enum ContractError {
     InvalidUpgradeVersion = 15,
     /// Stored state schema is incompatible with this contract version
     IncompatibleStateSchema = 16,
+    /// Guardian is required but has not been configured in storage
+    GuardianNotSet = 18,
 }
 
 // ── Contract ─────────────────────────────────────────────────────────────────
@@ -467,14 +469,13 @@ impl RentWallet {
         // upgrades for now (same safety policy as normal upgrades).
         validate_upgrade_safety(&env, new_version)?;
 
-        // Multi-sig: require guardian if configured
-        if let Some(guardian) = env
+        // Multi-sig: guardian must be configured and authorize emergency upgrade
+        let guardian = env
             .storage()
             .instance()
             .get::<_, Address>(&DataKey::Guardian)
-        {
-            guardian.require_auth();
-        }
+            .ok_or(ContractError::GuardianNotSet)?;
+        guardian.require_auth();
         // Clear any pending upgrade
         env.storage()
             .instance()
@@ -1738,6 +1739,33 @@ mod test {
         let result = client.try_emergency_upgrade(&admin, &hash, &2u32);
         // Should fail: guardian.require_auth() not met
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn emergency_upgrade_fails_without_guardian() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _user, _non_admin) = setup(&env);
+        let hash = BytesN::from_array(&env, &[1u8; 32]);
+        env.mock_all_auths();
+
+        // No guardian configured: must fail with GuardianNotSet
+        let res = client.try_emergency_upgrade(&admin, &hash, &2u32);
+        assert_eq!(res, Err(Ok(ContractError::GuardianNotSet)));
+    }
+
+    #[test]
+    fn emergency_upgrade_succeeds_with_both_auths() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _user, _non_admin) = setup(&env);
+        let guardian = Address::generate(&env);
+        let hash = BytesN::from_array(&env, &[1u8; 32]);
+
+        env.mock_all_auths();
+        client.set_guardian(&admin, &guardian);
+
+        let res = client.try_emergency_upgrade(&admin, &hash, &2u32);
+        assert!(res.is_ok());
+        assert_eq!(client.contract_version(), 2u32);
     }
 
     #[test]

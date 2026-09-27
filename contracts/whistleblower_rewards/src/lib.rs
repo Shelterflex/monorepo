@@ -75,6 +75,7 @@ pub enum ContractError {
     AllocationAlreadyRevoked = 14,
     AllocationNotFound = 15,
     HoldWindowElapsed = 16,
+    GuardianNotSet = 17,
 }
 
 #[contract]
@@ -644,13 +645,12 @@ impl WhistleblowerRewards {
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
-        if let Some(guardian) = env
+        let guardian = env
             .storage()
             .instance()
             .get::<_, Address>(&StorageKey::Guardian)
-        {
-            guardian.require_auth();
-        }
+            .ok_or(ContractError::GuardianNotSet)?;
+        guardian.require_auth();
         env.storage()
             .instance()
             .remove(&StorageKey::PendingUpgradeHash);
@@ -1746,5 +1746,56 @@ mod test {
             .unwrap();
 
         assert_eq!(client.claimable(&wb, &listing), 0i128);
+    }
+
+    #[test]
+    fn emergency_upgrade_fails_without_guardian() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _token_id, _token_admin) = setup(&env);
+        let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+        env.mock_all_auths();
+
+        // No guardian set: must fail with GuardianNotSet
+        let res = client.try_emergency_upgrade(&admin, &hash);
+        assert_eq!(res, Err(Ok(ContractError::GuardianNotSet)));
+    }
+
+    #[test]
+    fn emergency_upgrade_requires_guardian_auth() {
+        let env = Env::default();
+        let (contract_id, client, admin, _operator, _token_id, _token_admin) = setup(&env);
+        let guardian = Address::generate(&env);
+        let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+
+        env.mock_all_auths();
+        client.set_guardian(&admin, &guardian);
+
+        // Only admin authorizes, guardian does not
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "emergency_upgrade",
+                args: (admin.clone(), hash.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let res = client.try_emergency_upgrade(&admin, &hash);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn emergency_upgrade_succeeds_with_both_auths() {
+        let env = Env::default();
+        let (_contract_id, client, admin, _operator, _token_id, _token_admin) = setup(&env);
+        let guardian = Address::generate(&env);
+        let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+
+        env.mock_all_auths();
+        client.set_guardian(&admin, &guardian);
+
+        // Both admin and guardian authorized via mock_all_auths
+        let res = client.try_emergency_upgrade(&admin, &hash);
+        assert!(res.is_ok());
     }
 }
