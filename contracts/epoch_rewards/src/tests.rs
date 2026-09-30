@@ -2,7 +2,7 @@ extern crate std;
 
 use crate::{ContractError, EpochRewards, EpochRewardsClient};
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Events, Ledger},
     Address, Env,
 };
 
@@ -287,6 +287,18 @@ fn distribute_rewards_fails_when_paused() {
     client.unpause(&admin);
     assert!(!client.is_paused());
     assert!(client.try_fund_epoch_rewards(&admin, &1_000).is_ok());
+}
+
+#[test]
+fn pause_cycle_emits_shared_events() {
+    let env = Env::default();
+    let (admin, client) = setup(&env, 100);
+
+    client.pause(&admin);
+    client.unpause(&admin);
+
+    let events = env.events().all();
+    assert!(events.len() >= 3, "init, pause, and unpause events expected");
 }
 
 // ── 10. Conservation: uneven stake split ─────────────────────────────────────

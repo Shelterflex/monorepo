@@ -1,5 +1,6 @@
 #![no_std]
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol, Vec};
 
 // ── Storage Keys ─────────────────────────────────────────────────────────────
@@ -135,12 +136,7 @@ impl StakeDelegation {
     }
 
     fn require_not_paused(env: &Env) -> Result<(), ContractError> {
-        if env
-            .storage()
-            .instance()
-            .get::<_, bool>(&DataKey::Paused)
-            .unwrap_or(false)
-        {
+        if <StakeDelegation as Pausable>::is_paused(env.clone()) {
             return Err(ContractError::Paused);
         }
         Ok(())
@@ -975,36 +971,6 @@ impl StakeDelegation {
         Self::current_epoch(&env)
     }
 
-    pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
-        Self::require_admin(&env, &admin)?;
-        env.storage().instance().set(&DataKey::Paused, &true);
-        env.events().publish(
-            (Symbol::new(&env, "delegation"), Symbol::new(&env, "paused")),
-            admin,
-        );
-        Ok(())
-    }
-
-    pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
-        Self::require_admin(&env, &admin)?;
-        env.storage().instance().set(&DataKey::Paused, &false);
-        env.events().publish(
-            (
-                Symbol::new(&env, "delegation"),
-                Symbol::new(&env, "unpaused"),
-            ),
-            admin,
-        );
-        Ok(())
-    }
-
-    pub fn is_paused(env: Env) -> bool {
-        env.storage()
-            .instance()
-            .get::<_, bool>(&DataKey::Paused)
-            .unwrap_or(false)
-    }
-
     // ── Internal helpers ──────────────────────────────────────────────────────
 
     fn get_total_staked(env: &Env) -> i128 {
@@ -1224,6 +1190,36 @@ impl StakeDelegation {
         );
 
         Ok(amount)
+    }
+}
+
+#[contractimpl]
+impl Pausable for StakeDelegation {
+    fn pause(env: Env, admin: Address) -> Result<(), PausableError> {
+        StakeDelegation::require_admin(&env, &admin).map_err(|_| PausableError::NotAuthorized)?;
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: Env, admin: Address) -> Result<(), PausableError> {
+        StakeDelegation::require_admin(&env, &admin).map_err(|_| PausableError::NotAuthorized)?;
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<_, bool>(&DataKey::Paused)
+            .unwrap_or(false)
     }
 }
 
@@ -1651,7 +1647,7 @@ mod tests {
         let attacker = Address::generate(&env);
 
         let result = client.try_pause(&attacker);
-        assert_eq!(result.unwrap_err().unwrap(), ContractError::NotAuthorized);
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     #[test]
@@ -1662,7 +1658,7 @@ mod tests {
 
         client.pause(&admin);
         let result = client.try_unpause(&attacker);
-        assert_eq!(result.unwrap_err().unwrap(), ContractError::NotAuthorized);
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     #[test]

@@ -280,6 +280,13 @@ impl Timelock {
         }
 
         env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (
+                Symbol::new(&env, "governance"),
+                Symbol::new(&env, "unpause"),
+            ),
+            (),
+        );
         Ok(())
     }
 

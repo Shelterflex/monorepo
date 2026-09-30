@@ -1,5 +1,6 @@
 #![no_std]
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol};
 
 // ── Storage Keys ─────────────────────────────────────────────────────────────
@@ -161,32 +162,8 @@ impl EpochRewards {
         Ok(())
     }
 
-    pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
-        Self::require_admin(&env, &admin)?;
-        env.storage().instance().set(&DataKey::Paused, &true);
-        Ok(())
-    }
-
-    pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
-        Self::require_admin(&env, &admin)?;
-        env.storage().instance().set(&DataKey::Paused, &false);
-        Ok(())
-    }
-
-    pub fn is_paused(env: Env) -> bool {
-        env.storage()
-            .instance()
-            .get::<_, bool>(&DataKey::Paused)
-            .unwrap_or(false)
-    }
-
     fn require_not_paused(env: &Env) -> Result<(), ContractError> {
-        if env
-            .storage()
-            .instance()
-            .get::<_, bool>(&DataKey::Paused)
-            .unwrap_or(false)
-        {
+        if <EpochRewards as Pausable>::is_paused(env.clone()) {
             return Err(ContractError::Paused);
         }
         Ok(())
@@ -629,6 +606,36 @@ impl EpochRewards {
             return 0;
         }
         stake.amount * (reward_index - stake.user_reward_index) / SCALE
+    }
+}
+
+#[contractimpl]
+impl Pausable for EpochRewards {
+    fn pause(env: Env, admin: Address) -> Result<(), PausableError> {
+        EpochRewards::require_admin(&env, &admin).map_err(|_| PausableError::NotAuthorized)?;
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: Env, admin: Address) -> Result<(), PausableError> {
+        EpochRewards::require_admin(&env, &admin).map_err(|_| PausableError::NotAuthorized)?;
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<_, bool>(&DataKey::Paused)
+            .unwrap_or(false)
     }
 }
 

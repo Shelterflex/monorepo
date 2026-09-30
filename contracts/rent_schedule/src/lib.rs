@@ -3,6 +3,7 @@
 use soroban_sdk::{
     contract, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
 };
+use soroban_pausable::{Pausable, PausableError};
 
 #[contracttype]
 #[derive(Clone)]
@@ -58,7 +59,7 @@ pub struct Config {
     pub operator: Address,
 }
 
-fn is_paused(env: &Env) -> bool {
+fn is_paused_state(env: &Env) -> bool {
     env.storage()
         .instance()
         .get::<_, bool>(&DataKey::Paused)
@@ -66,7 +67,7 @@ fn is_paused(env: &Env) -> bool {
 }
 
 fn require_not_paused(env: &Env) {
-    if is_paused(env) {
+    if <RentSchedule as Pausable>::is_paused(env.clone()) {
         panic!("ContractPaused");
     }
 }
@@ -103,50 +104,6 @@ impl RentSchedule {
             ),
             (),
         );
-    }
-
-    pub fn pause(env: Env, caller: Address) {
-        caller.require_auth();
-        let cfg: Config = env
-            .storage()
-            .instance()
-            .get(&DataKey::Config)
-            .expect("NotInitialized");
-        if caller != cfg.admin {
-            panic!("NotAuthorized");
-        }
-        env.storage().instance().set(&DataKey::Paused, &true);
-        env.events().publish(
-            (
-                Symbol::new(&env, "rent_schedule"),
-                Symbol::new(&env, "paused"),
-            ),
-            (),
-        );
-    }
-
-    pub fn unpause(env: Env, caller: Address) {
-        caller.require_auth();
-        let cfg: Config = env
-            .storage()
-            .instance()
-            .get(&DataKey::Config)
-            .expect("NotInitialized");
-        if caller != cfg.admin {
-            panic!("NotAuthorized");
-        }
-        env.storage().instance().set(&DataKey::Paused, &false);
-        env.events().publish(
-            (
-                Symbol::new(&env, "rent_schedule"),
-                Symbol::new(&env, "unpaused"),
-            ),
-            (),
-        );
-    }
-
-    pub fn is_paused(env: Env) -> bool {
-        is_paused(&env)
     }
 
     pub fn create_schedule(
@@ -426,6 +383,49 @@ impl RentSchedule {
             .iter()
             .find(|i| i.instalment_number == instalment_number)
             .unwrap()
+    }
+}
+
+#[contractimpl]
+impl Pausable for RentSchedule {
+    fn pause(env: Env, caller: Address) -> Result<(), PausableError> {
+        caller.require_auth();
+        let cfg: Config = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .ok_or(PausableError::NotAuthorized)?;
+        if caller != cfg.admin {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: Env, caller: Address) -> Result<(), PausableError> {
+        caller.require_auth();
+        let cfg: Config = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .ok_or(PausableError::NotAuthorized)?;
+        if caller != cfg.admin {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        is_paused_state(&env)
     }
 }
 
