@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { validate } from '../middleware/validate.js'
-import { otpRequestRateLimit, walletAuthRateLimit } from '../middleware/authRateLimit.js'
+import { otpRequestRateLimit, otpVerifyRateLimit, refreshTokenRateLimit, walletAuthRateLimit } from '../middleware/authRateLimit.js'
 import { createRateLimiter } from '../middleware/rateLimiter.js'
 import { rateLimitProfiles } from '../config/rateLimitConfig.js'
 import { requestOtpSchema, verifyOtpSchema, walletChallengeSchema, walletVerifySchema } from '../schemas/auth.js'
@@ -142,6 +142,8 @@ router.post(
   '/verify-otp',
   validate(verifyOtpSchema, 'body'),
   authLimiter,
+  otpLimiter,
+  otpVerifyRateLimit(),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const email = (req.body.email as string).toLowerCase()
@@ -220,40 +222,46 @@ router.post(
 )
 
 /**
- * POST /api/auth/logout
+ * POST /api/auth/refresh
+ * Body/cookie: refreshToken -> { token, user }
  */
-router.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const refreshToken = getCookie(req, REFRESH_COOKIE_NAME)
-    if (!refreshToken) {
-      throw new AppError(ErrorCode.INVALID_TOKEN, 401, 'Refresh token required')
+router.post(
+  '/refresh',
+  authLimiter,
+  refreshTokenRateLimit(),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const refreshToken = getCookie(req, REFRESH_COOKIE_NAME)
+      if (!refreshToken) {
+        throw new AppError(ErrorCode.INVALID_TOKEN, 401, 'Refresh token required')
+      }
+
+      const record = await refreshTokenStore.findByRawToken(refreshToken)
+      if (!record || record.expiresAt.getTime() < Date.now()) {
+        throw new AppError(ErrorCode.INVALID_TOKEN, 401, 'Invalid refresh token')
+      }
+
+      if (record.usedAt) {
+        await refreshTokenStore.invalidateFamily(record.family)
+        clearRefreshCookie(res)
+        throw new AppError(ErrorCode.INVALID_TOKEN, 401, 'Refresh token replay detected')
+      }
+
+      await refreshTokenStore.markUsed(refreshToken)
+      const token = await issueSessionPair(
+        res,
+        { id: record.userId, email: record.email },
+        { ip: req.ip, userAgent: req.get('User-Agent') },
+        record.family,
+      )
+      const user = await userStore.getById(record.userId)
+
+      res.json({ token, user: user ? sanitiseForClient({ ...user }) : undefined })
+    } catch (error) {
+      next(error)
     }
-
-    const record = await refreshTokenStore.findByRawToken(refreshToken)
-    if (!record || record.expiresAt.getTime() < Date.now()) {
-      throw new AppError(ErrorCode.INVALID_TOKEN, 401, 'Invalid refresh token')
-    }
-
-    if (record.usedAt) {
-      await refreshTokenStore.invalidateFamily(record.family)
-      clearRefreshCookie(res)
-      throw new AppError(ErrorCode.INVALID_TOKEN, 401, 'Refresh token replay detected')
-    }
-
-    await refreshTokenStore.markUsed(refreshToken)
-    const token = await issueSessionPair(
-      res,
-      { id: record.userId, email: record.email },
-      { ip: req.ip, userAgent: req.get('User-Agent') },
-      record.family,
-    )
-    const user = await userStore.getById(record.userId)
-
-    res.json({ token, user: user ? sanitiseForClient({ ...user }) : undefined })
-  } catch (error) {
-    next(error)
-  }
-})
+  },
+)
 
 router.post('/logout', async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization

@@ -5,6 +5,31 @@ use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, 
 #[cfg(kani)]
 mod formal_properties;
 
+/// Extends the TTL (time-to-live) of a persistent storage entry.
+///
+/// On Soroban, persistent storage entries have a limited lifetime based on the ledger TTL.
+/// If entries are never extended, they eventually get archived or expire, causing reads to fail.
+/// This helper should be called after writing to persistent storage to ensure the entry remains accessible.
+///
+/// The standard approach is to extend TTL on every write to a persistent key, which is
+/// the simplest and most robust method to ensure data remains accessible.
+///
+/// # Arguments
+/// * `env` - The environment
+/// * `key` - The storage key to extend TTL for
+///
+/// # Example
+/// ```ignore
+/// env.storage().persistent().set(&key, &value);
+/// extend_storage_ttl(&env, &key);
+/// ```
+#[inline]
+pub fn extend_storage_ttl(env: &Env, key: &soroban_sdk::Val) {
+    // Extend TTL if it's below threshold (10,000 ledgers) to 500,000 ledgers (~58 days at 10s per ledger)
+    // This is a conservative extension that balances cost with data safety
+    env.storage().persistent().extend_ttl(key, 10_000, 500_000);
+}
+
 /// Emit a standardized unauthorized-access event and return the provided contract error.
 #[inline]
 pub fn deny<E>(env: &Env, caller: &Address, operation: &str, err: E) -> E {

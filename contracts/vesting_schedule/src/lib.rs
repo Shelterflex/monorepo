@@ -4,6 +4,9 @@
 // allow has to cover the whole crate rather than a single function.
 #![allow(clippy::too_many_arguments)]
 
+#[cfg(kani)]
+mod formal_properties;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env,
 };

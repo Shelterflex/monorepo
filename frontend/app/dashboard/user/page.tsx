@@ -180,7 +180,7 @@ export default function UserDashboardPage() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="min-h-screen pt-20">
+      <main id="main-content" className="min-h-screen pt-20">
         <div className="p-4 md:p-6 lg:p-8">
           <div className="mb-6 flex flex-col gap-2 md:mb-8">
             <h1 className="text-2xl font-bold text-foreground md:text-3xl lg:text-4xl">

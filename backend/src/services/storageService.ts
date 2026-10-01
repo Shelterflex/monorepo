@@ -23,6 +23,7 @@ export const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER ?? 's3'
 // Storage provider interface
 export interface StorageProvider {
   uploadFile(key: string, buffer: Buffer, contentType: string, metadata?: Record<string, string>): Promise<{ key: string; url: string }>
+  downloadFile(key: string): Promise<{ buffer: Buffer; contentType: string }>
   deleteFile(key: string): Promise<void>
   generatePresignedUpload(key: string, contentType: string, ttlSeconds: number): Promise<{ uploadUrl: string; objectKey: string }>
   generatePresignedDownload(key: string, ttlSeconds: number): Promise<{ downloadUrl: string }>
@@ -60,6 +61,19 @@ class S3StorageProvider implements StorageProvider {
     await this.client.send(command)
     const { downloadUrl } = await this.generatePresignedDownload(key, DOWNLOAD_TTL_SECONDS)
     return { key, url: downloadUrl }
+  }
+
+  async downloadFile(key: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    })
+    const response = await this.client.send(command)
+    const bytes = await response.Body!.transformToByteArray()
+    return {
+      buffer: Buffer.from(bytes),
+      contentType: response.ContentType ?? 'application/octet-stream',
+    }
   }
 
   async deleteFile(key: string): Promise<void> {
@@ -122,6 +136,12 @@ class LocalStorageProvider implements StorageProvider {
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(filePath, buffer)
     return { key, url: `file://${filePath}` }
+  }
+
+  async downloadFile(key: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const filePath = this.getFilePath(key)
+    const buffer = await fs.readFile(filePath)
+    return { buffer, contentType: 'application/octet-stream' }
   }
 
   async deleteFile(key: string): Promise<void> {

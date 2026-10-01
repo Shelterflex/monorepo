@@ -323,7 +323,7 @@ export default function ReconciliationDashboard() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main id="main-content" className="container mx-auto px-4 py-8">
         {/* Custom Tabs */}
         <nav aria-label="Reconciliation sections">
           <div className="mb-6 flex flex-wrap gap-2 md:gap-4" role="tablist">

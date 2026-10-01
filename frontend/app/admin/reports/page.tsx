@@ -122,7 +122,7 @@ export default function AdminReportsPage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <section className="border-b-3 border-foreground bg-muted py-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between">

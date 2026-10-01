@@ -264,7 +264,7 @@ export default function GovernancePage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-12 md:py-20">
+      <main id="main-content" className="container mx-auto px-4 py-12 md:py-20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-8">
             <div className="flex items-center justify-between">

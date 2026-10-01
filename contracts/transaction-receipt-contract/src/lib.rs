@@ -582,8 +582,12 @@ impl TransactionReceiptContract {
         // Calculate start index from cursor (default 0)
         let start_index = cursor.unwrap_or(0);
 
-        // Calculate end index (start + limit, capped at total_count)
-        let end_index = core::cmp::min(start_index + limit, total_count);
+        // Calculate end index with limit cap and checked_add overflow protection
+        let capped_limit = core::cmp::min(limit, 100);
+        let end_index = match start_index.checked_add(capped_limit) {
+            Some(val) => core::cmp::min(val, total_count),
+            None => total_count,
+        };
 
         // Iterate through deal index to load receipts
         for index in start_index..end_index {
@@ -633,7 +637,11 @@ impl TransactionReceiptContract {
         let total_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
 
         let start_index = cursor.unwrap_or(0);
-        let end_index = core::cmp::min(start_index + limit, total_count);
+        let capped_limit = core::cmp::min(limit, 100);
+        let end_index = match start_index.checked_add(capped_limit) {
+            Some(val) => core::cmp::min(val, total_count),
+            None => total_count,
+        };
 
         for index in start_index..end_index {
             let user_index_key = StorageKey::UserIndex(user.clone(), index);

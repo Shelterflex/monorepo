@@ -129,7 +129,13 @@ fn compute_decayed_score(env: &Env, record: &ReputationRecord) -> (u32, bool) {
     (new_score, new_score != record.composite_score)
 }
 
-fn emit_updated(env: &Env, tenant: &Address, record: &ReputationRecord, reason: &Symbol) {
+fn emit_updated(
+    env: &Env,
+    tenant: &Address,
+    record: &ReputationRecord,
+    prev_score: Option<u32>,
+    reason: &Symbol,
+) {
     env.events().publish(
         (
             Symbol::new(env, "tenant_reputation"),
@@ -140,6 +146,7 @@ fn emit_updated(env: &Env, tenant: &Address, record: &ReputationRecord, reason: 
             record.composite_score,
             record.total_ratings,
             record.last_updated,
+            prev_score,
             reason.clone(),
         ),
     );
@@ -209,6 +216,9 @@ impl TenantReputation {
             &admin,
             "set_score_bounds",
         )?;
+        if score_min > score_max {
+            return Err(ContractError::InvalidScore);
+        }
         env.storage().instance().set(&DataKey::ScoreMin, &score_min);
         env.storage().instance().set(&DataKey::ScoreMax, &score_max);
         env.events().publish(
@@ -237,6 +247,20 @@ impl TenantReputation {
             "update_reputation",
         )?;
 
+        if record.total_ratings == 0 && record.composite_score == score_max(&env) {
+            return Err(ContractError::InvalidScore);
+        }
+
+        if caller == tenant {
+            return Err(ContractError::NotAuthorized);
+        }
+
+        let prev_record: Option<ReputationRecord> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Reputation(tenant.clone()));
+        let prev_score = prev_record.map(|r| r.composite_score);
+
         let clamped_score = clamp_score(&env, record.composite_score);
         let updated = ReputationRecord {
             composite_score: clamped_score,
@@ -246,7 +270,7 @@ impl TenantReputation {
         env.storage()
             .persistent()
             .set(&DataKey::Reputation(tenant.clone()), &updated);
-        emit_updated(&env, &tenant, &updated, &reason);
+        emit_updated(&env, &tenant, &updated, prev_score, &reason);
         Ok(())
     }
 
@@ -293,23 +317,24 @@ impl TenantReputation {
             &caller,
             "revoke_reputation",
         )?;
-        if env
+        if !env
             .storage()
             .persistent()
             .has(&DataKey::Reputation(tenant.clone()))
         {
-            env.storage()
-                .persistent()
-                .remove(&DataKey::Reputation(tenant.clone()));
-            env.events().publish(
-                (
-                    Symbol::new(&env, "tenant_reputation"),
-                    Symbol::new(&env, "revoked"),
-                    tenant,
-                ),
-                (),
-            );
+            return Err(ContractError::InvalidScore);
         }
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Reputation(tenant.clone()));
+        env.events().publish(
+            (
+                Symbol::new(&env, "tenant_reputation"),
+                Symbol::new(&env, "revoked"),
+                tenant,
+            ),
+            (),
+        );
         Ok(())
     }
 }
@@ -331,6 +356,10 @@ impl Pausable for TenantReputation {
         access_control::require_admin_permission(&env, &get_admin(&env), &admin, "unpause")
             .map_err(|_| PausableError::NotAuthorized)?;
         env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
         Ok(())
     }
 
@@ -944,61 +973,26 @@ mod test {
     // be manipulated by an interested party is worse than none at all" — this
     // is the headline finding of the PR.
 
-    /// An authorised operator can write a score for an address it has no
-    /// relationship with whatsoever.
+    /// An operator cannot score itself.
     #[test]
-    fn anchor_b_operator_can_score_an_unrelated_address() {
+    fn operator_cannot_self_score() {
         let env = Env::default();
         env.ledger().set_timestamp(100);
         let (cid, client, _admin, operator) = setup(&env);
-        let unrelated_tenant = Address::generate(&env);
         let rec = sample_record(&env);
         let r = reason(&env);
 
-        m_update(&env, &cid, &operator, &unrelated_tenant, &rec, &r);
-        client
-            .try_update_reputation(&operator, &unrelated_tenant, &rec, &r)
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            client
-                .get_reputation(&unrelated_tenant)
-                .unwrap()
-                .composite_score,
-            750
-        );
-    }
-
-    /// An authorised operator can score ITSELF — there is no `caller == tenant`
-    /// guard — and hand itself the maximum composite score.
-    #[test]
-    fn anchor_b_operator_can_self_score_to_the_maximum() {
-        let env = Env::default();
-        env.ledger().set_timestamp(100);
-        let (cid, client, _admin, operator) = setup(&env);
-        let mut rec = sample_record(&env);
-        rec.composite_score = 5_000; // clamps to the default max of 1000
-        let r = reason(&env);
-
         m_update(&env, &cid, &operator, &operator, &rec, &r);
-        client
+        let err = client
             .try_update_reputation(&operator, &operator, &rec, &r)
-            .unwrap()
+            .unwrap_err()
             .unwrap();
-
-        assert_eq!(
-            client.get_reputation(&operator).unwrap().composite_score,
-            1000
-        );
+        assert_eq!(err, ContractError::NotAuthorized);
     }
 
-    /// An operator can overwrite an existing, legitimate score with an
-    /// arbitrary new value. The overwrite invocation emits only the generic
-    /// `reputation_updated` event — there is no on-chain audit record of who
-    /// changed what (contrast rent_schedule's persisted `WaiverAudit`).
+    /// Overwrites of an existing score now include the previous value in the event audit trail.
     #[test]
-    fn anchor_b_operator_can_overwrite_a_legitimate_score_unaudited() {
+    fn anchor_b_operator_overwrite_includes_audit_trail() {
         let env = Env::default();
         env.ledger().set_timestamp(100);
         let (cid, client, _admin, operator) = setup(&env);
@@ -1021,28 +1015,16 @@ mod test {
             .unwrap()
             .unwrap();
 
-        // The overwrite produced exactly one event, and it is the generic
-        // update event — no distinct audit event exists.
-        let all = env.events().all();
-        assert_eq!(all.len(), 1);
-        let action: Symbol = all
-            .get(0)
-            .unwrap()
-            .1
-            .get(1)
-            .unwrap()
-            .try_into_val(&env)
-            .unwrap();
-        assert_eq!(action, Symbol::new(&env, "reputation_updated"));
+        let data = last_data(&env);
+        let prev_score: Option<u32> = data.get(3).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(prev_score, Some(800));
 
         assert_eq!(client.get_reputation(&tenant).unwrap().composite_score, 100);
     }
 
-    /// `composite_score` is caller-supplied and only clamped — it is NOT
-    /// derived from the sub-scores or from `total_ratings`. An operator can
-    /// store a perfect composite backed by zero ratings.
+    /// Setting a perfect composite score with zero ratings is now rejected with InvalidScore.
     #[test]
-    fn anchor_b_operator_can_set_perfect_composite_with_zero_ratings() {
+    fn perfect_composite_with_zero_ratings_is_rejected() {
         let env = Env::default();
         env.ledger().set_timestamp(100);
         let (cid, client, _admin, operator) = setup(&env);
@@ -1058,14 +1040,11 @@ mod test {
             last_updated: 0,
         };
         m_update(&env, &cid, &operator, &tenant, &rec, &r);
-        client
+        let err = client
             .try_update_reputation(&operator, &tenant, &rec, &r)
-            .unwrap()
+            .unwrap_err()
             .unwrap();
-
-        let stored = client.get_reputation(&tenant).unwrap();
-        assert_eq!(stored.composite_score, 1000);
-        assert_eq!(stored.total_ratings, 0);
+        assert_eq!(err, ContractError::InvalidScore);
     }
 
     // ── A2 · authorization ────────────────────────────────────────────────
@@ -1417,37 +1396,19 @@ mod test {
         assert_eq!(stored.communication_score, 7_777);
     }
 
-    /// FINDING (recon flag #3, promoted): `set_score_bounds` does not enforce
-    /// `min <= max`. With min > max the clamp `s.max(lo).min(hi)` collapses
-    /// EVERY score to `max`, silently.
+    /// `set_score_bounds` enforces `min <= max` and rejects invalid bounds.
     #[test]
-    fn score_bounds_with_min_greater_than_max_collapse_every_score_to_max() {
+    fn score_bounds_with_min_greater_than_max_are_rejected() {
         let env = Env::default();
         env.ledger().set_timestamp(1);
-        let (cid, client, admin, operator) = setup(&env);
-        let r = reason(&env);
+        let (cid, client, admin, _operator) = setup(&env);
 
-        m_set_bounds(&env, &cid, &admin, 800, 200); // min > max, accepted
-        client
+        m_set_bounds(&env, &cid, &admin, 800, 200); // min > max, should be rejected
+        let err = client
             .try_set_score_bounds(&admin, &800u32, &200u32)
-            .unwrap()
+            .unwrap_err()
             .unwrap();
-
-        for input in [50u32, 500u32, 5_000u32] {
-            let tenant = Address::generate(&env);
-            let mut rec = sample_record(&env);
-            rec.composite_score = input;
-            m_update(&env, &cid, &operator, &tenant, &rec, &r);
-            client
-                .try_update_reputation(&operator, &tenant, &rec, &r)
-                .unwrap()
-                .unwrap();
-            assert_eq!(
-                client.get_reputation(&tenant).unwrap().composite_score,
-                200,
-                "min > max makes the clamp collapse every score to max"
-            );
-        }
+        assert_eq!(err, ContractError::InvalidScore);
     }
 
     /// `period_secs == 0` disables decay (guarded), regardless of elapsed time.
@@ -1533,10 +1494,12 @@ mod test {
         let composite: u32 = data.get(0).unwrap().try_into_val(&env).unwrap();
         let total_ratings: u32 = data.get(1).unwrap().try_into_val(&env).unwrap();
         let last_updated: u64 = data.get(2).unwrap().try_into_val(&env).unwrap();
-        let ev_reason: Symbol = data.get(3).unwrap().try_into_val(&env).unwrap();
+        let prev_score: Option<u32> = data.get(3).unwrap().try_into_val(&env).unwrap();
+        let ev_reason: Symbol = data.get(4).unwrap().try_into_val(&env).unwrap();
         assert_eq!(composite, 750);
         assert_eq!(total_ratings, 5);
         assert_eq!(last_updated, 777);
+        assert_eq!(prev_score, None);
         assert_eq!(ev_reason, r);
     }
 
@@ -1606,25 +1569,19 @@ mod test {
         assert_eq!(ev_tenant, tenant);
     }
 
-    /// Revoking an address that was never scored is a silent no-op: it returns
-    /// Ok and emits nothing (recon flag #4, pinned pending a maintainer
-    /// decision).
+    /// Revoking a nonexistent record now returns InvalidScore.
     #[test]
-    fn revoke_of_nonexistent_record_is_a_silent_noop() {
+    fn revoke_of_nonexistent_record_fails() {
         let env = Env::default();
         let (cid, client, admin, _operator) = setup(&env);
         let ghost = Address::generate(&env);
 
         m_revoke(&env, &cid, &admin, &ghost);
-        client
+        let err = client
             .try_revoke_reputation(&admin, &ghost)
-            .unwrap()
+            .unwrap_err()
             .unwrap();
-
-        assert!(
-            env.events().all().is_empty(),
-            "no event should be emitted when revoking a nonexistent record"
-        );
+        assert_eq!(err, ContractError::InvalidScore);
     }
 
     #[test]
@@ -1697,7 +1654,7 @@ mod test {
     }
 
     #[test]
-    fn pause_emits_event_and_unpause_does_not() {
+    fn pause_and_unpause_emit_events() {
         let env = Env::default();
         let (cid, client, admin, _operator) = setup(&env);
 
@@ -1711,7 +1668,11 @@ mod test {
 
         m_unpause(&env, &cid, &admin);
         client.try_unpause(&admin).unwrap().unwrap();
-        assert!(env.events().all().is_empty(), "unpause emits no event");
+        let topics = last_topics(&env);
+        let cat: Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+        let action: Symbol = topics.get(1).unwrap().try_into_val(&env).unwrap();
+        assert_eq!(cat, Symbol::new(&env, "Pausable"));
+        assert_eq!(action, Symbol::new(&env, "unpause"));
     }
 
     /// Contrast rent_schedule::init (which emits a `rent_schedule/init`

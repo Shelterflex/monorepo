@@ -19,6 +19,8 @@
 //! If any step fails the contract panics and the ledger transaction reverts,
 //! leaving the state unchanged.
 
+#[cfg(kani)]
+pub mod formal_properties;
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, String, Symbol, Vec};
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -112,6 +114,11 @@ pub struct SchemaRegistry;
 impl SchemaRegistry {
     // ── Initialisation ────────────────────────────────────────────────────────
 
+    /// Initialise the registry with the governing admin address.
+    ///
+    /// Sets the registry schema version to `1.0.0`, stores `admin`, and
+    /// creates an empty compatibility matrix.  Panics if called more than once
+    /// (`"already initialized"`).
     pub fn initialize(env: Env, admin: Address) {
         if env.storage().persistent().has(&DataKey::Admin) {
             panic!("already initialized");
@@ -133,6 +140,13 @@ impl SchemaRegistry {
 
     // ── Admin: register a schema transition ──────────────────────────────────
 
+    /// Register a supported schema transition in the compatibility matrix.
+    ///
+    /// Admin-only; requires auth from `caller`.  `meta.source` and
+    /// `meta.target` must differ; passing identical versions returns
+    /// `RegistryError::InvalidVersion`.  If an entry for the same
+    /// `(source, target)` pair already exists it is overwritten.  Does not
+    /// emit an event.
     pub fn register_transition(
         env: Env,
         caller: Address,
@@ -188,6 +202,20 @@ impl SchemaRegistry {
 
     // ── Execute migration ─────────────────────────────────────────────────────
 
+    /// Execute a registered schema migration from `source` to `target`.
+    ///
+    /// Callable by any authorised address (auth is required from `caller`, but
+    /// the function is not restricted to admin — see test
+    /// `test_execute_migration_allows_non_admin_caller`).  Performs these
+    /// checks in order: (1) the current registry version must equal `source`;
+    /// (2) the transition must be registered in the compatibility matrix;
+    /// (3) the migration must not have been executed before (idempotency guard);
+    /// (4) if `meta.requires_dry_run` is set, invariant checks must pass;
+    /// (5) post-write invariant verification.  On success, advances the stored
+    /// registry version to `target`, persists a `MigrationReceipt` under both
+    /// the `(source, target)` and `migration_id` lookup keys, and emits a
+    /// `migration_executed` event with `(migration_id, src_id, tgt_id, ledger)`.
+    /// Returns the `MigrationReceipt` on success.
     pub fn execute_migration(
         env: Env,
         caller: Address,
@@ -284,6 +312,7 @@ impl SchemaRegistry {
 
     // ── Queries ───────────────────────────────────────────────────────────────
 
+    /// Return `true` if a transition from `source` to `target` is registered in the matrix.
     pub fn is_transition_supported(env: Env, source: SchemaVersion, target: SchemaVersion) -> bool {
         let key = (Self::version_id(&source), Self::version_id(&target));
         let matrix: Map<(u32, u32), CompatibilityMeta> = env
@@ -294,6 +323,9 @@ impl SchemaRegistry {
         matrix.contains_key(key)
     }
 
+    /// Return the `MigrationReceipt` for a completed `source → target` migration, if one exists.
+    ///
+    /// Returns `None` if no migration has been executed for this transition pair.
     pub fn get_receipt(
         env: Env,
         source: SchemaVersion,
@@ -316,6 +348,9 @@ impl SchemaRegistry {
         }
     }
 
+    /// Return the current registry schema version.
+    ///
+    /// Defaults to `1.0.0` before any migrations have been executed.
     pub fn registry_version(env: Env) -> SchemaVersion {
         env.storage()
             .persistent()

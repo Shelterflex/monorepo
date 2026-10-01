@@ -130,7 +130,7 @@ export default function AdminQuotaPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-12 md:py-16 space-y-10">
+      <main id="main-content" className="container mx-auto px-4 py-12 md:py-16 space-y-10">
         <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
           <form onSubmit={handleLookup} className="flex flex-col md:flex-row gap-4 md:items-end">
             <div className="flex-1 space-y-1.5">

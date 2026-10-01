@@ -5,6 +5,9 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, vec, Address, BytesN, Env, Symbol, Vec,
 };
 
+#[cfg(kani)]
+mod formal_properties;
+
 /// Deal ID type - using u64 for simplicity
 pub type DealId = u64;
 

@@ -1722,6 +1722,7 @@ version = "0.1.0"
 dependencies = [
  "soroban-pausable",
  "soroban-sdk",
+ "soroban_access_control",
 ]
 
 [[package]]
@@ -1741,6 +1742,7 @@ version = "0.1.0"
 dependencies = [
  "soroban-pausable",
  "soroban-sdk",
+ "soroban_access_control",
 ]
 
 [[package]]

@@ -32,7 +32,7 @@ export default function AboutPage() {
   const t = useTranslations("about")
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       {/* Hero */}
       <section className="border-b-3 border-foreground bg-muted py-16 md:py-24">
         <div className="container mx-auto px-4">

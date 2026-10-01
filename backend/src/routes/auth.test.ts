@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createTestAgent, expectErrorShape } from '../test-helpers.js'
 import { otpChallengeStore, sessionStore, userStore, walletChallengeStore } from '../models/authStore.js'
-import { _testOnly_clearAuthRateLimits, _testOnly_prefillEmailOtpCounter } from '../middleware/authRateLimit.js'
+import {
+  _testOnly_clearAuthRateLimits,
+  _testOnly_prefillEmailOtpCounter,
+  _testOnly_prefillIpOtpVerifyCounter,
+  _testOnly_prefillIpRefreshCounter,
+} from '../middleware/authRateLimit.js'
 
 vi.mock('../utils/wallet.js', async (importOriginal) => {
   const mod = await importOriginal<typeof import('../utils/wallet.js')>()
@@ -83,7 +88,60 @@ describe('Auth Routes (OTP)', () => {
     }
 
     const res = await request.post('/api/auth/verify-otp').send({ email, otp: '123456' })
-    expectErrorShape(res, 'UNAUTHORIZED', 401)
+    // The per-challenge attempt cap is reached and the per-IP verify limiter is
+    // now exhausted, so further attempts are rejected before the handler runs.
+    expectErrorShape(res, 'TOO_MANY_REQUESTS', 429)
+  })
+
+  it('verify-otp should rate limit by IP after too many attempts', async () => {
+    // Use a fresh agent so the global express-rate-limit counter is reset
+    const agent = createTestAgent()
+    const email = 'verify-ratelimit@example.com'
+    const ip = '203.0.113.10'
+
+    // Pre-fill the per-IP verify counter to the configured limit (5)
+    _testOnly_prefillIpOtpVerifyCounter(ip, 5)
+
+    const res = await agent
+      .post('/api/auth/verify-otp')
+      .set('X-Forwarded-For', ip)
+      .send({ email, otp: '123456' })
+
+    expect(res.status).toBe(429)
+    expect(res.body.error.code).toBe('TOO_MANY_REQUESTS')
+  })
+
+  it('POST /api/auth/refresh should rate limit by IP', async () => {
+    // Use a fresh agent so the global express-rate-limit counter is reset
+    const agent = createTestAgent()
+    const ip = '203.0.113.20'
+
+    // Pre-fill the per-IP refresh counter to the configured limit (10)
+    _testOnly_prefillIpRefreshCounter(ip, 10)
+
+    const res = await agent.post('/api/auth/refresh').set('X-Forwarded-For', ip)
+
+    expect(res.status).toBe(429)
+    expect(res.body.error.code).toBe('TOO_MANY_REQUESTS')
+  })
+
+  it('POST /api/auth/refresh should still exchange a valid refresh token', async () => {
+    const agent = createTestAgent()
+    const email = 'refresh@example.com'
+
+    await agent.post('/api/auth/request-otp').send({ email }).expect(200)
+    const verifyRes = await agent
+      .post('/api/auth/verify-otp')
+      .send({ email, otp: '123456' })
+      .expect(200)
+
+    const refreshToken = (verifyRes.headers['set-cookie'] as unknown as string[])[0].split(';')[0]
+
+    const res = await agent.post('/api/auth/refresh').set('Cookie', refreshToken)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('token', 'session-token-abc')
+    expect(res.body.user).toHaveProperty('email', email)
   })
 
   it('request-otp should rate limit by email', async () => {

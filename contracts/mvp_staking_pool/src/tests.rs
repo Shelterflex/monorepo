@@ -143,7 +143,6 @@ fn restake_after_unstake() {
 }
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn admin_pause_stake_fails() {
     let env = Env::default();
     env.mock_all_auths();
@@ -157,11 +156,13 @@ fn admin_pause_stake_fails() {
     assert!(client.is_paused());
 
     // Stake should fail when paused
-    client.stake(&user, &100i128);
+    let result = client.try_stake(&user, &100i128);
+    assert!(result.is_err());
+    let err = result.unwrap_err().unwrap();
+    assert_eq!(err, ContractError::ContractPaused);
 }
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn admin_pause_unstake_fails() {
     let env = Env::default();
     env.mock_all_auths();
@@ -177,7 +178,10 @@ fn admin_pause_unstake_fails() {
     assert!(client.is_paused());
 
     // Unstake should fail when paused
-    client.unstake(&user, &50i128);
+    let result = client.try_unstake(&user, &50i128);
+    assert!(result.is_err());
+    let err = result.unwrap_err().unwrap();
+    assert_eq!(err, ContractError::ContractPaused);
 }
 
 #[test]

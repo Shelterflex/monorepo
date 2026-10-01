@@ -123,7 +123,7 @@ export default function TenantPrivacyPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <section className="border-b-3 border-foreground bg-muted py-12 md:py-16">
         <div className="container mx-auto px-4">
           <h1 className="font-mono text-3xl font-black md:text-4xl mb-2">

@@ -9,6 +9,9 @@
 
 #![no_std]
 
+#[cfg(kani)]
+pub mod formal_properties;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, Map, String, Symbol, Vec,
 };
@@ -118,6 +121,9 @@ impl AllowlistRegistry {
         }
 
         let mut reg = registry(&env);
+        if reg.contains_key(address.clone()) {
+            return Err(Error::AlreadyExists);
+        }
         let entry = Entry {
             label: label.clone(),
             expires_at,
@@ -442,23 +448,24 @@ mod tests {
 
     // ── Duplicate / boundary behavior ────────────────────────────────────────
 
-    /// `add` on an address that is already registered overwrites the entry —
-    /// the `AlreadyExists` error variant is defined but never returned
-    /// anywhere in the contract. Documenting current (overwrite) behavior;
-    /// flagged in the PR as ambiguous — should re-adding an existing member
-    /// be rejected instead?
+    /// `add` on an address that is already registered is rejected with
+    /// `AlreadyExists` error.
     #[test]
-    fn test_add_duplicate_overwrites_existing_entry() {
+    fn test_add_duplicate_rejected_with_error() {
         let env = Env::default();
         env.mock_all_auths();
         let (client, admin) = deploy(&env);
         let member = Address::generate(&env);
 
         client.add(&admin, &member, &String::from_str(&env, "tier1"), &0);
-        client.add(&admin, &member, &String::from_str(&env, "tier2"), &0);
+        let result = client.try_add(&admin, &member, &String::from_str(&env, "tier2"), &0);
+        assert!(result.is_err());
+        let err = result.unwrap_err().unwrap();
+        assert_eq!(err, Error::AlreadyExists);
 
+        // Verify the original entry is unchanged
         let entry = client.get_entry(&member);
-        assert_eq!(entry.label, String::from_str(&env, "tier2"));
+        assert_eq!(entry.label, String::from_str(&env, "tier1"));
     }
 
     #[test]

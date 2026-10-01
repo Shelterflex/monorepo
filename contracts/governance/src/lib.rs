@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(kani)]
+mod formal_properties;
+
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -50,6 +53,7 @@ pub enum ContractError {
     ProposalNotPassed = 9,
     ProposalAlreadyExecuted = 10,
     QuorumNotReached = 11,
+    NegativeStake = 12,
 }
 
 // ── Data Structures ───────────────────────────────────────────────────────────
@@ -146,6 +150,9 @@ impl Governance {
     /// Admin updates total staked (mirrors staking pool state for quorum).
     pub fn set_total_staked(env: Env, admin: Address, total: i128) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
+        if total < 0 {
+            return Err(ContractError::NegativeStake);
+        }
         env.storage().instance().set(&DataKey::TotalStaked, &total);
         Ok(())
     }
@@ -158,6 +165,9 @@ impl Governance {
         stake: i128,
     ) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
+        if stake < 0 {
+            return Err(ContractError::NegativeStake);
+        }
         // Reuse Voted(0, voter) as a stake-weight slot (proposal 0 is never created)
         env.storage()
             .persistent()
@@ -784,6 +794,25 @@ mod tests {
         let victim = Address::generate(&env);
         let result = client.try_set_voter_stake(&attacker, &victim, &1_000_000);
         assert_eq!(result.unwrap_err().unwrap(), ContractError::NotAuthorized);
+    }
+
+    #[test]
+    fn set_total_staked_rejects_negative_amount() {
+        let env = Env::default();
+        let (admin, client) = setup(&env, 1_000_000);
+
+        let result = client.try_set_total_staked(&admin, &-1);
+        assert_eq!(result.unwrap_err().unwrap(), ContractError::NegativeStake);
+    }
+
+    #[test]
+    fn set_voter_stake_rejects_negative_amount() {
+        let env = Env::default();
+        let (admin, client) = setup(&env, 1_000_000);
+
+        let voter = Address::generate(&env);
+        let result = client.try_set_voter_stake(&admin, &voter, &-1);
+        assert_eq!(result.unwrap_err().unwrap(), ContractError::NegativeStake);
     }
 
     // --- Initialization edge cases -----------------------------------------

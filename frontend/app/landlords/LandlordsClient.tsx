@@ -127,7 +127,7 @@ export default function LandlordsClient() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       {/* Hero Section */}
       <section className="border-b-3 border-foreground bg-secondary/30 py-16 md:py-24">
         <div className="container mx-auto px-4">

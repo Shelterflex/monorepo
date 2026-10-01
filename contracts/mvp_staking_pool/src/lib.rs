@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(kani)]
+mod formal_properties;
+
 use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token::Client as TokenClient, Address,
@@ -44,6 +47,16 @@ pub enum ContractError {
     InsufficientUnusedStake = 5,
     /// Admin utilization exceeds user's unused stake.
     UtilizationExceedsUnused = 6,
+    /// Contract is paused.
+    ContractPaused = 7,
+    /// Amount must be positive.
+    AmountNotPositive = 8,
+    /// Contract already initialized.
+    AlreadyInitialized = 9,
+    /// Caller must be admin.
+    NotAdmin = 10,
+    /// No stakers in the pool.
+    NoStakers = 11,
 }
 
 #[contract]
@@ -99,16 +112,18 @@ fn require_admin(env: &Env) {
     admin.require_auth();
 }
 
-fn require_not_paused(env: &Env) {
+fn require_not_paused(env: &Env) -> Result<(), ContractError> {
     if is_paused(env) {
-        panic!("contract is paused");
+        return Err(ContractError::ContractPaused);
     }
+    Ok(())
 }
 
-fn require_positive_amount(amount: i128) {
+fn require_positive_amount(amount: i128) -> Result<(), ContractError> {
     if amount <= 0 {
-        panic!("amount must be positive");
+        return Err(ContractError::AmountNotPositive);
     }
+    Ok(())
 }
 
 fn get_staked_balance(env: &Env, user: &Address) -> i128 {
@@ -188,9 +203,9 @@ fn accrue_user_rewards(env: &Env, user: &Address) {
 
 #[contractimpl]
 impl StakingPool {
-    pub fn init(env: Env, admin: Address, token: Address) {
+    pub fn init(env: Env, admin: Address, token: Address) -> Result<(), ContractError> {
         if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+            return Err(ContractError::AlreadyInitialized);
         }
 
         env.storage().instance().set(&DataKey::Admin, &admin);
@@ -210,6 +225,7 @@ impl StakingPool {
             ),
             (admin, token, 2u32),
         );
+        Ok(())
     }
 
     pub fn contract_version(env: Env) -> u32 {
@@ -219,10 +235,10 @@ impl StakingPool {
             .unwrap_or(0u32)
     }
 
-    pub fn stake(env: Env, user: Address, amount: i128) {
+    pub fn stake(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
         user.require_auth();
-        require_not_paused(&env);
-        require_positive_amount(amount);
+        require_not_paused(&env)?;
+        require_positive_amount(amount)?;
 
         accrue_user_rewards(&env, &user);
 
@@ -245,13 +261,14 @@ impl StakingPool {
 
         env.events()
             .publish((Symbol::new(&env, "stake"), user.clone()), amount);
+        Ok(())
     }
 
     /// Withdraws only from **unused** stake. Used stake (see `utilize_stake`) stays locked.
     pub fn unstake(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
         user.require_auth();
-        require_not_paused(&env);
-        require_positive_amount(amount);
+        require_not_paused(&env)?;
+        require_positive_amount(amount)?;
 
         accrue_user_rewards(&env, &user);
 
@@ -313,8 +330,8 @@ impl StakingPool {
         if admin != get_admin(&env) {
             return Err(ContractError::NotAuthorized);
         }
-        require_not_paused(&env);
-        require_positive_amount(amount);
+        require_not_paused(&env)?;
+        require_positive_amount(amount)?;
 
         accrue_user_rewards(&env, &user);
 
@@ -348,19 +365,19 @@ impl StakingPool {
         get_total_staked(&env)
     }
 
-    pub fn fund_rewards(env: Env, from: Address, amount: i128) {
+    pub fn fund_rewards(env: Env, from: Address, amount: i128) -> Result<(), ContractError> {
         require_admin(&env);
-        require_not_paused(&env);
-        require_positive_amount(amount);
+        require_not_paused(&env)?;
+        require_positive_amount(amount)?;
 
         let admin = get_admin(&env);
         if from != admin {
-            panic!("from must be admin");
+            return Err(ContractError::NotAdmin);
         }
 
         let total = get_total_staked(&env);
         if total <= 0 {
-            panic!("no stakers");
+            return Err(ContractError::NoStakers);
         }
 
         let token_address = get_token(&env);
@@ -373,6 +390,7 @@ impl StakingPool {
 
         env.events()
             .publish((Symbol::new(&env, "fund_rewards"), from.clone()), amount);
+        Ok(())
     }
 
     pub fn claimable(env: Env, user: Address) -> i128 {
@@ -380,15 +398,15 @@ impl StakingPool {
         get_claimable_reward(&env, &user)
     }
 
-    pub fn claim(env: Env, to: Address) -> i128 {
+    pub fn claim(env: Env, to: Address) -> Result<i128, ContractError> {
         to.require_auth();
-        require_not_paused(&env);
+        require_not_paused(&env)?;
 
         accrue_user_rewards(&env, &to);
 
         let amount = get_claimable_reward(&env, &to);
         if amount <= 0 {
-            return 0;
+            return Ok(0);
         }
 
         env.storage()
@@ -401,7 +419,7 @@ impl StakingPool {
 
         env.events()
             .publish((Symbol::new(&env, "claim"), to.clone()), amount);
-        amount
+        Ok(amount)
     }
 
     // ── Upgrade governance (#392) ──────────────────────────────────────────────
@@ -706,7 +724,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "already initialized")]
     fn init_cannot_be_called_twice() {
         let env = Env::default();
         let contract_id = env.register(StakingPool, ());
@@ -718,7 +735,8 @@ mod test {
         let token_contract_id = token_contract.address();
 
         client.init(&admin, &token_contract_id);
-        client.init(&admin, &token_contract_id);
+        let result = client.try_init(&admin, &token_contract_id);
+        assert!(result.is_err());
     }
 
     // ============================================================================
@@ -801,7 +819,6 @@ mod test {
     // ============================================================================
 
     #[test]
-    #[should_panic(expected = "contract is paused")]
     fn stake_fails_when_paused() {
         let env = Env::default();
         let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
@@ -829,11 +846,11 @@ mod test {
             },
         }]);
 
-        client.stake(&user, &100i128);
+        let result = client.try_stake(&user, &100i128);
+        assert!(result.is_err());
     }
 
     #[test]
-    #[should_panic(expected = "contract is paused")]
     fn unstake_fails_when_paused() {
         let env = Env::default();
         let (contract_id, client, admin, user, _token_id) = setup_contract(&env);
@@ -861,7 +878,8 @@ mod test {
             },
         }]);
 
-        client.unstake(&user, &50i128);
+        let result = client.try_unstake(&user, &50i128);
+        assert!(result.is_err());
     }
 
     // ============================================================================
@@ -869,7 +887,6 @@ mod test {
     // ============================================================================
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
     fn stake_fails_with_zero_amount() {
         let env = Env::default();
         let (contract_id, client, _admin, user, _token_id) = setup_contract(&env);
@@ -884,11 +901,11 @@ mod test {
             },
         }]);
 
-        client.stake(&user, &0i128);
+        let result = client.try_stake(&user, &0i128);
+        assert!(result.is_err());
     }
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
     fn stake_fails_with_negative_amount() {
         let env = Env::default();
         let (contract_id, client, _admin, user, _token_id) = setup_contract(&env);
@@ -903,11 +920,11 @@ mod test {
             },
         }]);
 
-        client.stake(&user, &-10i128);
+        let result = client.try_stake(&user, &-10i128);
+        assert!(result.is_err());
     }
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
     fn unstake_fails_with_zero_amount() {
         let env = Env::default();
         let (contract_id, client, _admin, user, _token_id) = setup_contract(&env);
@@ -922,11 +939,11 @@ mod test {
             },
         }]);
 
-        client.unstake(&user, &0i128);
+        let result = client.try_unstake(&user, &0i128);
+        assert!(result.is_err());
     }
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
     fn unstake_fails_with_negative_amount() {
         let env = Env::default();
         let (contract_id, client, _admin, user, _token_id) = setup_contract(&env);
@@ -941,7 +958,8 @@ mod test {
             },
         }]);
 
-        client.unstake(&user, &-10i128);
+        let result = client.try_unstake(&user, &-10i128);
+        assert!(result.is_err());
     }
 
     // ============================================================================

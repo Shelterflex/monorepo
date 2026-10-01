@@ -20,7 +20,7 @@ describe('webhookDeliveryService', () => {
     initScheduler({ schedule } as any)
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection reset')) as any)
 
-    const sub = webhookSubscriptionStore.create({
+    const sub = await webhookSubscriptionStore.create({
       ownerId: 'owner-1',
       targetUrl: 'https://example.com/hooks/payments',
       secret: 'hashed_secret',
@@ -43,7 +43,7 @@ describe('webhookDeliveryService', () => {
     expect(delayMs).toBeGreaterThanOrEqual(59_000)
     expect(delayMs).toBeLessThanOrEqual(61_000)
 
-    const history = webhookDeliveryStore.getHistoryBySubscription(sub.id)
+    const history = await webhookDeliveryStore.getHistoryBySubscription(sub.id)
     expect(history[0]?.status).toBe('failed')
     expect(vi.mocked(fetch).mock.calls[0]?.[1]).toMatchObject({
       signal: expect.any(AbortSignal),
@@ -55,7 +55,7 @@ describe('webhookDeliveryService', () => {
     initScheduler({ schedule } as any)
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('subscriber timeout')) as any)
 
-    const sub = webhookSubscriptionStore.create({
+    const sub = await webhookSubscriptionStore.create({
       ownerId: 'owner-2',
       targetUrl: 'https://example.com/hooks/status',
       secret: 'hashed_secret',
@@ -70,22 +70,22 @@ describe('webhookDeliveryService', () => {
     })
 
     expect(schedule).not.toHaveBeenCalled()
-    const history = webhookDeliveryStore.getHistoryBySubscription(sub.id)
+    const history = await webhookDeliveryStore.getHistoryBySubscription(sub.id)
     expect(history[0]?.status).toBe('permanently_failed')
-    expect(webhookSubscriptionStore.findById(sub.id)?.active).toBe(true)
+    expect((await webhookSubscriptionStore.findById(sub.id))?.active).toBe(true)
   })
 
   it('enqueues one delivery job per active subscriber', async () => {
     const schedule = vi.fn()
     initScheduler({ schedule } as any)
 
-    webhookSubscriptionStore.create({
+    await webhookSubscriptionStore.create({
       ownerId: 'owner-a',
       targetUrl: 'https://example.com/hooks/a',
       secret: 'hashed_secret_a',
       events: [WebhookEventType.PAYMENT_RECEIVED],
     })
-    webhookSubscriptionStore.create({
+    await webhookSubscriptionStore.create({
       ownerId: 'owner-b',
       targetUrl: 'https://example.com/hooks/b',
       secret: 'hashed_secret_b',

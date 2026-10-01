@@ -644,13 +644,12 @@ impl WhistleblowerRewards {
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
         require_admin(&env, &admin)?;
-        if let Some(guardian) = env
+        let guardian = env
             .storage()
             .instance()
             .get::<_, Address>(&StorageKey::Guardian)
-        {
-            guardian.require_auth();
-        }
+            .ok_or(ContractError::NotAuthorized)?;
+        guardian.require_auth();
         env.storage()
             .instance()
             .remove(&StorageKey::PendingUpgradeHash);
@@ -1746,5 +1745,28 @@ mod test {
             .unwrap();
 
         assert_eq!(client.claimable(&wb, &listing), 0i128);
+    }
+
+    #[test]
+    fn emergency_upgrade_fails_when_guardian_unset() {
+        let env = Env::default();
+        let (contract_id, client, admin, _operator, _token_id, _token_id_admin) = setup(&env);
+        let dummy_hash = soroban_sdk::BytesN::from_array(&env, &[0u8; 32]);
+
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "emergency_upgrade",
+                args: (admin.clone(), dummy_hash.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        let err = client
+            .try_emergency_upgrade(&admin, &dummy_hash)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err, ContractError::NotAuthorized);
     }
 }

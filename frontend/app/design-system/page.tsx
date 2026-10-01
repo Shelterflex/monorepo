@@ -44,7 +44,7 @@ export default function DesignSystemPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main id="main-content" className="min-h-screen bg-background text-foreground">
       <section className="ds-container py-8 md:py-12 lg:py-16 ds-stack ds-reveal">
         <header className="rounded-xl border-4 border-foreground bg-card p-5 shadow-[8px_8px_0px_0px_rgba(26,26,26,1)] md:p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

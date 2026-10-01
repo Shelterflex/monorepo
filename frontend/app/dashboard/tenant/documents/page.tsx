@@ -131,7 +131,7 @@ export default function DocumentsPage() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="container max-w-6xl mx-auto px-4 py-8">
+      <main id="main-content" className="container max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <div>

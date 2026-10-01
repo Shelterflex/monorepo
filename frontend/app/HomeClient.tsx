@@ -41,7 +41,7 @@ export default function HomeClient() {
     : [];
 
   return (
-    <main>
+    <main id="main-content">
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-background py-12 sm:py-16 md:py-20 lg:py-24">
         <div className="container mx-auto px-4 sm:px-6">

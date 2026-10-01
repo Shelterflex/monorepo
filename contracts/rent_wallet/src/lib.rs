@@ -467,14 +467,13 @@ impl RentWallet {
         // upgrades for now (same safety policy as normal upgrades).
         validate_upgrade_safety(&env, new_version)?;
 
-        // Multi-sig: require guardian if configured
-        if let Some(guardian) = env
+        // Require guardian to be configured and authorize
+        let guardian: Address = env
             .storage()
             .instance()
-            .get::<_, Address>(&DataKey::Guardian)
-        {
-            guardian.require_auth();
-        }
+            .get(&DataKey::Guardian)
+            .ok_or(ContractError::NotAuthorized)?;
+        guardian.require_auth();
         // Clear any pending upgrade
         env.storage()
             .instance()

@@ -99,7 +99,7 @@ function mapRow(row: Record<string, unknown>): OutboxItem {
 // ---------------------------------------------------------------------------
 // In-memory implementation (test / fallback)
 // ---------------------------------------------------------------------------
-class InMemoryOutboxStore implements IOutboxStore {
+export class InMemoryOutboxStore implements IOutboxStore {
   public items = new Map<string, OutboxItem>()
   private refIndex = new Map<CanonicalExternalRefV1, string>()
   private claims = new Map<string, { workerId: string; claimedAt: Date }>()

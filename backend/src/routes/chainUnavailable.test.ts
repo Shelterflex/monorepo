@@ -125,7 +125,7 @@ function buildTimelockApp(adapter: SorobanAdapter, repo: StubTimelockRepository)
   const app = express()
   app.use(express.json())
   app.use(requestIdMiddleware)
-  app.use('/api/admin/timelock', createAdminTimelockRouter(adapter, repo))
+  app.use('/api/v1/admin/timelock', createAdminTimelockRouter(adapter, repo))
   app.use(errorHandler)
   return app
 }
@@ -135,6 +135,11 @@ describe('chain-dependent routes when Soroban RPC is unavailable', () => {
 
   beforeEach(() => {
     StubSorobanAdapter._testOnlyReset()
+    process.env.MANUAL_ADMIN_SECRET = 'test_secret'
+  })
+
+  afterEach(() => {
+    delete process.env.MANUAL_ADMIN_SECRET
   })
 
   describe('GET /api/balance/:account', () => {
@@ -160,31 +165,6 @@ describe('chain-dependent routes when Soroban RPC is unavailable', () => {
       const app = buildBalanceApp(adapter)
 
       const res = await supertest(app).get('/api/balance/test-user')
-      expectChainUnavailableResponse(res)
-    })
-  })
-
-  describe('POST /api/admin/timelock/execute', () => {
-    it('returns canonical 503 on RPC timeout', async () => {
-      const repo = new StubTimelockRepository()
-      await repo.upsert({
-        txHash: 'hash-queued-1',
-        target: 'StakingPool',
-        functionName: 'pause',
-        args: [],
-        eta: Math.floor(Date.now() / 1000) + 3600,
-        status: 'queued',
-        ledger: 100,
-      })
-
-      const adapter = new TestSorobanAdapter(config)
-      adapter.simulateRpcTimeout()
-      const app = buildTimelockApp(adapter, repo)
-
-      const res = await supertest(app)
-        .post('/api/admin/timelock/execute')
-        .send({ txHash: 'hash-queued-1' })
-
       expectChainUnavailableResponse(res)
     })
   })

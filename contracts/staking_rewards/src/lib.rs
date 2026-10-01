@@ -1,7 +1,8 @@
 #![no_std]
+use soroban_access_control::extend_storage_ttl;
 use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, Symbol,
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, IntoVal, Symbol,
 };
 
 #[cfg(kani)]
@@ -223,11 +224,13 @@ impl StakingRewards {
         user_stake.user_index = reward_index;
 
         env.storage().persistent().set(&user, &user_stake);
+        extend_storage_ttl(&env, &user.into_val(&env));
 
         let total = Self::get_total_staked(&env);
         env.storage()
             .persistent()
             .set(&TOTAL_STAKED, &(total + amount));
+        extend_storage_ttl(&env, &TOTAL_STAKED.into_val(&env));
 
         env.events().publish(
             (
@@ -262,11 +265,13 @@ impl StakingRewards {
         user_stake.amount -= amount;
 
         env.storage().persistent().set(&user, &user_stake);
+        extend_storage_ttl(&env, &user.into_val(&env));
 
         let total = Self::get_total_staked(&env);
         env.storage()
             .persistent()
             .set(&TOTAL_STAKED, &(total - amount));
+        extend_storage_ttl(&env, &TOTAL_STAKED.into_val(&env));
 
         env.events().publish(
             (
@@ -309,7 +314,9 @@ impl StakingRewards {
         env.storage()
             .persistent()
             .set(&REWARD_INDEX, &(reward_index + index_increment));
+        extend_storage_ttl(&env, &REWARD_INDEX.into_val(&env));
         env.storage().persistent().set(&PENDING_DUST, &new_dust);
+        extend_storage_ttl(&env, &PENDING_DUST.into_val(&env));
 
         env.events().publish(
             (
@@ -350,7 +357,9 @@ impl StakingRewards {
         env.storage()
             .persistent()
             .set(&REWARD_INDEX, &(reward_index + index_increment));
+        extend_storage_ttl(&env, &REWARD_INDEX.into_val(&env));
         env.storage().persistent().set(&PENDING_DUST, &new_dust);
+        extend_storage_ttl(&env, &PENDING_DUST.into_val(&env));
 
         env.events().publish(
             (
@@ -375,6 +384,7 @@ impl StakingRewards {
         user_stake.pending_amount = 0;
 
         env.storage().persistent().set(&user, &user_stake);
+        extend_storage_ttl(&env, &user.into_val(&env));
 
         env.events().publish(
             (
@@ -574,13 +584,12 @@ impl StakingRewards {
         if admin != stored_admin {
             return Err(ContractError::NotAuthorized);
         }
-        if let Some(guardian) = env
+        let guardian = env
             .storage()
             .instance()
             .get::<_, Address>(&StorageKey::Guardian)
-        {
-            guardian.require_auth();
-        }
+            .ok_or(ContractError::NotAuthorized)?;
+        guardian.require_auth();
         env.storage()
             .instance()
             .remove(&StorageKey::PendingUpgradeHash);

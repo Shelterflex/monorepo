@@ -9,14 +9,21 @@
  * avoid touching that router's request/response shape.
  */
 import { Router, type Request, type Response, type NextFunction } from 'express'
+import { z } from 'zod'
 import { paymentDisputeRepository } from '../repositories/PaymentDisputeRepository.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/rbac.js'
+import { validate } from '../middleware/validate.js'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { auditLog, extractAuditContext, type AuditEventType } from '../utils/auditLogger.js'
 import { logger } from '../utils/logger.js'
 import { enqueueResolveRentDispute } from '../services/disputes/rentReleaseSync.js'
+
+const resolveDisputeSchema = z.object({
+  status: z.enum(['resolved', 'rejected']),
+  resolution: z.string().max(1000, 'Resolution must be at most 1000 characters').optional(),
+})
 
 const router = Router()
 
@@ -45,15 +52,12 @@ router.post(
   '/:disputeId/resolve',
   authenticateToken,
   requirePermission('disputes', 'resolve'),
+  validate(resolveDisputeSchema, 'body'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { disputeId } = req.params
       const adminId = (req as any).user.id as string
       const { status, resolution } = req.body as { status: string; resolution?: string }
-
-      if (!['resolved', 'rejected'].includes(status)) {
-        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Invalid status')
-      }
 
       const dispute = await paymentDisputeRepository.findById(disputeId)
       if (!dispute) {

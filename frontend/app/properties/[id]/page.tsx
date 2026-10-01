@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getProperty, type PropertyListing } from "@/lib/propertiesApi";
+import { formatNgn } from "@/lib/currency";
 import {
   DEFAULT_OG_IMAGE,
   SITE_NAME,
@@ -18,15 +19,6 @@ const defaultTitle = "Property Details";
 const defaultDescription =
   "Explore verified property details, amenities, and neighborhood context on ShelterFlex.";
 
-function formatNgn(amount: number): string {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 function locationLabel(listing: PropertyListing): string {
   return [listing.area, listing.city].filter(Boolean).join(", ");
 }
@@ -42,7 +34,7 @@ function listingDescription(listing: PropertyListing): string {
     `${listing.bedrooms} bed`,
     `${listing.bathrooms} bath`,
     Number.isFinite(listing.annualRentNgn)
-      ? `${formatNgn(listing.annualRentNgn)}/year`
+      ? `${formatNgn(listing.annualRentNgn, undefined, { fractionDigits: 0 })}/year`
       : null,
   ]
     .filter(Boolean)

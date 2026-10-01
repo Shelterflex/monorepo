@@ -64,7 +64,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ jobId: str
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="lg:pl-64">
+        <main id="main-content" className="lg:pl-64">
           <div className="p-6 lg:p-8">
             <Card className="border-3 border-foreground p-12 text-center shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
               <FileText className="mx-auto h-16 w-16 text-muted-foreground" />
@@ -85,7 +85,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ jobId: str
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="lg:pl-64">
+        <main id="main-content" className="lg:pl-64">
           <div className="p-6 lg:p-8">
             <Skeleton className="mb-8 h-12 w-48 border-3 border-foreground" />
             <Skeleton className="h-96 border-3 border-foreground" />
@@ -99,7 +99,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ jobId: str
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="lg:pl-64">
+        <main id="main-content" className="lg:pl-64">
           <div className="p-6 lg:p-8">
             <Link href="/dashboard/inspector">
               <Button variant="outline" className="mb-6 border-2 border-foreground">
@@ -131,7 +131,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ jobId: str
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="lg:pl-64">
+        <main id="main-content" className="lg:pl-64">
           <div className="p-6 lg:p-8">
             <Link href="/dashboard/inspector">
               <Button
@@ -169,7 +169,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ jobId: str
       />
 
       {/* Main Content */}
-      <main className="lg:pl-64">
+      <main id="main-content" className="lg:pl-64">
         <div className="p-6 lg:p-8">
           {/* Header */}
           <div className="mb-8">

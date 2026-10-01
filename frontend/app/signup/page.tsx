@@ -89,7 +89,7 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen bg-muted flex items-center justify-center py-12 px-4">
+    <main id="main-content" className="min-h-screen bg-muted flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <Link href="/" className="inline-block font-mono text-3xl font-black">

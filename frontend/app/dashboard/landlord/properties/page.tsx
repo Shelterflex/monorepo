@@ -167,7 +167,7 @@ export default function LandlordPropertiesPage() {
         userInfo={{ name: "Chief Okonkwo", roleLabel: "Landlord" }}
       />
 
-      <main className="lg:ml-64 min-h-screen pt-20">
+      <main id="main-content" className="lg:ml-64 min-h-screen pt-20">
         <div className="p-8">
           <div className="mb-8 flex items-center justify-between">
             <div>

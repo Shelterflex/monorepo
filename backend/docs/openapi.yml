@@ -3863,6 +3863,134 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/vesting-schedule/claimable:
+    get:
+      summary: Get the authenticated user's claimable vested tokens
+      description: Uses the Stellar wallet linked to the authenticated user. Address query parameters are not accepted.
+      operationId: getOwnClaimableVestedTokens
+      tags:
+        - Vesting
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Claimable vested-token amount for the authenticated wallet
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [beneficiary, claimableAmount]
+                properties:
+                  beneficiary:
+                    type: string
+                    description: Stellar wallet linked to the authenticated user
+                  claimableAmount:
+                    type: string
+                    description: Claimable amount in contract base units
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/vesting-schedule/claim:
+    post:
+      summary: Claim vested tokens for the authenticated user
+      description: Claims only for the Stellar wallet linked to the authenticated user. The request body must be empty.
+      operationId: claimOwnVestedTokens
+      tags:
+        - Vesting
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Vested tokens claimed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, beneficiary, claimedAmount, message]
+                properties:
+                  success:
+                    type: boolean
+                  beneficiary:
+                    type: string
+                  claimedAmount:
+                    type: string
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/whistleblower-rewards/claimable:
+    get:
+      summary: Get the authenticated user's claimable whistleblower reward
+      description: Uses the Stellar wallet linked to the authenticated user. Address query parameters are not accepted.
+      operationId: getOwnClaimableWhistleblowerReward
+      tags:
+        - Whistleblower
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Claimable reward amount for the authenticated wallet
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [whistleblower, claimableAmount]
+                properties:
+                  whistleblower:
+                    type: string
+                    description: Stellar wallet linked to the authenticated user
+                  claimableAmount:
+                    type: string
+                    description: Claimable amount in contract base units
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/whistleblower-rewards/claim:
+    post:
+      summary: Claim the authenticated user's whistleblower reward
+      description: Claims only for the Stellar wallet linked to the authenticated user. The request body must be empty.
+      operationId: claimOwnWhistleblowerReward
+      tags:
+        - Whistleblower
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Whistleblower reward claimed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, whistleblower, claimedAmount, message]
+                properties:
+                  success:
+                    type: boolean
+                  whistleblower:
+                    type: string
+                  claimedAmount:
+                    type: string
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   parameters:
     GovernanceProposalId:
@@ -5700,6 +5828,8 @@ tags:
     description: User risk state (frozen status)
   - name: Whistleblower
     description: Whistleblower listing operations
+  - name: Vesting
+    description: Authenticated vesting schedule operations
   - name: Deals
     description: Deal management and repayment schedule operations
   - name: Admin

@@ -1,6 +1,8 @@
 #![no_std]
 
 use soroban_pausable::{Pausable, PausableError};
+#[cfg(kani)]
+mod formal_properties;
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol};
 
 // ── Storage Keys ─────────────────────────────────────────────────────────────

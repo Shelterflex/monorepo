@@ -7,7 +7,8 @@ use soroban_sdk::{
 use soroban_pausable::{Pausable, PausableError};
 
 pub mod access_control;
-mod formal_properties;
+#[cfg(kani)]
+pub mod formal_properties;
 
 #[contracttype]
 #[derive(Clone)]

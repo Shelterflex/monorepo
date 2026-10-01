@@ -208,7 +208,7 @@ export default function TenantPaymentsPage() {
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="ml-64 min-h-screen pt-20 flex items-center justify-center">
+        <main id="main-content" className="ml-64 min-h-screen pt-20 flex items-center justify-center">
           <div
             aria-live="polite"
             aria-busy="true"
@@ -231,7 +231,7 @@ export default function TenantPaymentsPage() {
         userInfo={{ name: "Ngozi Adekunle", roleLabel: "Tenant" }}
       />
 
-      <main className="lg:ml-64 min-h-screen pt-20">
+      <main id="main-content" className="lg:ml-64 min-h-screen pt-20">
         <div className="p-8">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground">Payments</h1>

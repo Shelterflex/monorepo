@@ -168,6 +168,26 @@
       "browseProperties": "[TR:ar] Browse Properties"
     }
   },
+  "payment": {
+    "confirmPayment": "تأكيد الدفع",
+    "fullPayment": "الدفع الكامل",
+    "landlordPayout": "دفع المالك",
+    "loadingDetails": "جاري تحميل التفاصيل...",
+    "noReporter": "لا يوجد مبلّغ",
+    "paymentConfirmed": "تم تأكيد الدفع",
+    "platformFee": "رسوم المنصة",
+    "platformFeeSubLabel": "رسوم خدمة المنصة",
+    "processing": "جاري المعالجة...",
+    "receipt": "الإيصال",
+    "reference": "المرجع",
+    "reporterReward": "مكافأة المبلّغ",
+    "reporterRewardSubLabel": "مكافأة الإبلاغ",
+    "reviewDistribution": "مراجعة التوزيع",
+    "rewardDistribution": "توزيع المكافآت",
+    "somethingWentWrong": "حدث خطأ ما",
+    "totalCharged": "إجمالي المبلغ المحسوب",
+    "tryAgain": "حاول مرة أخرى"
+  },
   "contact": {
     "backHome": "[TR:ar] Back Home",
     "title": "[TR:ar] Get in Touch",

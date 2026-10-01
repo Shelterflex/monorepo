@@ -4,6 +4,9 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Symbol,
 };
 
+#[cfg(kani)]
+mod formal_properties;
+
 // ── Storage Keys ──────────────────────────────────────────────────────────────
 
 #[contracttype]

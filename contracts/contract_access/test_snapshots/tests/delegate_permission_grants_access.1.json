@@ -119,7 +119,24 @@
                                 "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                               },
                               "val": {
-                                "u32": 6
+                                "map": [
+                                  {
+                                    "key": {
+                                      "symbol": "delegator"
+                                    },
+                                    "val": {
+                                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                                    }
+                                  },
+                                  {
+                                    "key": {
+                                      "symbol": "permission"
+                                    },
+                                    "val": {
+                                      "u32": 6
+                                    }
+                                  }
+                                ]
                               }
                             }
                           ]

@@ -186,7 +186,7 @@ export default function PropertyPageContent({
 
   if (isLoadingProperty) {
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
+      <main id="main-content" className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-muted-foreground font-mono">Loading property...</p>
@@ -197,7 +197,7 @@ export default function PropertyPageContent({
 
   if (propertyError || !property) {
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
+      <main id="main-content" className="min-h-screen bg-background flex items-center justify-center">
         <div className="border-3 border-foreground bg-card p-12 text-center shadow-[6px_6px_0px_0px_rgba(26,26,26,1)]">
           <Home className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
           <h1 className="font-mono text-2xl font-black mb-2">
@@ -217,7 +217,7 @@ export default function PropertyPageContent({
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="border-b-3 border-foreground bg-muted">
         <div className="container mx-auto px-4 py-4">
           <button

@@ -7,6 +7,9 @@ use soroban_sdk::{
 
 pub mod access_control;
 
+#[cfg(kani)]
+mod formal_properties;
+
 const DEFAULT_STALENESS_SECONDS: u64 = 600;
 const DEFAULT_MAX_DEVIATION_BPS: u64 = 500; // 5% in basis points
 const PRICE_DECIMALS: u32 = 7;
@@ -75,6 +78,8 @@ pub enum ContractError {
     NoQuorum = 7,
     /// Source is not registered for this feed
     UnknownSource = 8,
+    /// Invalid configuration parameter (e.g. out of bounds threshold or deviation)
+    InvalidConfiguration = 9,
 }
 
 #[contract]
@@ -541,6 +546,9 @@ impl OraclePriceFeeds {
             &caller,
             "set_staleness_threshold",
         )?;
+        if threshold == 0 || threshold > 31536000 {
+            return Err(ContractError::InvalidConfiguration);
+        }
         env.storage()
             .instance()
             .set(&DataKey::StalenessThreshold, &threshold);
@@ -558,6 +566,9 @@ impl OraclePriceFeeds {
             &caller,
             "set_max_deviation_bps",
         )?;
+        if max_deviation_bps == 0 || max_deviation_bps > 10000 {
+            return Err(ContractError::InvalidConfiguration);
+        }
         env.storage()
             .instance()
             .set(&DataKey::MaxDeviationBps, &max_deviation_bps);
@@ -1582,5 +1593,53 @@ mod test {
 
         client.remove_source(&admin, &p, &src);
         assert_eq!(client.get_sources(&p).len(), 0);
+    }
+
+    #[test]
+    fn set_max_deviation_bps_rejects_out_of_bounds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        // Zero deviation should be rejected
+        let err_zero = client
+            .try_set_max_deviation_bps(&admin, &0u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err_zero, ContractError::InvalidConfiguration);
+
+        // Unreasonably large deviation (> 10000 bps / 100%) should be rejected
+        let err_large = client
+            .try_set_max_deviation_bps(&admin, &10001u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err_large, ContractError::InvalidConfiguration);
+
+        // Valid update should succeed
+        client.set_max_deviation_bps(&admin, &500u64);
+    }
+
+    #[test]
+    fn set_staleness_threshold_rejects_out_of_bounds() {
+        let env = Env::default();
+        let (contract_id, client, admin, _operator, _p) = setup(&env);
+        env.mock_all_auths();
+
+        // Zero staleness threshold should be rejected
+        let err_zero = client
+            .try_set_staleness_threshold(&admin, &0u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err_zero, ContractError::InvalidConfiguration);
+
+        // Unreasonably large threshold (> 31536000s / 1 year) should be rejected
+        let err_large = client
+            .try_set_staleness_threshold(&admin, &31536001u64)
+            .unwrap_err()
+            .unwrap();
+        assert_eq!(err_large, ContractError::InvalidConfiguration);
+
+        // Valid update should succeed
+        client.set_staleness_threshold(&admin, &600u64);
     }
 }

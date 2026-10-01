@@ -180,7 +180,7 @@ export default function LandlordDashboard() {
         userInfo={{ name: "Chief Okonkwo", roleLabel: "Landlord" }}
       />
 
-      <main className="min-h-screen pt-20 lg:ml-64">
+      <main id="main-content" className="min-h-screen pt-20 lg:ml-64">
         <div className="p-4 md:p-6 lg:p-8">
           <div className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-center md:justify-between">
             <div>

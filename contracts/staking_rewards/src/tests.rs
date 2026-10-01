@@ -434,10 +434,23 @@ fn non_admin_cannot_emergency_upgrade() {
 }
 
 #[test]
+fn emergency_upgrade_without_guardian_fails() {
+    let env = Env::default();
+    let (_contract_id, client) = setup(&env);
+    let admin = client.admin();
+    let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+
+    // No guardian configured — emergency_upgrade must fail even for admin
+    env.mock_all_auths();
+    let result = client.try_emergency_upgrade(&admin, &hash);
+    assert!(result.is_err());
+}
+
+#[test]
 fn emergency_upgrade_with_guardian_requires_guardian_auth() {
     let env = Env::default();
     let (_contract_id, client) = setup(&env);
-    let admin = Address::generate(&env);
+    let admin = client.admin();
     let guardian = Address::generate(&env);
     let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
 

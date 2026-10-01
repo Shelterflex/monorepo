@@ -2,15 +2,16 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { SorobanAdapter } from '../soroban/adapter.js';
 import { TimelockRepository } from '../indexer/timelock-repository.js';
 import { logger } from '../utils/logger.js';
+import { requireAdminSecret } from '../middleware/adminSecret.js';
 
 export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: TimelockRepository): Router {
   const router = Router();
 
   /**
-   * GET /api/admin/timelock/transactions
+   * GET /transactions
    * Returns all tracked governance transactions
    */
-  router.get('/transactions', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/transactions', requireAdminSecret, async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const transactions = await repo.findAll();
       res.json({ transactions });
@@ -21,10 +22,10 @@ export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: 
   });
 
   /**
-   * POST /api/admin/timelock/execute
+   * POST /execute
    * Executes a queued transaction. Looks up details by txHash.
    */
-  router.post('/execute', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/execute', requireAdminSecret, async (req: Request, res: Response, next: NextFunction) => {
     const { txHash } = req.body;
     
     if (!txHash) {
@@ -60,10 +61,10 @@ export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: 
   });
 
   /**
-   * POST /api/admin/timelock/cancel
+   * POST /cancel
    * Cancels a queued transaction
    */
-  router.post('/cancel', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/cancel', requireAdminSecret, async (req: Request, res: Response, next: NextFunction) => {
     const { txHash } = req.body;
 
     if (!txHash) {

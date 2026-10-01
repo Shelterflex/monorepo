@@ -29,6 +29,9 @@
 
 #![no_std]
 
+#[cfg(kani)]
+pub mod formal_properties;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
 };

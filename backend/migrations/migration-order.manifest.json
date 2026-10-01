@@ -276,6 +276,14 @@
     {
       "position": 69,
       "filename": "046_payment_disputes_deal_id.sql"
+    },
+    {
+      "position": 70,
+      "filename": "047_whistleblower_applications.sql"
+    },
+    {
+      "position": 71,
+      "filename": "048_webhook_subscriptions.sql"
     }
   ]
 }

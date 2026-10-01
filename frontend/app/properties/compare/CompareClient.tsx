@@ -110,7 +110,7 @@ function CompareContent() {
   if (ids.length < MIN_COMPARE) {
     return (
       <div className="min-h-screen bg-background">
-        <main className="container mx-auto max-w-4xl px-4 pt-24 pb-12">
+        <main id="main-content" className="container mx-auto max-w-4xl px-4 pt-24 pb-12">
           <Link
             href="/properties"
             className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground mb-6"
@@ -139,7 +139,7 @@ function CompareContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <main className="container mx-auto max-w-7xl px-4 pt-24 pb-12">
+      <main id="main-content" className="container mx-auto max-w-7xl px-4 pt-24 pb-12">
         <div className="mb-6 flex items-center justify-between">
           <Link
             href="/properties"

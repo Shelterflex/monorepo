@@ -9,6 +9,9 @@ mod tests;
 
 mod security_properties;
 
+#[cfg(kani)]
+mod formal_properties;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, xdr::ToXdr, Address, BytesN, Env, IntoVal,
     Symbol, Val, Vec,

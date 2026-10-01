@@ -129,7 +129,7 @@ export default function LandlordSettingsPage() {
       <LandlordSidebar />
 
       {/* Main Content */}
-      <main className="ml-64 min-h-screen pt-20">
+      <main id="main-content" className="ml-64 min-h-screen pt-20">
         <div className="p-8">
           {/* Header */}
           <div className="mb-8">

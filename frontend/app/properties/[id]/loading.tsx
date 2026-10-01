@@ -6,7 +6,7 @@ export default function PropertyDetailLoading() {
   const galleryRows = ["gallery-1", "gallery-2", "gallery-3", "gallery-4", "gallery-5", "gallery-6"]
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       {/* Breadcrumb */}
       <div className="border-b-3 border-foreground bg-muted">
         <div className="container mx-auto px-4 py-4">

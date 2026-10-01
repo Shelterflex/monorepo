@@ -1,22 +1,30 @@
 use soroban_sdk::{contracterror, Address, Env};
 
+/// Emit a standardized unauthorized-access event and return the error.
+#[inline]
+pub fn deny(env: &Env, caller: &Address, operation: &str) -> AccessControlError {
+    soroban_access_control::deny(env, caller, operation, AccessControlError::NotAuthorized)
+}
+
+/// Require that `caller` is the current `admin`.
+pub fn require_admin_permission(
+    env: &Env,
+    admin: &Address,
+    caller: &Address,
+    operation: &str,
+) -> Result<(), AccessControlError> {
+    soroban_access_control::require_admin_permission(
+        env,
+        admin,
+        caller,
+        operation,
+        AccessControlError::NotAuthorized,
+    )
+}
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum AccessControlError {
     NotAuthorized = 1,
-}
-
-/// Helper: require that `caller` is the expected admin; otherwise error.
-pub fn require_admin_permission(
-    _env: &Env,
-    expected_admin: &Address,
-    caller: &Address,
-    _fn_name: &str,
-) -> Result<(), AccessControlError> {
-    caller.require_auth();
-    if caller != expected_admin {
-        return Err(AccessControlError::NotAuthorized);
-    }
-    Ok(())
 }

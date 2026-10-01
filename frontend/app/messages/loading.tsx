@@ -34,7 +34,7 @@ export default function MessagesLoading() {
       </aside>
 
       {/* Chat Area */}
-      <main className="hidden flex-1 flex-col md:flex">
+      <main id="main-content" className="hidden flex-1 flex-col md:flex">
         {/* Chat Header */}
         <div className="flex items-center justify-between border-b-3 border-foreground bg-card p-4">
           <div className="flex items-center gap-4">

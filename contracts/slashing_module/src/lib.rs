@@ -6,6 +6,9 @@ use soroban_sdk::{
     Symbol, Vec,
 };
 
+#[cfg(kani)]
+mod formal_properties;
+
 /// Maximum reporter reward as a fraction of the slashed amount, in basis points.
 /// A reporter who surfaces a valid slash earns at most this percentage of the
 /// slashed tokens (issue #1199 — bounded reporter reward on finalized slash).

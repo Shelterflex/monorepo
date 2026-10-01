@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 
 export default function OfflinePage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#fffef9] px-4">
+    <main id="main-content" className="min-h-screen flex items-center justify-center bg-[#fffef9] px-4">
       <div className="max-w-sm w-full border-3 border-[#111827] bg-white p-8 shadow-[8px_8px_0_#111827] text-center">
         <div className="flex justify-center mb-6">
           <Image

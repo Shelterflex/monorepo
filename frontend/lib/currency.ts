@@ -11,6 +11,13 @@ interface CurrencyPolicy {
 
 interface FormatMoneyOptions {
   locale?: string;
+  /**
+   * Override the currency policy's decimal precision (minimum and maximum).
+   * Whole-naira call sites (wallet modals, share metadata) pass 0 so every
+   * call site keeps its intended precision without local reimplementations
+   * of the formatter (#1849).
+   */
+  fractionDigits?: number;
 }
 
 interface FormatDecimalOptions {
@@ -65,9 +72,10 @@ export function formatMoney(
   const policy = CURRENCY_POLICIES[currency];
   const locale = options.locale ?? policy.locale;
   const rounded = roundCurrencyAmount(amount, currency);
+  const fractionDigits = options.fractionDigits ?? policy.fractionDigits;
   const formatterOptions: Intl.NumberFormatOptions = {
-    minimumFractionDigits: policy.fractionDigits,
-    maximumFractionDigits: policy.fractionDigits,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   };
 
   if (policy.style === "currency") {
@@ -81,8 +89,12 @@ export function formatMoney(
   return currency === "USDC" ? `${formatted} USDC` : formatted;
 }
 
-export function formatNgn(amount: number | string, locale?: string): string {
-  return formatMoney(amount, "NGN", { locale });
+export function formatNgn(
+  amount: number | string,
+  locale?: string,
+  options?: { fractionDigits?: number },
+): string {
+  return formatMoney(amount, "NGN", { locale, ...options });
 }
 
 export function formatCompactNgn(amount: number | string, locale = DEFAULT_LOCALE): string {

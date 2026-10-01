@@ -4,11 +4,11 @@ import Link from "next/link"
 import { Home, Building2, Calculator, Menu, X, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
-import { useNotificationUnread } from "@/hooks/use-notification-unread"
+import { useUnreadCount } from "@/hooks/use-unread-count"
 
 export function DashboardHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { unread } = useNotificationUnread()
+  const { totalUnread: unread } = useUnreadCount()
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b-3 border-foreground bg-card">

@@ -54,6 +54,7 @@ export default function LandlordAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<LandlordAnalytics | null>(null);
+  const [isUsingMock, setIsUsingMock] = useState(false);
   const [properties, setProperties] = useState<LandlordProperty[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
@@ -69,6 +70,7 @@ export default function LandlordAnalyticsPage() {
     try {
       setLoading(true);
       setError(null);
+      setIsUsingMock(false);
       const data = await landlordApi.getAnalytics({
         propertyId: selectedProperty === "all" ? undefined : selectedProperty,
         startDate: format(dateRange.from, "yyyy-MM-dd"),
@@ -77,9 +79,9 @@ export default function LandlordAnalyticsPage() {
       setAnalytics(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics data");
-      // Fallback mock data for development if API is missing
       if (process.env.NODE_ENV === 'development') {
         mockAnalytics();
+        setIsUsingMock(true);
       }
     } finally {
       setLoading(false);
@@ -137,8 +139,14 @@ export default function LandlordAnalyticsPage() {
       <DashboardHeader />
       <LandlordSidebar />
       
-      <main className="min-h-screen pt-20 lg:ml-64">
+      <main id="main-content" className="min-h-screen pt-20 lg:ml-64">
         <div className="p-4 md:p-8 flex flex-col gap-8">
+          {isUsingMock && (
+            <div className="flex items-center gap-2 rounded-xl border-3 border-amber-500 bg-amber-50 p-4 text-amber-900 shadow-[4px_4px_0px_0px_rgba(245,158,11,1)]">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              <span className="text-sm font-bold">Development Banner: Displaying mock analytics data because the API request failed.</span>
+            </div>
+          )}
           {/* Header */}
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -224,15 +232,25 @@ export default function LandlordAnalyticsPage() {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {loading ? <Skeleton className="h-8 w-20" /> : (
-                  <>
-                    <div className="text-2xl font-bold">{analytics?.occupancyTrend[analytics.occupancyTrend.length - 1]?.rate}%</div>
-                    <p className="text-xs text-green-500 font-bold flex items-center">
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                      +2.1% from last month
-                    </p>
-                  </>
-                )}
+                {loading ? <Skeleton className="h-8 w-20" /> : (() => {
+                  const trend = analytics?.occupancyTrend;
+                  const current = trend && trend.length > 0 ? trend[trend.length - 1]?.rate : undefined;
+                  const previous = trend && trend.length > 1 ? trend[trend.length - 2]?.rate : undefined;
+                  const diff = current !== undefined && previous !== undefined ? Number((current - previous).toFixed(1)) : undefined;
+                  return (
+                    <>
+                      <div className="text-2xl font-bold">{current !== undefined ? `${current}%` : "N/A"}</div>
+                      {diff !== undefined ? (
+                        <p className={cn("text-xs font-bold flex items-center", diff >= 0 ? "text-green-500" : "text-red-500")}>
+                          {diff >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+                          {diff >= 0 ? `+${diff}%` : `${diff}%`} from last period
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground font-bold">No prior period comparison</p>
+                      )}
+                    </>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -242,15 +260,27 @@ export default function LandlordAnalyticsPage() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {loading ? <Skeleton className="h-8 w-32" /> : (
-                  <>
-                    <div className="text-2xl font-bold">₦{analytics?.revenueBreakdown[analytics.revenueBreakdown.length - 1]?.collected.toLocaleString()}</div>
-                    <p className="text-xs text-green-500 font-bold flex items-center">
-                      <TrendingUp className="mr-1 h-3 w-3" />
-                      +12.5% from last month
-                    </p>
-                  </>
-                )}
+                {loading ? <Skeleton className="h-8 w-32" /> : (() => {
+                  const breakdown = analytics?.revenueBreakdown;
+                  const current = breakdown && breakdown.length > 0 ? breakdown[breakdown.length - 1]?.collected : undefined;
+                  const previous = breakdown && breakdown.length > 1 ? breakdown[breakdown.length - 2]?.collected : undefined;
+                  const diffPercent = current !== undefined && previous !== undefined && previous > 0 
+                    ? Number((((current - previous) / previous) * 100).toFixed(1))
+                    : undefined;
+                  return (
+                    <>
+                      <div className="text-2xl font-bold">₦{current !== undefined ? current.toLocaleString() : "0"}</div>
+                      {diffPercent !== undefined ? (
+                        <p className={cn("text-xs font-bold flex items-center", diffPercent >= 0 ? "text-green-500" : "text-red-500")}>
+                          {diffPercent >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+                          {diffPercent >= 0 ? `+${diffPercent}%` : `${diffPercent}%`} from last period
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground font-bold">No prior period comparison</p>
+                      )}
+                    </>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -278,10 +308,7 @@ export default function LandlordAnalyticsPage() {
                 {loading ? <Skeleton className="h-8 w-24" /> : (
                   <>
                     <div className="text-2xl font-bold">{analytics?.vacancyMetrics.averageTimeToFill} Days</div>
-                    <p className="text-xs text-red-500 font-bold flex items-center">
-                      <TrendingDown className="mr-1 h-3 w-3" />
-                      +2 days from average
-                    </p>
+                    <p className="text-xs text-muted-foreground font-bold italic">Average portfolio turnaround</p>
                   </>
                 )}
               </CardContent>

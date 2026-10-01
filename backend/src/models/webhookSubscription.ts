@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import {
+  PostgresWebhookSubscriptionRepository,
+  PostgresWebhookDeliveryLogRepository,
+} from '../repositories/WebhookRepository.js'
 
 export enum WebhookEventType {
   DEAL_ACTIVATED = 'deal.activated',
@@ -33,75 +37,124 @@ export interface WebhookDeliveryLog {
   attemptedAt: Date
 }
 
-const subscriptions = new Map<string, WebhookSubscription>()
-const deliveryLogs = new Map<string, WebhookDeliveryLog[]>()
+// Fallback in-memory storage for when Postgres is not available
+const fallbackSubscriptions = new Map<string, WebhookSubscription>()
+const fallbackDeliveryLogs = new Map<string, WebhookDeliveryLog[]>()
 
-export const webhookSubscriptionStore = {
-  create(data: {
+class WebhookSubscriptionStore {
+  private postgresRepo = new PostgresWebhookSubscriptionRepository()
+
+  async create(data: {
     ownerId: string
     targetUrl: string
     secret: string // Store the hashed secret
     events: WebhookEventType[]
-  }): WebhookSubscription {
-    const sub: WebhookSubscription = {
-      id: randomUUID(),
-      ownerId: data.ownerId,
-      targetUrl: data.targetUrl,
-      secret: data.secret,
-      events: data.events,
-      active: true,
-      createdAt: new Date(),
+  }): Promise<WebhookSubscription> {
+    try {
+      return await this.postgresRepo.create(data)
+    } catch (error) {
+      console.warn('Postgres webhook subscription creation failed, using fallback cache:', error)
+      const sub: WebhookSubscription = {
+        id: randomUUID(),
+        ownerId: data.ownerId,
+        targetUrl: data.targetUrl,
+        secret: data.secret,
+        events: data.events,
+        active: true,
+        createdAt: new Date(),
+      }
+      fallbackSubscriptions.set(sub.id, sub)
+      return sub
     }
-    subscriptions.set(sub.id, sub)
-    return sub
-  },
+  }
 
-  findById(id: string): WebhookSubscription | undefined {
-    return subscriptions.get(id)
-  },
-
-  listByOwner(ownerId: string): WebhookSubscription[] {
-    return Array.from(subscriptions.values()).filter(s => s.ownerId === ownerId)
-  },
-
-  listActiveByEvent(event: WebhookEventType): WebhookSubscription[] {
-    return Array.from(subscriptions.values()).filter(s => s.active && s.events.includes(event))
-  },
-
-  delete(id: string): boolean {
-    return subscriptions.delete(id)
-  },
-
-  updateActive(id: string, active: boolean): void {
-    const sub = subscriptions.get(id)
-    if (sub) {
-      sub.active = active
-      subscriptions.set(id, sub)
+  async findById(id: string): Promise<WebhookSubscription | undefined> {
+    try {
+      const result = await this.postgresRepo.findById(id)
+      return result || undefined
+    } catch (error) {
+      console.warn('Postgres webhook subscription lookup failed, using fallback cache:', error)
+      return fallbackSubscriptions.get(id)
     }
-  },
+  }
+
+  async listByOwner(ownerId: string): Promise<WebhookSubscription[]> {
+    try {
+      return await this.postgresRepo.listByOwner(ownerId)
+    } catch (error) {
+      console.warn('Postgres webhook subscription list by owner failed, using fallback cache:', error)
+      return Array.from(fallbackSubscriptions.values()).filter(s => s.ownerId === ownerId)
+    }
+  }
+
+  async listActiveByEvent(event: WebhookEventType): Promise<WebhookSubscription[]> {
+    try {
+      return await this.postgresRepo.listActiveByEvent(event)
+    } catch (error) {
+      console.warn('Postgres webhook subscription list by event failed, using fallback cache:', error)
+      return Array.from(fallbackSubscriptions.values()).filter(s => s.active && s.events.includes(event))
+    }
+  }
+
+  async delete(id: string): Promise<boolean> {
+    try {
+      return await this.postgresRepo.delete(id)
+    } catch (error) {
+      console.warn('Postgres webhook subscription delete failed, using fallback cache:', error)
+      return fallbackSubscriptions.delete(id)
+    }
+  }
+
+  async updateActive(id: string, active: boolean): Promise<void> {
+    try {
+      await this.postgresRepo.updateActive(id, active)
+    } catch (error) {
+      console.warn('Postgres webhook subscription update failed, using fallback cache:', error)
+      const sub = fallbackSubscriptions.get(id)
+      if (sub) {
+        sub.active = active
+        fallbackSubscriptions.set(id, sub)
+      }
+    }
+  }
 
   clear() {
-    subscriptions.clear()
-    deliveryLogs.clear()
+    fallbackSubscriptions.clear()
+    fallbackDeliveryLogs.clear()
   }
 }
 
-export const webhookDeliveryStore = {
-  logAttempt(log: Omit<WebhookDeliveryLog, 'id' | 'attemptedAt'>): WebhookDeliveryLog {
-    const fullLog: WebhookDeliveryLog = {
-      ...log,
-      id: randomUUID(),
-      attemptedAt: new Date(),
+class WebhookDeliveryStore {
+  private postgresRepo = new PostgresWebhookDeliveryLogRepository()
+
+  async logAttempt(log: Omit<WebhookDeliveryLog, 'id' | 'attemptedAt'>): Promise<WebhookDeliveryLog> {
+    try {
+      return await this.postgresRepo.logAttempt(log)
+    } catch (error) {
+      console.warn('Postgres webhook delivery log failed, using fallback cache:', error)
+      const fullLog: WebhookDeliveryLog = {
+        ...log,
+        id: randomUUID(),
+        attemptedAt: new Date(),
+      }
+      const list = fallbackDeliveryLogs.get(log.subscriptionId) || []
+      list.push(fullLog)
+      fallbackDeliveryLogs.set(log.subscriptionId, list)
+      return fullLog
     }
-    const list = deliveryLogs.get(log.subscriptionId) || []
-    list.push(fullLog)
-    deliveryLogs.set(log.subscriptionId, list)
-    return fullLog
-  },
+  }
 
-  getHistoryBySubscription(subscriptionId: string): WebhookDeliveryLog[] {
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-    const list = deliveryLogs.get(subscriptionId) || []
-    return list.filter(l => l.attemptedAt.getTime() > thirtyDaysAgo)
+  async getHistoryBySubscription(subscriptionId: string): Promise<WebhookDeliveryLog[]> {
+    try {
+      return await this.postgresRepo.getHistoryBySubscription(subscriptionId)
+    } catch (error) {
+      console.warn('Postgres webhook delivery history failed, using fallback cache:', error)
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const list = fallbackDeliveryLogs.get(subscriptionId) || []
+      return list.filter(l => l.attemptedAt.getTime() > thirtyDaysAgo)
+    }
   }
 }
+
+export const webhookSubscriptionStore = new WebhookSubscriptionStore()
+export const webhookDeliveryStore = new WebhookDeliveryStore()

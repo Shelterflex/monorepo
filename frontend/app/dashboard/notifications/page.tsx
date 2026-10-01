@@ -134,7 +134,7 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
-      <main className="container mx-auto max-w-2xl px-4 pt-24 pb-12">
+      <main id="main-content" className="container mx-auto max-w-2xl px-4 pt-24 pb-12">
         <div className="mb-6 flex items-center justify-between">
           <Link
             href="/dashboard/tenant"

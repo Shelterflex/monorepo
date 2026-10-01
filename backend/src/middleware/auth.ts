@@ -79,6 +79,7 @@ export async function authenticateToken(
       email: user.email,
       name: user.name,
       role: user.role,
+      walletAddress: user.walletAddress,
       displayCurrency: user.displayCurrency,
     }
 

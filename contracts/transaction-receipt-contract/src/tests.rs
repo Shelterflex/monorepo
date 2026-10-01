@@ -367,3 +367,46 @@ fn test_high_volume_isolation() {
         );
     }
 }
+
+#[test]
+fn test_pagination_overflow_and_limit_cap() {
+    let env = Env::default();
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    client.init(&admin, &operator);
+
+    env.mock_all_auths();
+
+    let token = Address::generate(&env);
+    let input = ReceiptInput {
+        external_ref_source: Symbol::new(&env, "stellar"),
+        external_ref: String::from_str(&env, "ref_pagination"),
+        tx_type: Symbol::new(&env, "TENANT_REPAYMENT"),
+        amount_usdc: 100_0000000i128,
+        token: token.clone(),
+        deal_id: String::from_str(&env, "deal_pagination"),
+        listing_id: None,
+        from: None,
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+    client.record_receipt(&operator, &input);
+
+    // Test that excessive limit and cursor values do not panic (should clamp/safely handle)
+    let receipts_deal = client.list_receipts_by_deal(
+        &String::from_str(&env, "deal_pagination"),
+        &u32::MAX,
+        &Some(1),
+    );
+    assert_eq!(receipts_deal.len(), 0);
+
+    let user = Address::generate(&env);
+    let receipts_user = client.list_receipts_by_user(&user, &u32::MAX, &Some(1));
+    assert_eq!(receipts_user.len(), 0);
+}

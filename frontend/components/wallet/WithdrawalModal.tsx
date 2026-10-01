@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { ArrowRight, AlertCircle, Check, Loader2, AlertTriangle } from "lucide-react";
 import { handleError, showSuccessToast } from "@/lib/toast";
+import { formatNgn } from "@/lib/currency";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -66,13 +67,6 @@ const NIGERIAN_BANKS = [
   "Zenith Bank",
 ];
 
-function formatNgn(amount: number) {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    minimumFractionDigits: 0,
-  }).format(amount);
-}
 
 export function WithdrawalModal({
   open,
@@ -115,13 +109,13 @@ export function WithdrawalModal({
       return "Please enter a valid amount";
     }
     if (num < MIN_WITHDRAWAL) {
-      return `Minimum withdrawal is ${formatNgn(MIN_WITHDRAWAL)}`;
+      return `Minimum withdrawal is ${formatNgn(MIN_WITHDRAWAL, undefined, { fractionDigits: 0 })}`;
     }
     if (num > MAX_WITHDRAWAL) {
-      return `Maximum withdrawal is ${formatNgn(MAX_WITHDRAWAL)}`;
+      return `Maximum withdrawal is ${formatNgn(MAX_WITHDRAWAL, undefined, { fractionDigits: 0 })}`;
     }
     if (num > availableBalance) {
-      return `Insufficient balance. Available: ${formatNgn(availableBalance)}`;
+      return `Insufficient balance. Available: ${formatNgn(availableBalance, undefined, { fractionDigits: 0 })}`;
     }
     return null;
   };
@@ -230,7 +224,7 @@ export function WithdrawalModal({
                 <p className="font-semibold">Account frozen</p>
                 <p className="mt-1">{ACCOUNT_FROZEN_MESSAGE}</p>
                 {deficitNgn > 0 && (
-                  <p className="mt-1">Outstanding deficit: {formatNgn(deficitNgn)}</p>
+                  <p className="mt-1">Outstanding deficit: {formatNgn(deficitNgn, undefined, { fractionDigits: 0 })}</p>
                 )}
                 {freezeReason ? <p className="mt-1 text-xs">Reason: {freezeReason}</p> : null}
               </div>
@@ -253,8 +247,8 @@ export function WithdrawalModal({
                 disabled={isSubmitting || isFrozen}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Min: {formatNgn(MIN_WITHDRAWAL)} · Max: {formatNgn(MAX_WITHDRAWAL)}</span>
-                <span>Available: {formatNgn(availableBalance)}</span>
+                <span>Min: {formatNgn(MIN_WITHDRAWAL, undefined, { fractionDigits: 0 })} · Max: {formatNgn(MAX_WITHDRAWAL, undefined, { fractionDigits: 0 })}</span>
+                <span>Available: {formatNgn(availableBalance, undefined, { fractionDigits: 0 })}</span>
               </div>
             </div>
 
@@ -354,7 +348,7 @@ export function WithdrawalModal({
             <div className="rounded-md border-2 border-foreground bg-muted p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Amount</span>
-                <span className="font-mono font-bold">{formatNgn(withdrawalResult.amountNgn)}</span>
+                <span className="font-mono font-bold">{formatNgn(withdrawalResult.amountNgn, undefined, { fractionDigits: 0 })}</span>
               </div>
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Bank</span>
@@ -386,7 +380,7 @@ export function WithdrawalModal({
                 <div className="text-sm text-blue-800">
                   <p className="font-medium">Funds Held</p>
                   <p className="mt-1">
-                    {formatNgn(withdrawalResult.amountNgn)} has been held from your available balance
+                    {formatNgn(withdrawalResult.amountNgn, undefined, { fractionDigits: 0 })} has been held from your available balance
                     while this withdrawal is being processed.
                   </p>
                 </div>

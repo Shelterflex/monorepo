@@ -213,7 +213,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background py-12">
+    <main id="main-content" className="min-h-screen bg-background py-12">
       <div className="container mx-auto px-4">
         <div className="mb-8">
           <h1 className="font-mono text-4xl font-black mb-2">User Management</h1>
