@@ -10,11 +10,17 @@ export interface PerformanceReport {
 // Simple in-memory rate limiter with cleanup (TTL / bounded map) to prevent memory leaks
 const recentRequests = new Map<string, number>()
 const MAX_RECENT_REQUESTS = 10000
-const TTL_MS = 60000 // 1 minute TTL
+const RATE_LIMIT_WINDOW_MS = 1000
+const TTL_MS = 60000
+
+// NextRequest does not expose the peer socket address. Treating
+// x-forwarded-for as authoritative would let a caller choose a new key on
+// every request and bypass the limiter, so this endpoint uses one conservative
+// process-local bucket until a trusted proxy/client-IP integration is added.
+const RATE_LIMIT_KEY = 'performance-endpoint'
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || 'unknown'
     const now = Date.now()
 
     // Evict old entries or prune if map gets too large
@@ -34,11 +40,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const lastReq = recentRequests.get(ip) || 0
-    if (now - lastReq < 1000) {
+    const lastReq = recentRequests.get(RATE_LIMIT_KEY) || 0
+    if (now - lastReq < RATE_LIMIT_WINDOW_MS) {
       return NextResponse.json({ success: false, message: 'Rate limited' }, { status: 429 })
     }
-    recentRequests.set(ip, now)
+    recentRequests.set(RATE_LIMIT_KEY, now)
 
     const report: PerformanceReport = await request.json()
     
