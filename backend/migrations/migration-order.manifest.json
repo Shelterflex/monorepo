@@ -276,6 +276,10 @@
     {
       "position": 69,
       "filename": "046_payment_disputes_deal_id.sql"
+    },
+    {
+      "position": 70,
+      "filename": "047_landlord_payout_preferences.sql"
     }
   ]
 }
