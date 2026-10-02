@@ -7,17 +7,57 @@ export interface PerformanceReport {
   url: string
 }
 
+// Simple in-memory rate limiter with cleanup (TTL / bounded map) to prevent memory leaks
+const recentRequests = new Map<string, number>()
+const MAX_RECENT_REQUESTS = 10000
+const RATE_LIMIT_WINDOW_MS = 1000
+const TTL_MS = 60000
+
+// NextRequest does not expose the peer socket address. Treating
+// x-forwarded-for as authoritative would let a caller choose a new key on
+// every request and bypass the limiter, so this endpoint uses one conservative
+// process-local bucket until a trusted proxy/client-IP integration is added.
+const RATE_LIMIT_KEY = 'performance-endpoint'
+
 export async function POST(request: NextRequest) {
   try {
+    const now = Date.now()
+
+    // Evict old entries or prune if map gets too large
+    if (recentRequests.size > MAX_RECENT_REQUESTS) {
+      for (const [key, timestamp] of recentRequests.entries()) {
+        if (now - timestamp > TTL_MS) {
+          recentRequests.delete(key)
+        }
+      }
+      // If still too large, clear half
+      if (recentRequests.size > MAX_RECENT_REQUESTS) {
+        let i = 0
+        for (const key of recentRequests.keys()) {
+          recentRequests.delete(key)
+          if (i++ > MAX_RECENT_REQUESTS / 2) break
+        }
+      }
+    }
+
+    const lastReq = recentRequests.get(RATE_LIMIT_KEY) || 0
+    if (now - lastReq < RATE_LIMIT_WINDOW_MS) {
+      return NextResponse.json({ success: false, message: 'Rate limited' }, { status: 429 })
+    }
+    recentRequests.set(RATE_LIMIT_KEY, now)
+
     const report: PerformanceReport = await request.json()
     
-    // Log performance metrics for monitoring
-    console.log('Performance Report:', {
-      timestamp: new Date(report.timestamp).toISOString(),
-      url: report.url,
-      metrics: report.metrics,
-      budgetStatus: report.budgetStatus
-    })
+    // Use structured logging with sanitized / summarized metrics if needed
+    // or sample the logs (e.g. only log 20% of reports to avoid log volume explosion)
+    if (Math.random() < 0.2) {
+      console.info(JSON.stringify({
+        event: 'performance_report',
+        timestamp: new Date(report.timestamp).toISOString(),
+        url: report.url,
+        metricCount: Object.keys(report.metrics || {}).length,
+      }))
+    }
     
     // Here you could:
     // 1. Store metrics in a database
