@@ -1097,7 +1097,6 @@ impl SlashingModule {
             .get(&DataKey::InspectorSlashHistory(inspector))
             .unwrap_or_else(|| Vec::new(&env))
     }
-
 }
 
 #[contractimpl]

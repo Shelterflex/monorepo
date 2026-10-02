@@ -1,9 +1,9 @@
 #![no_std]
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
 };
-use soroban_pausable::{Pausable, PausableError};
 
 #[contracttype]
 #[derive(Clone)]

@@ -1,10 +1,10 @@
 #![no_std]
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env,
     IntoVal, String, Symbol, Vec,
 };
-use soroban_pausable::{Pausable, PausableError};
 
 pub mod access_control;
 #[cfg(kani)]
@@ -1004,7 +1004,6 @@ impl BondCollateral {
         );
         Ok(())
     }
-
 }
 
 #[contractimpl]

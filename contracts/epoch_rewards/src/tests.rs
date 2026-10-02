@@ -309,7 +309,10 @@ fn pause_cycle_emits_shared_events() {
     client.unpause(&admin);
 
     let events = env.events().all();
-    assert!(events.len() >= 3, "init, pause, and unpause events expected");
+    assert!(
+        events.len() >= 3,
+        "init, pause, and unpause events expected"
+    );
 }
 
 // ── 10. Conservation: uneven stake split ─────────────────────────────────────
