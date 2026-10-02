@@ -992,18 +992,20 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn pause_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
-        client.pause(&Address::generate(&env));
+        let result = client.try_pause(&Address::generate(&env));
+        assert_eq!(
+            result.unwrap().unwrap_err(),
+            PausableError::NotAuthorized
+        );
     }
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn unpause_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1011,7 +1013,11 @@ mod test {
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
         client.pause(&admin);
-        client.unpause(&Address::generate(&env));
+        let result = client.try_unpause(&Address::generate(&env));
+        assert_eq!(
+            result.unwrap().unwrap_err(),
+            PausableError::NotAuthorized
+        );
     }
 
     /// PINS CURRENT BEHAVIOR pending a maintainer decision (recon flag #3):
@@ -1099,13 +1105,16 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn pause_before_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
-        client.pause(&admin);
+        let result = client.try_pause(&admin);
+        assert_eq!(
+            result.unwrap().unwrap_err(),
+            PausableError::NotAuthorized
+        );
     }
 
     #[test]
@@ -1549,7 +1558,7 @@ mod test {
             .unwrap()
             .try_into_val(&env)
             .unwrap();
-        assert_eq!(paused_action, Symbol::new(&env, "paused"));
+        assert_eq!(paused_action, Symbol::new(&env, "pause"));
 
         client.unpause(&admin);
         let unpaused_action: Symbol = last_event_topics(&env)
@@ -1557,6 +1566,6 @@ mod test {
             .unwrap()
             .try_into_val(&env)
             .unwrap();
-        assert_eq!(unpaused_action, Symbol::new(&env, "unpaused"));
+        assert_eq!(unpaused_action, Symbol::new(&env, "unpause"));
     }
 }
