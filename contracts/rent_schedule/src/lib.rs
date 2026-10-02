@@ -999,7 +999,7 @@ mod test {
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
         let result = client.try_pause(&Address::generate(&env));
-        assert_eq!(result.unwrap().unwrap_err(), PausableError::NotAuthorized);
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     #[test]
@@ -1011,7 +1011,7 @@ mod test {
         client.init(&admin, &operator);
         client.pause(&admin);
         let result = client.try_unpause(&Address::generate(&env));
-        assert_eq!(result.unwrap().unwrap_err(), PausableError::NotAuthorized);
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     /// PINS CURRENT BEHAVIOR pending a maintainer decision (recon flag #3):
@@ -1105,7 +1105,7 @@ mod test {
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
         let result = client.try_pause(&admin);
-        assert_eq!(result.unwrap().unwrap_err(), PausableError::NotAuthorized);
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     #[test]
