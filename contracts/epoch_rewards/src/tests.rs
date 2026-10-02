@@ -3,7 +3,7 @@ extern crate std;
 use crate::{ContractError, EpochRewards, EpochRewardsClient};
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
-    Address, Env,
+    Address, Env, Symbol,
 };
 
 fn setup(env: &Env, duration: u64) -> (Address, EpochRewardsClient<'_>) {
@@ -309,10 +309,18 @@ fn pause_cycle_emits_shared_events() {
     client.unpause(&admin);
 
     let events = env.events().all();
-    assert!(
-        events.len() >= 3,
-        "init, pause, and unpause events expected"
-    );
+    assert!(events.len() >= 2, "pause and unpause events expected");
+
+    let pause_topics = events.get(events.len() - 2).unwrap().1;
+    let unpause_topics = events.get(events.len() - 1).unwrap().1;
+    let pause_category: Symbol = pause_topics.get(0).unwrap().try_into_val(&env).unwrap();
+    let pause_action: Symbol = pause_topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let unpause_category: Symbol = unpause_topics.get(0).unwrap().try_into_val(&env).unwrap();
+    let unpause_action: Symbol = unpause_topics.get(1).unwrap().try_into_val(&env).unwrap();
+    assert_eq!(pause_category, Symbol::new(&env, "Pausable"));
+    assert_eq!(pause_action, Symbol::new(&env, "pause"));
+    assert_eq!(unpause_category, Symbol::new(&env, "Pausable"));
+    assert_eq!(unpause_action, Symbol::new(&env, "unpause"));
 }
 
 // ── 10. Conservation: uneven stake split ─────────────────────────────────────
