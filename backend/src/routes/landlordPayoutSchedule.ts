@@ -121,6 +121,33 @@ router.get(
   },
 )
 
+/**
+ * PATCH /api/landlord/payout/preferences
+ * Save landlord payout schedule preference
+ */
+router.patch(
+  '/preferences',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const landlordId = requireLandlord(req)
+      const { schedule } = req.body ?? {}
+      if (!['activation', 'weekly', 'monthly'].includes(schedule)) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Invalid schedule preference')
+      }
+      const store = getLandlordPayoutScheduleStore()
+      await store.savePreference(landlordId, schedule)
+      res.json({
+        success: true,
+        preferences: { schedule },
+        message: 'Payout preferences updated successfully',
+      })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
 export function createLandlordPayoutScheduleRouter(): Router {
   return router
 }

@@ -5815,6 +5815,32 @@ components:
         token (e.g. x-paystack-signature for Paystack, verif-hash for Flutterwave). The
         header name varies by payment rail; see the payments webhook handler.
 
+  /api/landlord/payout/preferences:
+    patch:
+      summary: Update landlord payout schedule preference
+      operationId: updateLandlordPayoutPreference
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - schedule
+              properties:
+                schedule:
+                  type: string
+                  enum: [activation, weekly, monthly]
+      responses:
+        '200':
+          description: Payout preference updated
+        '400':
+          description: Invalid schedule preference
+        '401':
+          description: Authentication required
+
 tags:
   - name: Health
     description: Health check operations
