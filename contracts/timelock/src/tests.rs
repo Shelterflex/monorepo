@@ -29,6 +29,7 @@ mod tests {
     }
 
     fn setup(env: &Env) -> (Address, TimelockClient<'_>, Address, Address) {
+        env.mock_all_auths();
         let timelock_id = env.register(Timelock, ());
         let client = TimelockClient::new(env, &timelock_id);
         let admin = Address::generate(env);
@@ -284,6 +285,7 @@ mod tests {
         members.push_back(member.clone());
         members.push_back(member);
 
+        env.mock_all_auths();
         let result = client.try_init(&admin, &0u64, &604800u64, &members);
         assert!(matches!(result, Err(Ok(TimelockError::InvalidDelay))));
     }

@@ -94,7 +94,7 @@ export default function InspectorDashboard() {
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="lg:pl-64">
+        <main id="main-content" className="lg:pl-64">
           <div className="p-6 lg:p-8">
             <Card className="border-3 border-foreground p-12 text-center shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
               <FileText className="mx-auto h-16 w-16 text-muted-foreground" />
@@ -121,7 +121,7 @@ export default function InspectorDashboard() {
       />
 
       {/* Main Content */}
-      <main className="lg:pl-64">
+      <main id="main-content" className="lg:pl-64">
         <div className="p-6 lg:p-8">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground">Inspector Dashboard</h1>

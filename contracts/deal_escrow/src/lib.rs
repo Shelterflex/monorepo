@@ -12,6 +12,9 @@ use soroban_sdk::{
 pub mod access_control;
 pub mod validation;
 
+#[cfg(kani)]
+pub mod formal_properties;
+
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -408,6 +411,13 @@ fn generate_tx_id(env: &Env, external_ref_source: &Symbol, external_ref: &String
 
 #[contractimpl]
 impl DealEscrow {
+    /// Initialise the escrow contract.
+    ///
+    /// Sets the `admin`, `operator`, `token`, and `receipt_contract` addresses,
+    /// seeds the contract version to 1, and stores the initial storage-schema
+    /// version.  Can only be called once; subsequent calls return
+    /// `ContractError::AlreadyInitialized`.  Emits a `deal_escrow / init` event
+    /// containing all four addresses plus the version number.
     pub fn init(
         env: Env,
         admin: Address,
@@ -418,6 +428,7 @@ impl DealEscrow {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Operator, &operator);
         env.storage().instance().set(&DataKey::Token, &token);
@@ -439,6 +450,7 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Return the current contract version (starts at 1, incremented by upgrades).
     pub fn contract_version(env: Env) -> u32 {
         env.storage()
             .instance()
@@ -446,6 +458,16 @@ impl DealEscrow {
             .unwrap_or(0u32)
     }
 
+    /// Deposit tokens into escrow for a given deal.
+    ///
+    /// Requires auth from `from`.  Transfers `amount` tokens from `from` to the
+    /// contract using the configured token, then credits that amount to the
+    /// per-deal persistent balance.  The first depositor for a `deal_id` is
+    /// recorded as the deal's depositor (used later for dispute resolution).
+    /// Protected by a reentrancy guard around the external token transfer.
+    /// Reverts if the contract is paused, if `amount` is invalid (≤ 0), or if
+    /// `deal_id` is empty.  Emits a `deal_escrow / deposit` event containing
+    /// `(deal_id, from, amount)`.
     pub fn deposit(
         env: Env,
         from: Address,
@@ -483,6 +505,18 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Release the full escrowed balance for a deal to up to three recipients.
+    ///
+    /// Callable by the admin or operator.  Splits the deal's current balance
+    /// exactly into `principal_amount` (→ `to`), `platform_amount` (→
+    /// `platform_addr`), and `reporter_amount` (→ `reporter_addr`); the three
+    /// amounts must sum to the current balance exactly, otherwise
+    /// `ContractError::InvalidSplit` is returned.  Generates a canonical
+    /// transaction ID from `external_ref_source` / `external_ref` and records
+    /// it in the emitted event for receipt indexing.  Protected by a reentrancy
+    /// guard.  Reverts if the contract is paused or frozen, if the deal balance
+    /// is zero, or if any amount is negative.  Emits a `deal_escrow / release`
+    /// event and returns the released total.
     pub fn release(
         env: Env,
         caller: Address,
@@ -574,14 +608,24 @@ impl DealEscrow {
         Ok(cur)
     }
 
+    /// Return the current escrowed token balance for `deal_id`.
     pub fn balance(env: Env, deal_id: String) -> i128 {
         get_deal_balance(&env, &deal_id)
     }
 
+    /// Return the current storage-schema version (V1 = 1, V2 = 2, V3 = 3).
     pub fn storage_schema_version(env: Env) -> u32 {
         get_storage_schema_version(&env)
     }
 
+    /// Configure the two time windows used by the rent-release dispute flow.
+    ///
+    /// Admin-only.  `challenge_window_seconds` is the period after a release is
+    /// requested during which a depositor or recipient may open a dispute.
+    /// `dispute_timeout_seconds` is the period after a dispute is opened before
+    /// it auto-resolves in favour of the depositor via `settle_dispute_timeout`.
+    /// Both values must be non-zero.  Emits a
+    /// `deal_escrow / configure_dispute_windows` event with the new values.
     pub fn configure_dispute_windows(
         env: Env,
         admin: Address,
@@ -614,6 +658,11 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Set the address of the trusted dispute resolver.
+    ///
+    /// Admin-only.  The resolver is the only address permitted to call
+    /// `resolve_rent_dispute`.  Emits a `deal_escrow / set_resolver` event
+    /// containing the new resolver address.
     pub fn set_resolver(env: Env, admin: Address, resolver: Address) -> Result<(), ContractError> {
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_resolver")?;
@@ -628,6 +677,16 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Migrate deal-balance storage from an older schema version to V3.
+    ///
+    /// Admin-only.  Accepts `from_version` (must be V1 or V2) and a list of
+    /// `deal_ids` whose persistent records should be converted to the V3
+    /// `DealState` struct format.  If the contract is already at V3 the
+    /// function is a no-op and emits a `migration_noop` event.  On success the
+    /// stored schema version is bumped to V3 and a `migration_completed` event
+    /// is emitted.  Returns `ContractError::InvalidSchemaVersion` if
+    /// `from_version` does not match the current on-chain version or is not a
+    /// recognised legacy version.
     pub fn migrate_storage_schema(
         env: Env,
         admin: Address,
@@ -703,6 +762,17 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Initiate a two-phase rent-release for a deal.
+    ///
+    /// Callable by the admin or operator.  Records a `PendingRentRelease` for
+    /// `deal_id`, locking `amount` tokens within the deal's balance for the
+    /// intended recipient `to`.  The challenge window starts immediately;
+    /// either party (depositor or recipient) may dispute before
+    /// `challenge_end_at`.  Fails if the contract is paused, if the deal
+    /// already has a pending release (`ContractError::PendingReleaseExists`),
+    /// or if `amount` exceeds the current balance.  Emits a
+    /// `deal_escrow / rent_release_requested` event with `(deal_id, caller,
+    /// amount, challenge_end_at)`.
     pub fn request_rent_release(
         env: Env,
         caller: Address,
@@ -757,6 +827,16 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Open a dispute against a pending rent release.
+    ///
+    /// Requires auth from `caller`, who must be either the deal's depositor or
+    /// the intended recipient of the pending release.  Must be called within
+    /// the challenge window (`now <= challenge_end_at`); after that window
+    /// closes the function returns `ContractError::DisputeNotAllowed`.
+    /// `challenge_evidence_ref` must be a non-empty string referencing
+    /// off-chain evidence.  Creates a `RentDispute` record for the deal.
+    /// Emits a `deal_escrow / rent_release_challenged` event with `(deal_id,
+    /// caller, now)`.
     pub fn challenge_rent_release(
         env: Env,
         caller: Address,
@@ -795,6 +875,18 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Resolve an open rent-release dispute as the trusted resolver.
+    ///
+    /// Only callable by the address stored as the resolver (set via
+    /// `set_resolver`).  Requires auth from `caller`.  The `outcome` field
+    /// determines who receives the locked tokens:
+    /// `SettlementOutcome::ReleaseToRecipient` pays the intended recipient;
+    /// `SettlementOutcome::RefundToDepositor` refunds the depositor.
+    /// Clears the pending release and dispute records, transfers tokens under
+    /// the reentrancy guard, and emits a `deal_escrow / rent_release_settled`
+    /// event.  Returns `ContractError::NotAuthorized` if no resolver is
+    /// configured or `caller` is not the resolver, and
+    /// `ContractError::NoOpenDispute` if no dispute exists.
     pub fn resolve_rent_dispute(
         env: Env,
         caller: Address,
@@ -817,6 +909,14 @@ impl DealEscrow {
         Self::settle_release_inner(&env, &deal_id, outcome, &resolution_evidence_ref, true)
     }
 
+    /// Auto-settle a rent release after the challenge window expires with no dispute.
+    ///
+    /// Callable by anyone once `now >= challenge_end_at` and no dispute has
+    /// been opened.  Releases the locked tokens to the original recipient
+    /// (`SettlementOutcome::ReleaseToRecipient`).  Returns
+    /// `ContractError::DisputeNotAllowed` if a dispute is already open, and
+    /// `ContractError::InvalidReleaseWindow` if the challenge window has not
+    /// yet closed.  Emits a `deal_escrow / rent_release_settled` event.
     pub fn settle_rent_release_timeout(env: Env, deal_id: String) -> Result<(), ContractError> {
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
@@ -836,6 +936,14 @@ impl DealEscrow {
         )
     }
 
+    /// Auto-resolve a dispute that has exceeded the dispute-timeout window.
+    ///
+    /// Callable by anyone once `now >= dispute.opened_at + dispute_timeout_seconds`.
+    /// Settles in favour of the depositor (`SettlementOutcome::RefundToDepositor`).
+    /// Returns `ContractError::NoOpenDispute` if no dispute exists,
+    /// `ContractError::InvalidSettlement` if the dispute was already resolved,
+    /// and `ContractError::InvalidReleaseWindow` if the timeout has not yet
+    /// elapsed.  Emits a `deal_escrow / rent_release_settled` event.
     pub fn settle_dispute_timeout(env: Env, deal_id: String) -> Result<(), ContractError> {
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
@@ -956,6 +1064,13 @@ impl Pausable for DealEscrow {
 
 #[contractimpl]
 impl DealEscrow {
+    /// Set the guardian address that must co-sign upgrade execution.
+    ///
+    /// Admin-only.  When a guardian is configured, both the admin and the
+    /// guardian must authorise `execute_upgrade` and `emergency_upgrade`.
+    /// Setting a guardian is optional; without one, admin auth alone suffices.
+    /// Emits a `deal_escrow / set_guardian` event containing the new guardian
+    /// address.
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_guardian")?;
@@ -970,6 +1085,12 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Set the minimum delay (in seconds) between proposing and executing an upgrade.
+    ///
+    /// Admin-only.  A non-zero delay enforces a timelock on WASM upgrades,
+    /// giving stakeholders time to review before the upgrade takes effect.
+    /// A value of 0 disables the delay.  Emits a
+    /// `deal_escrow / set_upgrade_delay` event containing the new delay value.
     pub fn set_upgrade_delay(
         env: Env,
         admin: Address,
@@ -995,6 +1116,14 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Step 1 of the two-phase upgrade: propose a new WASM hash.
+    ///
+    /// Admin-only.  Records `new_wasm_hash` as the pending upgrade and
+    /// timestamps the proposal.  Only one upgrade may be pending at a time;
+    /// a second call returns `ContractError::UpgradeAlreadyPending`.  After
+    /// the configured `upgrade_delay` has elapsed, the admin (plus guardian if
+    /// set) can finalise the upgrade via `execute_upgrade`.  Emits a
+    /// `deal_escrow / propose_upgrade` event with `(new_wasm_hash, now)`.
     pub fn propose_upgrade(
         env: Env,
         admin: Address,
@@ -1022,6 +1151,15 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Step 2 of the two-phase upgrade: execute a previously proposed WASM upgrade.
+    ///
+    /// Admin-only (plus guardian auth if a guardian is configured).
+    /// `new_wasm_hash` must match the hash stored by `propose_upgrade`.  The
+    /// configured upgrade delay must have elapsed since the proposal; otherwise
+    /// `ContractError::UpgradeDelayNotMet` is returned.  On success, clears
+    /// the pending proposal, emits a `deal_escrow / execute_upgrade` event,
+    /// and replaces the contract WASM in-place via
+    /// `env.deployer().update_current_contract_wasm`.
     pub fn execute_upgrade(
         env: Env,
         admin: Address,
@@ -1072,6 +1210,14 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Bypass the upgrade delay and immediately replace the contract WASM.
+    ///
+    /// Admin-only (plus guardian auth if a guardian is configured).  Intended
+    /// for critical security patches where waiting for the normal timelock
+    /// would be dangerous.  Clears any pending upgrade proposal, emits a
+    /// `deal_escrow / emergency_upgrade` event containing `(admin,
+    /// new_wasm_hash, timestamp)`, and replaces the WASM in-place.  Use with
+    /// extreme caution.
     pub fn emergency_upgrade(
         env: Env,
         admin: Address,
@@ -1106,6 +1252,11 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Cancel a pending upgrade proposal before it is executed.
+    ///
+    /// Admin-only.  Returns `ContractError::NoUpgradePending` if there is no
+    /// proposal to cancel.  Clears the stored hash and timestamp, and emits a
+    /// `deal_escrow / cancel_upgrade` event with `(admin, cancelled_hash)`.
     pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "cancel_upgrade")?;
@@ -1134,6 +1285,13 @@ impl DealEscrow {
 
 #[contractimpl]
 impl DealEscrow {
+    /// Freeze the contract, halting all fund-movement operations.
+    ///
+    /// Admin-only.  Transitions the circuit-breaker state from `Unfrozen` to
+    /// `Frozen`.  While frozen, `release` and other fund-movement calls return
+    /// `ContractError::Frozen`.  Returns `ContractError::Frozen` if the
+    /// contract is already frozen.  Emits a `deal_escrow / freeze` event with
+    /// `(admin, timestamp)`.
     pub fn freeze(env: Env, admin: Address) -> Result<(), ContractError> {
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "freeze")?;
@@ -1156,10 +1314,19 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Return `true` if the contract is currently in the `Frozen` circuit-breaker state.
     pub fn is_frozen(env: Env) -> bool {
         get_circuit_breaker_state(&env) == CircuitBreakerState::Frozen
     }
 
+    /// Step 1 of the governance-controlled drain: propose a drain hash.
+    ///
+    /// Admin-only.  The contract must already be `Frozen`.  Records
+    /// `drain_hash` and the current timestamp as the pending drain proposal.
+    /// After the recovery delay elapses, `execute_drain` can finalise the
+    /// drain.  Returns `ContractError::InvalidGovernanceDrain` if the contract
+    /// is not frozen.  Emits a `deal_escrow / propose_drain` event with
+    /// `(drain_hash, now)`.
     pub fn propose_drain(
         env: Env,
         admin: Address,
@@ -1189,6 +1356,16 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Step 2 of the governance-controlled drain: execute after the recovery delay.
+    ///
+    /// Admin-only.  `drain_hash` must match the hash stored by `propose_drain`.
+    /// The recovery delay must have elapsed since the proposal; otherwise
+    /// `ContractError::RecoveryDelayNotMet` is returned.  The contract must
+    /// still be `Frozen`; non-frozen state returns
+    /// `ContractError::InvalidGovernanceDrain`.  On success, clears the
+    /// pending drain records, transitions the circuit-breaker state back to
+    /// `Unfrozen`, and emits a `deal_escrow / execute_drain` event with
+    /// `(admin, drain_hash, timestamp)`.
     pub fn execute_drain(
         env: Env,
         admin: Address,
@@ -1234,6 +1411,10 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Set the minimum recovery delay (in seconds) before `execute_drain` may run.
+    ///
+    /// Admin-only.  Defaults to 86 400 s (24 hours) when unset.  Emits a
+    /// `deal_escrow / set_recovery_delay` event containing the new delay value.
     pub fn set_recovery_delay(
         env: Env,
         admin: Address,
@@ -1260,6 +1441,10 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Return the current circuit-breaker state as a `u32`.
+    ///
+    /// Maps to `CircuitBreakerState`: `0` = Unfrozen, `1` = Frozen,
+    /// `2` = RecoveryAwaiting.
     pub fn get_circuit_breaker_state(env: Env) -> u32 {
         get_circuit_breaker_state(&env) as u32
     }
@@ -1350,6 +1535,10 @@ impl DealEscrow {
         Ok(())
     }
 
+    /// Return the current lifecycle status of a deal.
+    ///
+    /// Returns `DealLifecycleStatus::Draft` for deals that have never been
+    /// explicitly activated.  Does not revert; unknown deal IDs return `Draft`.
     pub fn deal_lifecycle_status(env: Env, deal_id: String) -> DealLifecycleStatus {
         Self::get_deal_lifecycle(&env, &deal_id)
     }
@@ -1374,6 +1563,7 @@ mod test {
     #[test]
     fn init_sets_version_to_one() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(DealEscrow, ());
         let client = DealEscrowClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -1392,6 +1582,7 @@ mod test {
     #[test]
     fn init_cannot_be_called_twice() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(DealEscrow, ());
         let client = DealEscrowClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -1411,6 +1602,22 @@ mod test {
         assert_eq!(err, ContractError::AlreadyInitialized);
     }
 
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(DealEscrow, ());
+        let client = DealEscrowClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        let token_id = env
+            .register_stellar_asset_contract_v2(Address::generate(&env))
+            .address();
+        let receipt = Address::generate(&env);
+
+        client.init(&admin, &operator, &token_id, &receipt);
+    }
+
     fn setup(
         env: &Env,
     ) -> (
@@ -1422,6 +1629,7 @@ mod test {
         Address,
         Address,
     ) {
+        env.mock_all_auths();
         let contract_id = env.register(DealEscrow, ());
         let client = DealEscrowClient::new(env, &contract_id);
         let admin = Address::generate(env);

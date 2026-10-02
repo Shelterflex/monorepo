@@ -12,7 +12,7 @@ export const metadata = buildPageMetadata({
 
 export default function RentToOwnPage() {
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       {/* Header */}
       <section className="border-b-3 border-foreground bg-muted py-8 md:py-12 lg:py-16">
         <div className="container mx-auto px-4">

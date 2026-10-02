@@ -126,7 +126,7 @@ export default function SavedPropertiesPage() {
         userInfo={{ name: "Tenant", roleLabel: "Tenant" }}
       />
 
-      <main className="min-h-screen pt-20 lg:ml-64">
+      <main id="main-content" className="min-h-screen pt-20 lg:ml-64">
         <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">
           {/* Header */}
           <div className="mb-8">

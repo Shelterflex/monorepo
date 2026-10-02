@@ -52,7 +52,7 @@ export default function ReferralsPage() {
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="container max-w-4xl mx-auto px-4 py-8">
+        <main id="main-content" className="container max-w-4xl mx-auto px-4 py-8">
           <ReferralShareCard loading={true} />
         </main>
       </div>
@@ -63,7 +63,7 @@ export default function ReferralsPage() {
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="container max-w-4xl mx-auto px-4 py-8">
+        <main id="main-content" className="container max-w-4xl mx-auto px-4 py-8">
           <ReferralShareCard error={error || 'Failed to load referral program'} />
         </main>
       </div>
@@ -74,7 +74,7 @@ export default function ReferralsPage() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="container max-w-4xl mx-auto px-4 py-8 space-y-8">
+      <main id="main-content" className="container max-w-4xl mx-auto px-4 py-8 space-y-8">
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-foreground">Referral Programme</h1>

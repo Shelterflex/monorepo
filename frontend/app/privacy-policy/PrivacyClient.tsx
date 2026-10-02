@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react"
 
 export default function PrivacyPolicyPage() {
   return (
-    <main className="min-h-screen bg-background py-12 px-4 pt-32">
+    <main id="main-content" className="min-h-screen bg-background py-12 px-4 pt-32">
       <div className="mx-auto max-w-4xl">
         {/* Back Button */}
         <Link href="/">

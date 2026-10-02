@@ -1,107 +1,172 @@
 'use client'
 
-import React from 'react'
-import { PhotoGallery } from '@/components/properties/PhotoGallery'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Loader2, Save } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  PhotoGalleryEditor,
+  type ListingPhoto,
+} from '@/components/landlord/PhotoGalleryEditor'
+import {
+  getLandlordProperty,
+  updateLandlordProperty,
+  type LandlordPropertyRecord,
+} from '@/lib/landlordPropertiesApi'
+import { showErrorToast, showSuccessToast } from '@/lib/toast'
 
-interface PropertyPhoto {
-  id: string
-  url: string
-  orderIndex: number
-  isFeatured: boolean
-  fileName?: string
-  fileSize?: number
-  width?: number
-  height?: number
-  mimeType?: string
-  uploadedAt: Date
-}
+/**
+ * Real property photo management (issue #1848).
+ *
+ * Photos are loaded from the landlord property record and edited with the
+ * same `PhotoGalleryEditor` the listing form uses, so uploads, deletes and
+ * reordering persist against the backend instead of being discarded. New
+ * files are uploaded by the editor itself (it knows `propertyId`); reorder
+ * and primary-photo changes are persisted through `updateLandlordProperty`
+ * with the same payload shape the listing form submits.
+ */
+export default function PropertyPhotosPage() {
+  const params = useParams()
+  const id = params.id as string
 
-export default function PropertyPhotosPage({ params }: { params: { id: string } }) {
-  // In a real implementation, you would fetch photos from the backend API
-  const mockPhotos: PropertyPhoto[] = [
-    {
-      id: '1',
-      url: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800',
-      orderIndex: 0,
-      isFeatured: true,
-      fileName: 'living-room.jpg',
-      fileSize: 2048000,
-      width: 1920,
-      height: 1080,
-      mimeType: 'image/jpeg',
-      uploadedAt: new Date('2024-01-15'),
-    },
-    {
-      id: '2',
-      url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800',
-      orderIndex: 1,
-      isFeatured: false,
-      fileName: 'bedroom.jpg',
-      fileSize: 1536000,
-      width: 1920,
-      height: 1080,
-      mimeType: 'image/jpeg',
-      uploadedAt: new Date('2024-01-16'),
-    },
-    {
-      id: '3',
-      url: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800',
-      orderIndex: 2,
-      isFeatured: false,
-      fileName: 'kitchen.jpg',
-      fileSize: 1792000,
-      width: 1920,
-      height: 1080,
-      mimeType: 'image/jpeg',
-      uploadedAt: new Date('2024-01-17'),
-    },
-  ]
+  const [property, setProperty] = useState<LandlordPropertyRecord | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<ListingPhoto[]>([])
+  const [primaryPhotoId, setPrimaryPhotoId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const handlePhotosChange = (photos: PropertyPhoto[]) => {
-    // In a real implementation, sync with backend
+  useEffect(() => {
+    let cancelled = false
+    getLandlordProperty(id)
+      .then((data) => {
+        if (cancelled) return
+        setProperty(data)
+        setPhotos(
+          data.photos.map((url, index) => ({
+            id: `existing-${index}`,
+            preview: url,
+          })),
+        )
+        setPrimaryPhotoId(
+          data.photos.length > 0 ? `existing-${data.primaryPhotoIndex ?? 0}` : null,
+        )
+      })
+      .catch((error) => {
+        if (!cancelled) showErrorToast(error, 'Failed to load property photos')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  /** Mirror the listing form's payload convention: primary photo first. */
+  const buildPhotoPayload = () => {
+    // Photos still holding a File failed to upload; keep them out of the
+    // persisted list so blob: previews never reach the backend.
+    const persisted = photos.filter((photo) => !photo.file)
+    const ordered = [...persisted]
+    const primaryIndex = primaryPhotoId
+      ? ordered.findIndex((photo) => photo.id === primaryPhotoId)
+      : 0
+    if (primaryIndex > 0) {
+      const [primary] = ordered.splice(primaryIndex, 1)
+      ordered.unshift(primary)
+    }
+    return {
+      photos: ordered.map((photo) => photo.preview),
+      primaryPhotoIndex: 0,
+    }
   }
 
+  const handleSave = async () => {
+    if (!property) return
+    setSaving(true)
+    try {
+      const payload = buildPhotoPayload()
+      const updated = await updateLandlordProperty(property.id, payload)
+      // Re-sync with the record so local ids match the persisted state.
+      setProperty(updated)
+      setPhotos(
+        updated.photos.map((url, index) => ({
+          id: `existing-${index}`,
+          preview: url,
+        })),
+      )
+      setPrimaryPhotoId(
+        updated.photos.length > 0 ? `existing-${updated.primaryPhotoIndex ?? 0}` : null,
+      )
+      showSuccessToast('Property photos updated')
+    } catch (error) {
+      showErrorToast(error, 'Failed to save property photos')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const unsavedUploads = useMemo(
+    () => photos.filter((photo) => photo.file).length,
+    [photos],
+  )
+
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard/landlord/properties">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          </Link>
+    <div className="min-h-screen bg-background pt-20">
+      <div className="mx-auto max-w-4xl p-8">
+        <Link
+          href="/dashboard/landlord/properties"
+          className="mb-4 inline-flex items-center gap-2 font-bold hover:text-primary"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          Back to properties
+        </Link>
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Property Photos</h1>
-            <p className="text-muted-foreground">Manage photos for property #{params.id}</p>
+            <h1 className="text-4xl font-bold">Property Photos</h1>
+            {property && (
+              <p className="text-muted-foreground">
+                Manage photos for {property.title}
+              </p>
+            )}
           </div>
+          <Button onClick={handleSave} disabled={saving || !property}>
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            {saving ? 'Saving…' : 'Save photos'}
+          </Button>
+        </div>
+
+        <div className="mt-8">
+          {loading ? (
+            <Skeleton className="h-96 w-full" />
+          ) : (
+            <>
+              <PhotoGalleryEditor
+                propertyId={id}
+                photos={photos}
+                primaryPhotoId={primaryPhotoId}
+                onChange={(nextPhotos, nextPrimaryId) => {
+                  setPhotos(nextPhotos)
+                  setPrimaryPhotoId(nextPrimaryId)
+                }}
+              />
+              {unsavedUploads > 0 && (
+                <p className="mt-2 text-sm text-destructive">
+                  {unsavedUploads} photo{unsavedUploads > 1 ? 's' : ''} failed to
+                  upload — use the retry button on those photos before saving.
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
-
-      {/* Photo Gallery */}
-      <PhotoGallery
-        propertyId={params.id}
-        initialPhotos={mockPhotos}
-        onPhotosChange={handlePhotosChange}
-        readOnly={false}
-      />
-
-      {/* Usage Instructions */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-4">How to Use</h2>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li>• <strong>Upload:</strong> Click "Upload Photos" to add new images (max 10MB per file)</li>
-          <li>• <strong>Drag & Drop:</strong> Drag photos to reorder them in the gallery</li>
-          <li>• <strong>Featured:</strong> Click the star icon to set a photo as featured</li>
-          <li>• <strong>View:</strong> Click any photo to open the lightbox viewer</li>
-          <li>• <strong>Navigate:</strong> Use arrow keys or click the arrows to navigate in lightbox</li>
-          <li>• <strong>Delete:</strong> Click the trash icon to remove a photo (with undo option)</li>
-        </ul>
-      </Card>
     </div>
   )
 }

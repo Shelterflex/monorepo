@@ -18,7 +18,7 @@ export interface TimelockStatusResponse {
 
 export async function getQueuedTransactions(): Promise<QueuedTransaction[]> {
   try {
-    const response = await apiFetch<TimelockStatusResponse>("/api/admin/timelock/transactions");
+    const response = await apiFetch<TimelockStatusResponse>("/api/v1/admin/timelock/transactions");
     // The backend returns { transactions: [...] }
     return response.transactions || [];
   } catch (error) {
@@ -29,7 +29,7 @@ export async function getQueuedTransactions(): Promise<QueuedTransaction[]> {
 
 export async function executeTransaction(txHash: string): Promise<{ success: boolean; stellarTxHash?: string; error?: string }> {
   try {
-    const response = await apiFetch<{ success: boolean; stellarTxHash?: string; error?: string }>("/api/admin/timelock/execute", {
+    const response = await apiFetch<{ success: boolean; stellarTxHash?: string; error?: string }>("/api/v1/admin/timelock/execute", {
       method: "POST",
       body: JSON.stringify({ txHash }),
     });
@@ -42,7 +42,7 @@ export async function executeTransaction(txHash: string): Promise<{ success: boo
 
 export async function cancelTransaction(txHash: string): Promise<{ success: boolean; stellarTxHash?: string; error?: string }> {
   try {
-    const response = await apiFetch<{ success: boolean; stellarTxHash?: string; error?: string }>("/api/admin/timelock/cancel", {
+    const response = await apiFetch<{ success: boolean; stellarTxHash?: string; error?: string }>("/api/v1/admin/timelock/cancel", {
       method: "POST",
       body: JSON.stringify({ txHash }),
     });

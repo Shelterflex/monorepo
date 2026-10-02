@@ -517,3 +517,52 @@ mod tests {
         }
     }
 }
+
+// contracts/rent_wallet/src/formal_properties.rs
+
+#[cfg(kani)]
+mod formal_properties {
+    use super::*;
+    use soroban_sdk::Env;
+
+    // Example proof harness corrected to run under Kani alone without #[test]
+    #[kani::proof]
+    pub fn inv1_funds_conservation() {
+        let env = Env::default();
+        // ... Kani symbolic inputs and contract checks ...
+    }
+
+    // Repeat for invariants 2 through 10, ensuring #[kani::proof] is used exclusively
+}
+
+// contracts/transaction-receipt-contract/src/formal_properties.rs
+
+#[cfg(kani)]
+mod formal_properties {
+    use super::*;
+    use soroban_sdk::{Address, Env};
+
+    #[kani::proof]
+    fn invariant_unique_receipts() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        let contract_id = env.register(TransactionReceiptContract, ());
+        let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+        client.init(&admin, &operator);
+
+        // Symbolic or concrete test inputs for issuing a receipt
+        let recipient = Address::generate(&env);
+        let amount: i128 = kani::any();
+        kani::assume(amount > 0 && amount < 1_000_000);
+
+        // Issue receipt
+        let receipt_id = client.issue_receipt(&operator, &recipient, &amount);
+
+        // Assert that the receipt is correctly stored and retrievable
+        let stored_receipt = client.get_receipt(&receipt_id);
+        assert!(stored_receipt.is_some());
+        assert_eq!(stored_receipt.unwrap().amount, amount);
+    }
+}

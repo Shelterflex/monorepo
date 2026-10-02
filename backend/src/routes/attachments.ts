@@ -12,7 +12,7 @@ import {
   ALLOWED_CONTENT_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from '../services/attachmentService.js'
-import { STORAGE_PROVIDER, type StorageProvider } from '../services/storageService.js'
+import { getStorageProvider, type StorageProvider } from '../services/storageService.js'
 import { z } from 'zod'
 import multer from 'multer'
 
@@ -43,19 +43,7 @@ function requireUser(req: AuthenticatedRequest): string {
 export function createAttachmentsRouter(storageProvider?: StorageProvider): Router {
   const router = Router()
 
-  const provider: StorageProvider = storageProvider ?? {
-    async generatePresignedUpload(key: string, contentType: string, ttlSeconds: number) {
-      return { uploadUrl: `/api/v1/messaging/attachments/upload/${key}`, objectKey: key }
-    },
-    async generatePresignedDownload(key: string, ttlSeconds: number) {
-      return { downloadUrl: `/api/v1/messaging/attachments/download/${key}` }
-    },
-    async uploadFile(key: string, buffer: Buffer, contentType: string) {
-      return { key, url: '' }
-    },
-    async deleteFile(key: string) {},
-    async copyFile(sourceKey: string, destKey: string) {},
-  }
+  const provider: StorageProvider = storageProvider ?? getStorageProvider()
 
   router.post('/upload-url', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -142,6 +130,72 @@ export function createAttachmentsRouter(storageProvider?: StorageProvider): Rout
         success: true,
         data: { downloadUrl, expiresAt, expiresInSeconds: 1800 },
       })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.post('/upload/:storageKey(*)', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      requireUser(req)
+      if (!req.file) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'No file provided')
+      }
+
+      const storageKey = req.params.storageKey
+      const contentType = req.body.contentType || req.file.mimetype
+
+      if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, `Content type ${contentType} not allowed`)
+      }
+
+      if (req.file.size > MAX_FILE_SIZE_BYTES) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'File too large')
+      }
+
+      if (!validateFileSignature(req.file.buffer, contentType)) {
+        throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'File signature does not match declared type')
+      }
+
+      let processedBuffer = req.file.buffer
+      if (contentType.startsWith('image/')) {
+        processedBuffer = await stripImageExif(processedBuffer)
+      }
+
+      const { url } = await provider.uploadFile(storageKey, processedBuffer, contentType)
+      const downloadUrl = (await provider.generatePresignedDownload(storageKey, 1800)).downloadUrl
+
+      res.status(201).json({
+        success: true,
+        data: {
+          storageKey,
+          contentType,
+          sizeBytes: req.file.size,
+          url: downloadUrl || url,
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.get('/download/:storageKey(*)/file', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = requireUser(req)
+      const storageKey = req.params.storageKey
+      const conversationId = req.query.conversationId as string | undefined
+
+      if (conversationId) {
+        const isParticipant = await conversationStore.isParticipant(conversationId, userId)
+        if (!isParticipant) {
+          throw notFound('Attachment')
+        }
+      }
+
+      const { buffer, contentType } = await provider.downloadFile(storageKey)
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Content-Length', buffer.length)
+      res.send(buffer)
     } catch (error) {
       next(error)
     }

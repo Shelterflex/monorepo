@@ -109,7 +109,6 @@ export default async function RootLayout({
                 <NetworkStatusBanner />
                 <SkipLink />
                 <Header />
-                <div id="main-content" />
                 {children}
                 <Footer />
                 <Toaster />

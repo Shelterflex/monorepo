@@ -26,6 +26,7 @@ export function useGovernance() {
   const [isLoading, setIsLoading] = useState(true);
   const [stakedBalance, setStakedBalance] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchProposals = useCallback(async () => {
     setIsLoading(true);
@@ -60,10 +61,39 @@ export function useGovernance() {
 
   const createProposal = useCallback(
     async (params: { paramKey: string; currentValue: string; proposedValue: string }) => {
-      if (!connected) {
-        handleError(new Error("Connect a wallet first"), "Wallet not connected");
-        return;
+      setError(null);
+
+      // Validate parameter key
+      if (!params.paramKey || !params.paramKey.trim()) {
+        const err = new Error("Parameter key is required");
+        handleError(err, "Validation failed");
+        setError(err.message);
+        throw err;
       }
+
+      // Validate currentValue is a valid number
+      if (!params.currentValue || params.currentValue.trim() === "" || isNaN(Number(params.currentValue))) {
+        const err = new Error("Current value must be a valid number");
+        handleError(err, "Validation failed");
+        setError(err.message);
+        throw err;
+      }
+
+      // Validate proposedValue is a valid number
+      if (!params.proposedValue || params.proposedValue.trim() === "" || isNaN(Number(params.proposedValue))) {
+        const err = new Error("Proposed value must be a valid number");
+        handleError(err, "Validation failed");
+        setError(err.message);
+        throw err;
+      }
+
+      if (!connected) {
+        const err = new Error("Connect a wallet first");
+        handleError(err, "Wallet not connected");
+        setError(err.message);
+        throw err;
+      }
+
       setIsSubmitting(true);
       try {
         const xdr = await prepareCreateProposal(params);
@@ -71,8 +101,11 @@ export function useGovernance() {
         await submitCreateProposal(signedXdr);
         showSuccessToast("Proposal submitted");
         await fetchProposals();
-      } catch (err) {
+      } catch (err: any) {
+        const message = err?.message || "Failed to create proposal";
+        setError(message);
         handleError(err, "Failed to create proposal");
+        throw err;
       } finally {
         setIsSubmitting(false);
       }
@@ -139,6 +172,7 @@ export function useGovernance() {
     isLoading,
     isSubmitting,
     stakedBalance,
+    error,
     fetchProposals,
     createProposal,
     castVote,

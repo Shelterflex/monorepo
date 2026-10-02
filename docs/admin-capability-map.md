@@ -14,7 +14,7 @@ Snapshot date: 2026-07-30.
 | `adminAnalytics.ts` | `/api/admin/analytics` | `app/admin/analytics`, `lib/adminAnalyticsApi.ts` | ✅ covered |
 | `adminAuditLogs.ts` | `/api/v1/admin/audit-logs` | `app/admin/audit-logs`, `lib/auditLogsApi.ts` | ✅ covered |
 | `adminOutbox.ts` | `/api/admin/outbox` | `app/dashboard/admin/outbox`, `lib/outboxAdminApi.ts` | ✅ covered |
-| `admin-timelock.ts` | `/api/admin/timelock` | `app/admin/timelock`, `lib/timelockApi.ts` | ✅ covered |
+| `admin-timelock.ts` | `/api/v1/admin/timelock` | `app/admin/timelock`, `lib/timelockApi.ts` | ✅ covered |
 | `adminWhistleblowerApplications.ts` | `/api/admin/whistleblower-applications` | `app/admin/whistleblower-verification` | ✅ covered |
 | `landlordVerification.ts` (admin half) | `/api/v1/admin/landlords/:id/verify` | `app/admin/landlords/[id]` | ✅ covered |
 | `kyc.ts` (admin half) | `/api/kyc/admin` | `app/admin/kyc`, `app/admin/kyc/[submissionId]` | ✅ covered |

@@ -279,7 +279,15 @@
     },
     {
       "position": 70,
-      "filename": "047_landlord_payout_preferences.sql"
+      "filename": "047_whistleblower_applications.sql"
+    },
+    {
+      "position": 71,
+      "filename": "048_webhook_subscriptions.sql"
+    },
+    {
+      "position": 72,
+      "filename": "049_landlord_payout_preferences.sql"
     }
   ]
 }

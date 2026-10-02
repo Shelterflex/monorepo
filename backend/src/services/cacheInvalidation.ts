@@ -49,6 +49,7 @@ export class CacheInvalidationService {
   private maxQueueSize = 1000
   private batchSize = 50
   private flushIntervalMs = 5000 // 5 seconds
+  private flushInterval: ReturnType<typeof setInterval> | null = null
 
   constructor() {
     this.startFlushInterval()
@@ -220,9 +221,27 @@ export class CacheInvalidationService {
    * Start periodic flush interval
    */
   private startFlushInterval(): void {
-    setInterval(() => {
+    if (this.flushInterval) {
+      return
+    }
+
+    this.flushInterval = setInterval(() => {
       this.processQueue()
     }, this.flushIntervalMs)
+  }
+
+  /**
+   * Stop the periodic flush interval so no further background work is
+   * scheduled after this point. Safe to call multiple times.
+   */
+  stop(): void {
+    if (!this.flushInterval) {
+      return
+    }
+
+    clearInterval(this.flushInterval)
+    this.flushInterval = null
+    logger.info('Cache invalidation flush interval stopped')
   }
 
   /**

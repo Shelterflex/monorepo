@@ -8,11 +8,20 @@ export interface SavedPropertyRecord {
   createdAt: string;
 }
 
+export interface ListSavedPropertiesOptions {
+  limit?: number;
+  offset?: number;
+}
+
 export interface SavedPropertyStore {
   save(userId: string, listingId: string): Promise<SavedPropertyRecord>;
   remove(userId: string, listingId: string): Promise<boolean>;
   isSaved(userId: string, listingId: string): Promise<boolean>;
-  listListingIds(userId: string): Promise<string[]>;
+  listListingIds(
+    userId: string,
+    options?: ListSavedPropertiesOptions,
+  ): Promise<string[]>;
+  count(userId: string): Promise<number>;
   clear(): Promise<void>;
 }
 
@@ -50,10 +59,21 @@ export class InMemorySavedPropertyStore implements SavedPropertyStore {
     );
   }
 
-  async listListingIds(userId: string): Promise<string[]> {
-    return this.records
-      .filter((r) => r.userId === userId)
-      .map((r) => r.listingId);
+  async listListingIds(
+    userId: string,
+    options?: ListSavedPropertiesOptions,
+  ): Promise<string[]> {
+    const userRecords = this.records.filter((r) => r.userId === userId);
+    const offset = Math.max(0, options?.offset ?? 0);
+    if (options?.limit !== undefined) {
+      const limit = Math.max(1, options.limit);
+      return userRecords.slice(offset, offset + limit).map((r) => r.listingId);
+    }
+    return userRecords.slice(offset).map((r) => r.listingId);
+  }
+
+  async count(userId: string): Promise<number> {
+    return this.records.filter((r) => r.userId === userId).length;
   }
 
   async clear(): Promise<void> {

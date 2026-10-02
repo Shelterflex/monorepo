@@ -5,6 +5,9 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, vec, Address, BytesN, Env, Symbol, Vec,
 };
 
+#[cfg(kani)]
+mod formal_properties;
+
 /// Deal ID type - using u64 for simplicity
 pub type DealId = u64;
 
@@ -194,6 +197,7 @@ impl RentPayments {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -491,6 +495,7 @@ mod test {
     };
 
     fn setup(env: &Env) -> (Address, RentPaymentsClient<'_>, soroban_sdk::Address) {
+        env.mock_all_auths();
         let contract_id = env.register(RentPayments, ());
         let client = RentPaymentsClient::new(env, &contract_id);
         let admin = Address::generate(env);
@@ -510,6 +515,7 @@ mod test {
     #[test]
     fn init_sets_version_to_one() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(RentPayments, ());
         let client = RentPaymentsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -520,6 +526,7 @@ mod test {
     #[test]
     fn version_matches_contract_version() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(RentPayments, ());
         let client = RentPaymentsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -531,12 +538,24 @@ mod test {
     #[test]
     fn init_cannot_be_called_twice() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(RentPayments, ());
         let client = RentPaymentsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         client.init(&admin);
         let err = client.try_init(&admin).unwrap_err().unwrap();
         assert_eq!(err, ContractError::AlreadyInitialized);
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(RentPayments, ());
+        let client = RentPaymentsClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin);
     }
 
     #[test]

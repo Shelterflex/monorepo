@@ -5,6 +5,24 @@ import { createWhistleblowerRewardsRouter } from './whistleblowerRewards.js'
 import { SorobanAdapter } from '../soroban/adapter.js'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('../middleware/auth.js', () => ({
+  authenticateToken: (req: express.Request & { user?: unknown }, res: express.Response, next: express.NextFunction) => {
+    const walletAddress = req.header('x-test-wallet')
+    if (!walletAddress) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED' } })
+      return
+    }
+    req.user = {
+      id: 'user-123',
+      email: 'user@example.com',
+      name: 'Test User',
+      role: 'tenant',
+      walletAddress,
+    }
+    next()
+  },
+}))
+
 // Mock the env module
 vi.mock('../schemas/env.js', () => ({
   env: {
@@ -142,47 +160,65 @@ describe('Whistleblower Rewards Routes', () => {
   })
 
   describe('GET /api/whistleblower-rewards/claimable', () => {
-    it('should get claimable amount for a whistleblower', async () => {
+    it('rejects unauthenticated requests', async () => {
+      const response = await request(app).get('/api/whistleblower-rewards/claimable')
+
+      expect(response.status).toBe(401)
+      expect(mockAdapter.getClaimableReward).not.toHaveBeenCalled()
+    })
+
+    it('gets the claimable amount for the authenticated wallet', async () => {
       const response = await request(app)
         .get('/api/whistleblower-rewards/claimable')
-        .query({
-          whistleblower: 'GTEST123456789',
-        })
+        .set('x-test-wallet', 'GTEST123456789')
 
       expect(response.status).toBe(200)
+      expect(response.body.whistleblower).toBe('GTEST123456789')
       expect(response.body.claimableAmount).toBe('100000')
       expect(mockAdapter.getClaimableReward).toHaveBeenCalledWith('GTEST123456789')
     })
 
-    it('should return 400 for missing whistleblower parameter', async () => {
+    it('rejects attempts to query another whistleblower', async () => {
       const response = await request(app)
         .get('/api/whistleblower-rewards/claimable')
+        .set('x-test-wallet', 'GTEST123456789')
+        .query({ whistleblower: 'GOTHER123456789' })
 
       expect(response.status).toBe(400)
+      expect(mockAdapter.getClaimableReward).not.toHaveBeenCalled()
     })
   })
 
   describe('POST /api/whistleblower-rewards/claim', () => {
-    it('should claim reward for a whistleblower', async () => {
+    it('rejects unauthenticated requests', async () => {
+      const response = await request(app).post('/api/whistleblower-rewards/claim').send({})
+
+      expect(response.status).toBe(401)
+      expect(mockAdapter.claimReward).not.toHaveBeenCalled()
+    })
+
+    it('claims the reward for the authenticated wallet', async () => {
       const response = await request(app)
         .post('/api/whistleblower-rewards/claim')
-        .send({
-          whistleblower: 'GTEST123456789',
-        })
+        .set('x-test-wallet', 'GTEST123456789')
+        .send({})
 
       expect(response.status).toBe(200)
       expect(response.body.success).toBe(true)
+      expect(response.body.whistleblower).toBe('GTEST123456789')
       expect(response.body.claimedAmount).toBe('100000')
       expect(response.body.message).toBe('Whistleblower reward claimed successfully')
       expect(mockAdapter.claimReward).toHaveBeenCalledWith('GTEST123456789')
     })
 
-    it('should return 400 for missing whistleblower parameter', async () => {
+    it('rejects attempts to claim for another whistleblower', async () => {
       const response = await request(app)
         .post('/api/whistleblower-rewards/claim')
-        .send({})
+        .set('x-test-wallet', 'GTEST123456789')
+        .send({ whistleblower: 'GOTHER123456789' })
 
       expect(response.status).toBe(400)
+      expect(mockAdapter.claimReward).not.toHaveBeenCalled()
     })
   })
 })

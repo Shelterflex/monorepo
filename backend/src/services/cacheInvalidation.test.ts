@@ -226,6 +226,49 @@ describe('Cache Invalidation Service', () => {
       expect(status.size).toBe(0)
     })
   })
+
+  describe('Shutdown', () => {
+    it('should stop the periodic flush interval', async () => {
+      vi.useFakeTimers()
+      try {
+        const shutdownService = new CacheInvalidationService()
+        shutdownService.registerWebhook('shutdown', {
+          url: 'https://example.com/webhook',
+          enabled: true,
+        })
+        ;(global.fetch as any).mockResolvedValue({
+          ok: true,
+          json: async () => ({}),
+        })
+
+        shutdownService.invalidateByTags(['property'], 'property_update')
+        await vi.advanceTimersByTimeAsync(5000)
+        expect(global.fetch).toHaveBeenCalledTimes(1)
+
+        shutdownService.stop()
+
+        shutdownService.invalidateByTags(['reviews'], 'review_update')
+        await vi.advanceTimersByTimeAsync(60000)
+        expect(global.fetch).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('should be safe to call stop() more than once', () => {
+      const shutdownService = new CacheInvalidationService()
+
+      expect(() => {
+        shutdownService.stop()
+        shutdownService.stop()
+      }).not.toThrow()
+    })
+
+    it('should expose a stop() method on the singleton used during graceful shutdown', () => {
+      expect(typeof cacheInvalidationService.stop).toBe('function')
+      expect(() => cacheInvalidationService.stop()).not.toThrow()
+    })
+  })
 })
 
 describe('Cache Invalidation Helpers', () => {

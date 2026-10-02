@@ -1,6 +1,9 @@
 #![no_std]
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol, Vec};
+use soroban_access_control::extend_storage_ttl;
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, IntoVal, Symbol, Vec,
+};
 
 // ── Storage Keys ─────────────────────────────────────────────────────────────
 
@@ -97,6 +100,7 @@ impl StakeDelegation {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -221,6 +225,10 @@ impl StakeDelegation {
             &DataKey::DelegateeCommissionRate(delegatee.clone()),
             &rate_bps,
         );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegateeCommissionRate(delegatee.clone()).into_val(&env),
+        );
         env.events().publish(
             (
                 Symbol::new(&env, "delegation"),
@@ -248,6 +256,10 @@ impl StakeDelegation {
         env.storage().persistent().set(
             &DataKey::DelegateeCommissionBalance(delegatee.clone()),
             &0i128,
+        );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegateeCommissionBalance(delegatee.clone()).into_val(&env),
         );
 
         env.events().publish(
@@ -344,6 +356,10 @@ impl StakeDelegation {
             &DataKey::DelegateeStake(delegatee.clone()),
             &new_delegatee_stake,
         );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegateeStake(delegatee.clone()).into_val(&env),
+        );
 
         // Proportionally reduce each delegator's position
         let delegators: Vec<Address> = env
@@ -381,6 +397,10 @@ impl StakeDelegation {
                     env.storage().persistent().set(
                         &DataKey::StakedBalance(delegator.clone()),
                         &(bal - delta).max(0),
+                    );
+                    extend_storage_ttl(
+                        &env,
+                        &DataKey::StakedBalance(delegator.clone()).into_val(&env),
                     );
 
                     if new_amount > 0 {
@@ -429,6 +449,10 @@ impl StakeDelegation {
             &DataKey::DelegatorsOf(delegatee.clone()),
             &remaining_delegators,
         );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegatorsOf(delegatee.clone()).into_val(&env),
+        );
 
         // Reduce total staked by the sum actually removed from delegators
         let total = Self::get_total_staked(&env);
@@ -436,6 +460,7 @@ impl StakeDelegation {
             &DataKey::TotalStaked,
             &(total - total_balance_slashed).max(0),
         );
+        extend_storage_ttl(&env, &DataKey::TotalStaked.into_val(&env));
 
         env.events().publish(
             (
@@ -562,6 +587,10 @@ impl StakeDelegation {
             &DataKey::DelegateeStake(delegatee.clone()),
             &(current_stake + amount),
         );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegateeStake(delegatee.clone()).into_val(&env),
+        );
 
         let delegations: Vec<Delegation> = env
             .storage()
@@ -645,6 +674,10 @@ impl StakeDelegation {
             &DataKey::RevocationRequest(delegator.clone(), delegatee.clone()),
             &current_epoch,
         );
+        extend_storage_ttl(
+            &env,
+            &DataKey::RevocationRequest(delegator.clone(), delegatee.clone()).into_val(&env),
+        );
 
         env.events().publish(
             (
@@ -698,6 +731,10 @@ impl StakeDelegation {
         env.storage().persistent().set(
             &DataKey::DelegateeStake(delegatee.clone()),
             &(current_stake - amount_to_remove),
+        );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegateeStake(delegatee.clone()).into_val(&env),
         );
 
         let delegations: Vec<Delegation> = env
@@ -781,6 +818,10 @@ impl StakeDelegation {
                 request_time: current_time,
             },
         );
+        extend_storage_ttl(
+            &env,
+            &DataKey::PendingUndelegation(delegator.clone(), delegatee.clone()).into_val(&env),
+        );
 
         env.events().publish(
             (
@@ -848,11 +889,19 @@ impl StakeDelegation {
         env.storage()
             .persistent()
             .set(&DataKey::Delegations(delegator.clone()), &new_delegations);
+        extend_storage_ttl(
+            &env,
+            &DataKey::Delegations(delegator.clone()).into_val(&env),
+        );
 
         let current_stake = Self::get_delegatee_stake(&env, &delegatee);
         env.storage().persistent().set(
             &DataKey::DelegateeStake(delegatee.clone()),
             &(current_stake - amount_removed),
+        );
+        extend_storage_ttl(
+            &env,
+            &DataKey::DelegateeStake(delegatee.clone()).into_val(&env),
         );
 
         if delegation_fully_removed {
@@ -1060,6 +1109,10 @@ impl StakeDelegation {
                         &DataKey::DelegateeCommissionBalance(addr.clone()),
                         &(prev + commission),
                     );
+                    extend_storage_ttl(
+                        env,
+                        &DataKey::DelegateeCommissionBalance(addr.clone()).into_val(env),
+                    );
                 }
                 if net_rewards > 0 {
                     let banked: i128 = env
@@ -1071,12 +1124,17 @@ impl StakeDelegation {
                         &DataKey::PendingRewards(addr.clone()),
                         &(banked + net_rewards),
                     );
+                    extend_storage_ttl(env, &DataKey::PendingRewards(addr.clone()).into_val(env));
                 }
             }
         }
         env.storage().persistent().set(
             &DataKey::DelegateeRewardIndex(addr.clone()),
             &current_reward_index,
+        );
+        extend_storage_ttl(
+            env,
+            &DataKey::DelegateeRewardIndex(addr.clone()).into_val(env),
         );
     }
 
@@ -1171,11 +1229,16 @@ impl StakeDelegation {
         env.storage()
             .persistent()
             .set(&DataKey::StakedBalance(delegator.clone()), &new_balance);
+        extend_storage_ttl(
+            &env,
+            &DataKey::StakedBalance(delegator.clone()).into_val(&env),
+        );
 
         let total = Self::get_total_staked(&env);
         env.storage()
             .persistent()
             .set(&DataKey::TotalStaked, &(total - amount));
+        extend_storage_ttl(&env, &DataKey::TotalStaked.into_val(&env));
 
         let delegations: Vec<Delegation> = env
             .storage()
@@ -1196,6 +1259,10 @@ impl StakeDelegation {
                         &DataKey::DelegateeStake(d.delegatee.clone()),
                         &(ds - delta).max(0),
                     );
+                    extend_storage_ttl(
+                        &env,
+                        &DataKey::DelegateeStake(d.delegatee.clone()).into_val(&env),
+                    );
                 }
 
                 if trimmed > 0 {
@@ -1212,6 +1279,10 @@ impl StakeDelegation {
             env.storage()
                 .persistent()
                 .set(&DataKey::Delegations(delegator.clone()), &new_delegations);
+            extend_storage_ttl(
+                &env,
+                &DataKey::Delegations(delegator.clone()).into_val(&env),
+            );
         }
 
         env.events().publish(
@@ -1246,6 +1317,17 @@ mod tests {
         let admin = Address::generate(env);
         client.init(&admin, &100u64);
         (admin, client)
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let id = env.register(StakeDelegation, ());
+        let client = StakeDelegationClient::new(&env, &id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin, &100u64);
     }
 
     // ── basic delegation ──────────────────────────────────────────────────────

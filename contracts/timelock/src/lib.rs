@@ -9,6 +9,9 @@ mod tests;
 
 mod security_properties;
 
+#[cfg(kani)]
+mod formal_properties;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, xdr::ToXdr, Address, BytesN, Env, IntoVal,
     Symbol, Val, Vec,
@@ -59,7 +62,6 @@ impl Timelock {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(TimelockError::AlreadyInitialized);
         }
-
         if min_delay > max_delay {
             return Err(TimelockError::InvalidDelay);
         }

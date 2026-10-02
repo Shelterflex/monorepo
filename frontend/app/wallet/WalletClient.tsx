@@ -472,7 +472,7 @@ function WalletPageContent() {
   }, [setFilters]);
 
   return (
-    <main className="min-h-screen bg-background relative ">
+    <main id="main-content" className="min-h-screen bg-background relative ">
       <div className="container mx-auto px-4 py-8 md:py-10">
 
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1108,7 +1108,7 @@ export default function WalletPage() {
 // Skeleton shown during suspense
 function WalletPageSkeleton() {
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 md:py-10">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">

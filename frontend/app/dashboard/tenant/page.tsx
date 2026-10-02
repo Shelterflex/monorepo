@@ -280,7 +280,7 @@ export default function TenantDashboard() {
         userInfo={{ name: "Ngozi Adekunle", roleLabel: "Tenant" }}
       />
 
-      <main className="min-h-screen pt-20 lg:ml-64">
+      <main id="main-content" className="min-h-screen pt-20 lg:ml-64">
         <div className="p-4 md:p-6 lg:p-8">
           <div className="mb-6 md:mb-8">
             <h1 className="text-2xl font-bold text-foreground md:text-3xl lg:text-4xl">

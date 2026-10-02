@@ -20,7 +20,7 @@ export function createSettlementAdminRouter() {
         requireAdmin(req)
         const pool = await getPool()
         if (!pool) {
-          return res.status(501).json({ error: { message: 'Database required for DLQ replay' } })
+          throw new AppError(ErrorCode.INTERNAL_ERROR, 501, 'Database required for DLQ replay')
         }
         const id = String(req.params.id)
         const { rows } = await pool.query(

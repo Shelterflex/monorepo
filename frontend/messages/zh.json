@@ -168,6 +168,26 @@
       "browseProperties": "[TR:zh] Browse Properties"
     }
   },
+  "payment": {
+    "confirmPayment": "确认付款",
+    "fullPayment": "全额付款",
+    "landlordPayout": "房东打款",
+    "loadingDetails": "正在加载详情...",
+    "noReporter": "无报告人",
+    "paymentConfirmed": "付款已确认",
+    "platformFee": "平台费",
+    "platformFeeSubLabel": "平台服务费",
+    "processing": "处理中...",
+    "receipt": "收据",
+    "reference": "参考号",
+    "reporterReward": "报告人奖励",
+    "reporterRewardSubLabel": "举报奖励",
+    "reviewDistribution": "查看分发",
+    "rewardDistribution": "奖励分发",
+    "somethingWentWrong": "出错了",
+    "totalCharged": "总扣款",
+    "tryAgain": "重试"
+  },
   "contact": {
     "backHome": "[TR:zh] Back Home",
     "title": "[TR:zh] Get in Touch",

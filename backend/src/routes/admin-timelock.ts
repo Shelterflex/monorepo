@@ -2,15 +2,18 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { SorobanAdapter } from '../soroban/adapter.js';
 import { TimelockRepository } from '../indexer/timelock-repository.js';
 import { logger } from '../utils/logger.js';
+import { AppError } from '../errors/AppError.js';
+import { ErrorCode } from '../errors/errorCodes.js';
+import { requireAdminSecret } from '../middleware/adminSecret.js';
 
 export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: TimelockRepository): Router {
   const router = Router();
 
   /**
-   * GET /api/admin/timelock/transactions
+   * GET /transactions
    * Returns all tracked governance transactions
    */
-  router.get('/transactions', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/transactions', requireAdminSecret, async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const transactions = await repo.findAll();
       res.json({ transactions });
@@ -21,14 +24,14 @@ export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: 
   });
 
   /**
-   * POST /api/admin/timelock/execute
+   * POST /execute
    * Executes a queued transaction. Looks up details by txHash.
    */
-  router.post('/execute', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/execute', requireAdminSecret, async (req: Request, res: Response, next: NextFunction) => {
     const { txHash } = req.body;
-    
+
     if (!txHash) {
-      return res.status(400).json({ error: 'Missing txHash' });
+      return next(new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Missing txHash'));
     }
 
     try {
@@ -37,21 +40,21 @@ export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: 
       const tx = allTx.find(t => t.txHash === txHash);
 
       if (!tx) {
-        return res.status(404).json({ error: 'Transaction not found in index' });
+        return next(new AppError(ErrorCode.NOT_FOUND, 404, 'Transaction not found in index'));
       }
 
       if (tx.status !== 'queued') {
-        return res.status(400).json({ error: `Transaction is already ${tx.status}` });
+        return next(new AppError(ErrorCode.VALIDATION_ERROR, 400, `Transaction is already ${tx.status}`));
       }
 
       const stellarTxHash = await sorobanAdapter.executeTimelock(
-        tx.txHash, 
-        tx.target, 
-        tx.functionName, 
-        tx.args || [], 
+        tx.txHash,
+        tx.target,
+        tx.functionName,
+        tx.args || [],
         tx.eta
       );
-      
+
       res.json({ success: true, stellarTxHash });
     } catch (err) {
       logger.error('Failed to execute timelock transaction', { txHash, error: err instanceof Error ? err.message : String(err) });
@@ -60,14 +63,14 @@ export function createAdminTimelockRouter(sorobanAdapter: SorobanAdapter, repo: 
   });
 
   /**
-   * POST /api/admin/timelock/cancel
+   * POST /cancel
    * Cancels a queued transaction
    */
-  router.post('/cancel', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/cancel', requireAdminSecret, async (req: Request, res: Response, next: NextFunction) => {
     const { txHash } = req.body;
 
     if (!txHash) {
-      return res.status(400).json({ error: 'Missing txHash' });
+      return next(new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Missing txHash'));
     }
 
     try {

@@ -208,7 +208,7 @@ export function PreScreenClient() {
 
   if (showResumePrompt) {
     return (
-      <main className="min-h-screen bg-background">
+      <main id="main-content" className="min-h-screen bg-background">
         <div className="container mx-auto max-w-lg px-4 py-12">
           <Card className="border-3 border-foreground p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
             <h2 className="text-lg font-black mb-2">Resume your pre-screen?</h2>
@@ -239,7 +239,7 @@ export function PreScreenClient() {
 
   if (result) {
     return (
-      <main className="min-h-screen bg-background">
+      <main id="main-content" className="min-h-screen bg-background">
         <div className="container mx-auto max-w-lg px-4 py-12">
           <EligibilityResultCard
             band={result.band}
@@ -259,7 +259,7 @@ export function PreScreenClient() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="container mx-auto max-w-lg px-4 py-12">
         <div className="mb-8">
           <h1 className="text-2xl font-black">Rent Affordability Pre-Screener</h1>

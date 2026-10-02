@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePolling } from './use-polling'
 
-export interface WebSocketMessage {
-  type: 'transaction_status' | 'staking_reward' | 'system_notification' | 'staking_position'
-  data: any
-  timestamp: string
+export interface WebSocketMessage<T = any> {
+  type: 'transaction_status' | 'staking_reward' | 'system_notification' | 'staking_position' | 'notification' | string
+  data?: T
+  payload?: any
+  timestamp?: string
+  [key: string]: any
 }
 
 export interface WebSocketConfig {
@@ -18,12 +20,12 @@ export interface WebSocketConfig {
 
 export type ConnectionStatus = 'live' | 'reconnecting' | 'stale' | 'disconnected'
 
-export interface WebSocketResult {
+export interface WebSocketResult<T = WebSocketMessage> {
   isConnected: boolean
   isConnecting: boolean
   connectionStatus: ConnectionStatus
   error: Error | null
-  lastMessage: WebSocketMessage | null
+  lastMessage: T | null
   reconnectAttempts: number
   send: (message: any) => void
   disconnect: () => void
@@ -44,13 +46,13 @@ function calculateBackoffDelay(attempt: number, baseDelay: number, maxDelay: num
   return Math.min(withJitter, maxDelay)
 }
 
-export function useWebSocket(config: WebSocketConfig): WebSocketResult {
+export function useWebSocket<T = WebSocketMessage>(config: WebSocketConfig): WebSocketResult<T> {
   const mergedConfig = useMemo(() => ({ ...DEFAULT_CONFIG, ...config }), [config])
 
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+  const [lastMessage, setLastMessage] = useState<T | null>(null)
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
 
   const connectionStatus = useMemo<ConnectionStatus>(() => {
@@ -72,7 +74,11 @@ export function useWebSocket(config: WebSocketConfig): WebSocketResult {
 
   usePolling(
     useCallback(async () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN || !configRef.current.enableFallback) {
+      if (
+        !configRef.current.url ||
+        wsRef.current?.readyState === (typeof WebSocket !== 'undefined' ? WebSocket.OPEN : 1) ||
+        !configRef.current.enableFallback
+      ) {
         return { data: null, status: 'connected' }
       }
 
@@ -89,7 +95,7 @@ export function useWebSocket(config: WebSocketConfig): WebSocketResult {
       }
     }, []),
     {
-      enabled: !isConnected && mergedConfig.enableFallback,
+      enabled: !isConnected && mergedConfig.enableFallback && !!config.url,
       initialInterval: mergedConfig.fallbackPollInterval,
       stopOnStatuses: ['connected'],
     },
@@ -97,6 +103,9 @@ export function useWebSocket(config: WebSocketConfig): WebSocketResult {
 
   const connect = useCallback(() => {
     if (
+      !configRef.current.url ||
+      typeof window === 'undefined' ||
+      typeof WebSocket === 'undefined' ||
       wsRef.current?.readyState === WebSocket.OPEN ||
       wsRef.current?.readyState === WebSocket.CONNECTING
     ) {
@@ -128,7 +137,7 @@ export function useWebSocket(config: WebSocketConfig): WebSocketResult {
 
       ws.onmessage = (event) => {
         try {
-          setLastMessage(JSON.parse(event.data) as WebSocketMessage)
+          setLastMessage(JSON.parse(event.data) as T)
         } catch (nextError) {
           console.error('Failed to parse WebSocket message:', nextError)
         }

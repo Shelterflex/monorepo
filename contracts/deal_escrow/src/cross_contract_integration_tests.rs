@@ -41,6 +41,7 @@ struct TestContracts<'a> {
 }
 
 fn setup_full_stack(env: &Env) -> TestContracts<'_> {
+    env.mock_all_auths();
     let admin = Address::generate(env);
     let operator = Address::generate(env);
     let tenant = Address::generate(env);

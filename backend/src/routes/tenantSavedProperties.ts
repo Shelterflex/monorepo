@@ -22,15 +22,44 @@ function getUserId(req: Request): string {
   return userId;
 }
 
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
 /**
  * GET /api/tenant/saved-properties
- * List saved listing IDs for the authenticated tenant.
+ * List saved listing IDs for the authenticated tenant with pagination.
  */
 router.get("/", authenticateToken, async (req: Request, res: Response, next) => {
   try {
     const userId = getUserId(req);
-    const listingIds = await savedPropertyStore.listListingIds(userId);
-    res.json({ success: true, data: listingIds });
+
+    const rawLimit = req.query.limit ?? req.query.pageSize;
+    const limitNum = rawLimit !== undefined ? parseInt(String(rawLimit), 10) : DEFAULT_LIMIT;
+    const limit = Math.min(MAX_LIMIT, Math.max(1, isNaN(limitNum) ? DEFAULT_LIMIT : limitNum));
+
+    let offset = 0;
+    if (req.query.offset !== undefined) {
+      const offsetNum = parseInt(String(req.query.offset), 10);
+      offset = Math.max(0, isNaN(offsetNum) ? 0 : offsetNum);
+    } else if (req.query.page !== undefined) {
+      const pageNum = parseInt(String(req.query.page), 10);
+      const page = Math.max(1, isNaN(pageNum) ? 1 : pageNum);
+      offset = (page - 1) * limit;
+    }
+
+    const total = await savedPropertyStore.count(userId);
+    const listingIds = await savedPropertyStore.listListingIds(userId, { limit, offset });
+
+    res.json({
+      success: true,
+      data: listingIds,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + listingIds.length < total,
+      },
+    });
   } catch (error) {
     next(error);
   }

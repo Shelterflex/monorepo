@@ -15,6 +15,9 @@ export function formatCurrency(
   currency: string,
   locale: Locale,
 ): string {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) {
+    return "—";
+  }
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: currency,
@@ -35,6 +38,10 @@ export function formatDate(
     typeof date === "string" || typeof date === "number"
       ? new Date(date)
       : date;
+
+  if (!dateObj || !(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+    return "—";
+  }
 
   const defaultOptions: Intl.DateTimeFormatOptions = {
     year: "numeric",
@@ -60,6 +67,10 @@ export function formatDateTime(
       ? new Date(date)
       : date;
 
+  if (!dateObj || !(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+    return "—";
+  }
+
   const defaultOptions: Intl.DateTimeFormatOptions = {
     year: "numeric",
     month: "long",
@@ -84,6 +95,11 @@ export function formatRelativeTime(
     typeof date === "string" || typeof date === "number"
       ? new Date(date)
       : date;
+
+  if (!dateObj || !(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+    return "—";
+  }
+
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - dateObj.getTime()) / 1000);
 

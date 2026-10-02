@@ -246,7 +246,7 @@ export default function TenantLeasePage() {
           role="tenant"
           userInfo={{ name: "Ngozi Adekunle", roleLabel: "Tenant" }}
         />
-        <main className="lg:ml-64 min-h-screen pt-20">
+        <main id="main-content" className="lg:ml-64 min-h-screen pt-20">
           <div className="p-8 flex items-center justify-center">
             <Loader2 className="h-12 w-12 animate-spin" />
           </div>
@@ -263,7 +263,7 @@ export default function TenantLeasePage() {
           role="tenant"
           userInfo={{ name: "Ngozi Adekunle", roleLabel: "Tenant" }}
         />
-        <main className="lg:ml-64 min-h-screen pt-20">
+        <main id="main-content" className="lg:ml-64 min-h-screen pt-20">
           <div className="p-8">
             <Card className="border-3 border-foreground bg-destructive/10 p-6">
               <div className="flex items-start gap-3">
@@ -291,7 +291,7 @@ export default function TenantLeasePage() {
         userInfo={{ name: "Ngozi Adekunle", roleLabel: "Tenant" }}
       />
 
-      <main className="lg:ml-64 min-h-screen pt-20">
+      <main id="main-content" className="lg:ml-64 min-h-screen pt-20">
         <div className="p-8">
           <div className="mb-8 flex items-center justify-between">
             <div>

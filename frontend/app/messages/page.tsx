@@ -645,7 +645,7 @@ export default function MessagesPage() {
 
       {/* Chat Area */}
       {selectedConv ? (
-        <main className={`flex flex-1 flex-col ${selectedConversationId ? "block" : "hidden md:block"}`}>
+        <main id="main-content" className={`flex flex-1 flex-col ${selectedConversationId ? "block" : "hidden md:block"}`}>
           {/* Chat Header */}
           <div className="flex items-center justify-between border-b-3 border-foreground bg-card p-3 md:p-4">
             <div className="flex items-center gap-2 md:gap-4">
@@ -886,7 +886,7 @@ export default function MessagesPage() {
           </div>
         </main>
       ) : (
-        <main className="flex flex-1 items-center justify-center bg-muted/30">
+        <main id="main-content" className="flex flex-1 items-center justify-center bg-muted/30">
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center border-3 border-foreground bg-muted">
               <MessageCircle className="h-10 w-10 text-muted-foreground" />

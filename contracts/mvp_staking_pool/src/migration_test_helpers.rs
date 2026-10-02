@@ -43,6 +43,7 @@ pub fn setup_test_contract(env: &Env) -> TestContract<'_> {
 /// This function allows migration tests to create contracts with different versions
 /// to test version-specific migration logic.
 pub fn create_test_contract(env: &Env, version: u32) -> TestContract<'_> {
+    env.mock_all_auths();
     let contract_id = env.register(StakingPool, ());
     let client = StakingPoolClient::new(env, &contract_id);
 

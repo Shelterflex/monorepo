@@ -1,6 +1,5 @@
 import {
   Router,
-  type Request,
   type Response,
   type NextFunction,
 } from "express";
@@ -9,17 +8,23 @@ import { logger } from "../utils/logger.js";
 import { AppError } from "../errors/AppError.js";
 import { ErrorCode } from "../errors/errorCodes.js";
 import { validate } from "../middleware/validate.js";
-import { requireAdminSecret } from "../middleware/adminSecret.js";
+import { authenticateToken, type AuthenticatedRequest } from "../middleware/auth.js";
 import { z } from "zod";
 
 // Validation schemas
-const getClaimableRewardSchema = z.object({
-  whistleblower: z.string(),
-});
+const ownClaimSchema = z.object({}).strict().default({});
 
-const claimRewardSchema = z.object({
-  whistleblower: z.string(),
-});
+function requireWalletAddress(req: AuthenticatedRequest): string {
+  const address = req.user?.walletAddress;
+  if (!address) {
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      400,
+      "User must have a linked Stellar wallet address"
+    );
+  }
+  return address;
+}
 
 export function createWhistleblowerRewardsRouter(adapter: SorobanAdapter) {
   const router = Router();
@@ -30,10 +35,11 @@ export function createWhistleblowerRewardsRouter(adapter: SorobanAdapter) {
    */
   router.get(
     "/claimable",
-    validate(getClaimableRewardSchema, 'query'),
-    async (req: Request, res: Response, next: NextFunction) => {
+    authenticateToken,
+    validate(ownClaimSchema, 'query'),
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { whistleblower } = req.query as { whistleblower: string };
+        const whistleblower = requireWalletAddress(req);
 
         if (!adapter.getClaimableReward) {
           throw new AppError(
@@ -61,10 +67,11 @@ export function createWhistleblowerRewardsRouter(adapter: SorobanAdapter) {
    */
   router.post(
     "/claim",
-    validate(claimRewardSchema, 'body'),
-    async (req: Request, res: Response, next: NextFunction) => {
+    authenticateToken,
+    validate(ownClaimSchema, 'body'),
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
-        const { whistleblower } = req.body;
+        const whistleblower = requireWalletAddress(req);
 
         if (!adapter.claimReward) {
           throw new AppError(

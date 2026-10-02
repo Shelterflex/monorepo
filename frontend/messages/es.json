@@ -168,6 +168,26 @@
       "browseProperties": "[TR:es] Browse Properties"
     }
   },
+  "payment": {
+    "confirmPayment": "Confirmar pago",
+    "fullPayment": "Pago total",
+    "landlordPayout": "Pago al propietario",
+    "loadingDetails": "Cargando detalles...",
+    "noReporter": "Sin informador",
+    "paymentConfirmed": "Pago confirmado",
+    "platformFee": "Tarifa de plataforma",
+    "platformFeeSubLabel": "Tarifa de servicio de la plataforma",
+    "processing": "Procesando...",
+    "receipt": "Recibo",
+    "reference": "Referencia",
+    "reporterReward": "Recompensa del informador",
+    "reporterRewardSubLabel": "Recompensa por reporte",
+    "reviewDistribution": "Revisar distribución",
+    "rewardDistribution": "Distribución de recompensas",
+    "somethingWentWrong": "Algo salió mal",
+    "totalCharged": "Total cargado",
+    "tryAgain": "Intentar de nuevo"
+  },
   "contact": {
     "backHome": "[TR:es] Back Home",
     "title": "[TR:es] Get in Touch",

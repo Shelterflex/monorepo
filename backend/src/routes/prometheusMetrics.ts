@@ -1,11 +1,13 @@
-import { Router, type Request, type Response } from 'express'
+import { Router, type Request, type Response, type NextFunction } from 'express'
 import { env } from '../schemas/env.js'
 import { metricsRegister } from '../metrics.js'
+import { AppError } from '../errors/AppError.js'
+import { ErrorCode } from '../errors/errorCodes.js'
 
 export function createPrometheusMetricsRouter(): Router {
   const router = Router()
 
-  router.get('/', async (req: Request, res: Response) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const expectedToken = env.METRICS_TOKEN
     const authorization = req.headers.authorization
     const bearerPrefix = 'Bearer '
@@ -15,14 +17,12 @@ export function createPrometheusMetricsRouter(): Router {
       !authorization?.startsWith(bearerPrefix) ||
       authorization.slice(bearerPrefix.length) !== expectedToken
     ) {
-      res.status(401).json({ error: 'Unauthorized' })
-      return
+      return next(new AppError(ErrorCode.UNAUTHORIZED, 401, 'Unauthorized'))
     }
 
     try {
-      const metrics = await metricsRegister.metrics()
       res.setHeader('Content-Type', metricsRegister.contentType)
-      res.end(metrics)
+      res.end(await metricsRegister.metrics())
     } catch (error) {
       console.error('Failed to generate Prometheus metrics:', error)
       res.status(500).json({ error: 'Failed to generate metrics' })

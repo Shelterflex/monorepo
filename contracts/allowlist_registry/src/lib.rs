@@ -9,6 +9,9 @@
 
 #![no_std]
 
+#[cfg(kani)]
+pub mod formal_properties;
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, Map, String, Symbol, Vec,
 };
@@ -93,6 +96,7 @@ impl AllowlistRegistry {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         Ok(())
     }
@@ -118,6 +122,9 @@ impl AllowlistRegistry {
         }
 
         let mut reg = registry(&env);
+        if reg.contains_key(address.clone()) {
+            return Err(Error::AlreadyExists);
+        }
         let entry = Entry {
             label: label.clone(),
             expires_at,
@@ -246,6 +253,17 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn initialize_requires_admin_auth() {
+        let env = Env::default();
+        let id = env.register(AllowlistRegistry, ());
+        let client = AllowlistRegistryClient::new(&env, &id);
+        let admin = Address::generate(&env);
+
+        client.initialize(&admin);
+    }
+
+    #[test]
     fn test_add_and_is_member() {
         let env = Env::default();
         env.mock_all_auths();
@@ -339,20 +357,15 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// `initialize` takes no `caller` argument and never calls `require_auth`
-    /// on the admin it is given, so any invocation succeeds even with zero
-    /// authorizations mocked. Documenting current behavior; flagged in the
-    /// PR as worth maintainer confirmation (is bootstrap meant to be
-    /// permissionless, relying on deploy-time control instead?).
+    /// `initialize` rejects an admin address that has not authorized the call.
     #[test]
-    fn test_initialize_succeeds_without_any_mocked_auth() {
+    fn test_initialize_fails_without_any_mocked_auth() {
         let env = Env::default();
         let id = env.register(AllowlistRegistry, ());
         let client = AllowlistRegistryClient::new(&env, &id);
         let admin = Address::generate(&env);
 
-        client.initialize(&admin);
-        assert_eq!(client.member_count(), 0);
+        assert!(client.try_initialize(&admin).is_err());
     }
 
     #[test]
@@ -442,23 +455,24 @@ mod tests {
 
     // ── Duplicate / boundary behavior ────────────────────────────────────────
 
-    /// `add` on an address that is already registered overwrites the entry —
-    /// the `AlreadyExists` error variant is defined but never returned
-    /// anywhere in the contract. Documenting current (overwrite) behavior;
-    /// flagged in the PR as ambiguous — should re-adding an existing member
-    /// be rejected instead?
+    /// `add` on an address that is already registered is rejected with
+    /// `AlreadyExists` error.
     #[test]
-    fn test_add_duplicate_overwrites_existing_entry() {
+    fn test_add_duplicate_rejected_with_error() {
         let env = Env::default();
         env.mock_all_auths();
         let (client, admin) = deploy(&env);
         let member = Address::generate(&env);
 
         client.add(&admin, &member, &String::from_str(&env, "tier1"), &0);
-        client.add(&admin, &member, &String::from_str(&env, "tier2"), &0);
+        let result = client.try_add(&admin, &member, &String::from_str(&env, "tier2"), &0);
+        assert!(result.is_err());
+        let err = result.unwrap_err().unwrap();
+        assert_eq!(err, Error::AlreadyExists);
 
+        // Verify the original entry is unchanged
         let entry = client.get_entry(&member);
-        assert_eq!(entry.label, String::from_str(&env, "tier2"));
+        assert_eq!(entry.label, String::from_str(&env, "tier1"));
     }
 
     #[test]

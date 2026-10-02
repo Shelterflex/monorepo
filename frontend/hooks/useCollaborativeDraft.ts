@@ -17,8 +17,9 @@
 
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useCollaborativeDraftStore } from '@/store/useCollaborativeDraftStore'
+import { useWebSocket } from './use-websocket'
 
 interface UseCollaborativeDraftOptions {
   draftId: string
@@ -54,107 +55,93 @@ export function useCollaborativeDraft({
     setConnected,
   } = useCollaborativeDraftStore()
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const maxReconnectAttempts = 10
-  const reconnectAttempts = useRef(0)
-
   // ── Initialise draft ────────────────────────────────────────────────────────
 
   useEffect(() => {
     initDraft(draftId, initialFields)
   }, [draftId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── WebSocket connection ────────────────────────────────────────────────────
+  // ── WebSocket connection via shared useWebSocket hook ─────────────────────────
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
+  const wsUrl = draftId && currentUserId
+    ? `${wsBaseUrl}/api/ws/draft/${draftId}?userId=${encodeURIComponent(currentUserId)}`
+    : ''
 
-    const url = `${wsBaseUrl}/api/ws/draft/${draftId}?userId=${encodeURIComponent(currentUserId)}`
-    const ws = new WebSocket(url)
-    wsRef.current = ws
+  const { isConnected: wsConnected, lastMessage, send: wsSend } = useWebSocket({
+    url: wsUrl,
+    reconnectInterval: 1000,
+    maxReconnectAttempts: 10,
+    enableFallback: false,
+  })
 
-    ws.onopen = () => {
-      setConnected(true)
-      reconnectAttempts.current = 0
-    }
-
-    ws.onclose = () => {
-      setConnected(false)
-      if (reconnectAttempts.current < maxReconnectAttempts) {
-        const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30_000)
-        reconnectAttempts.current++
-        reconnectTimerRef.current = setTimeout(connect, delay)
-      }
-    }
-
-    ws.onerror = () => ws.close()
-
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data as string) as Record<string, unknown>
-        if (msg.draftId !== draftId) return
-
-        switch (msg.type) {
-          case 'draft.field.change':
-            if (msg.userId !== currentUserId) {
-              applyRemoteChange(
-                msg.field as string,
-                msg.value as string,
-                msg.version as number,
-                msg.userId as string,
-              )
-            }
-            break
-
-          case 'draft.presence':
-            updatePresence({
-              userId: msg.userId as string,
-              userName: msg.userName as string,
-              avatarUrl: msg.avatarUrl as string | undefined,
-              focusedField: msg.focusedField as string | null,
-              lastSeenAt: Date.now(),
-              color: '',
-            })
-            break
-
-          case 'draft.presence.left':
-            removePresence(msg.userId as string)
-            break
-
-          case 'draft.saved':
-            markSaved()
-            break
-
-          default:
-            break
-        }
-      } catch {
-        // ignore malformed messages
-      }
-    }
-  }, [draftId, wsBaseUrl, currentUserId]) // eslint-disable-line react-hooks/exhaustive-deps
-
+  // Sync connection state to store - use setTimeout to avoid synchronous setState in effect
   useEffect(() => {
-    connect()
-    return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
-      wsRef.current?.close()
-    }
-  }, [connect])
+    const timer = setTimeout(() => {
+      setConnected(wsConnected)
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [wsConnected, setConnected])
+
+  // Handle incoming messages - use setTimeout to avoid synchronous setState in effect
+  useEffect(() => {
+    if (!lastMessage) return
+
+    const timer = setTimeout(() => {
+      const msg = lastMessage as Record<string, unknown>
+      if (msg.draftId !== draftId) return
+
+      switch (msg.type) {
+        case 'draft.field.change':
+          if (msg.userId !== currentUserId) {
+            applyRemoteChange(
+              msg.field as string,
+              msg.value as string,
+              msg.version as number,
+              msg.userId as string,
+            )
+          }
+          break
+
+        case 'draft.presence':
+          updatePresence({
+            userId: msg.userId as string,
+            userName: msg.userName as string,
+            avatarUrl: msg.avatarUrl as string | undefined,
+            focusedField: msg.focusedField as string | null,
+            lastSeenAt: Date.now(),
+            color: '',
+          })
+          break
+
+        case 'draft.presence.left':
+          removePresence(msg.userId as string)
+          break
+
+        case 'draft.saved':
+          markSaved()
+          break
+
+        default:
+          break
+      }
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [lastMessage, draftId, currentUserId, applyRemoteChange, updatePresence, removePresence, markSaved])
 
   // ── Send helpers ────────────────────────────────────────────────────────────
 
-  const send = useCallback((payload: Record<string, unknown>) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(payload))
-    }
-  }, [])
+  const send = useCallback(
+    (payload: Record<string, unknown>) => {
+      wsSend(payload)
+    },
+    [wsSend],
+  )
 
   const updateField = useCallback(
     (field: string, value: string) => {
       setFieldValue(field, value, currentUserId)
-      const version = (useCollaborativeDraftStore.getState().fields[field]?.version ?? 0)
+      const version = useCollaborativeDraftStore.getState().fields[field]?.version ?? 0
       send({ type: 'draft.field.change', draftId, field, value, version })
     },
     [draftId, currentUserId, send, setFieldValue],
@@ -181,7 +168,7 @@ export function useCollaborativeDraft({
   }, [draftId, send])
 
   // Filter out current user from presence display
-  const otherPresence = Object.values(presence).filter(p => p.userId !== currentUserId)
+  const otherPresence = Object.values(presence).filter((p) => p.userId !== currentUserId)
 
   return {
     fields,

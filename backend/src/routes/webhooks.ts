@@ -34,6 +34,8 @@ import {
 } from "../models/webhookSubscription.js";
 import { getWebhookReplayStore } from "../webhookReplay/store.js";
 import { WebhookProcessingStatus } from "../webhookReplay/types.js";
+import { validateUrlForSSRF, revalidateUrlForSSRF } from "../utils/ssrfProtection.js";
+import rateLimit from "express-rate-limit";
 
 function extractWebhookHeaders(req: Request): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -49,6 +51,19 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
   const router = Router();
   const adapter = createSorobanAdapter(getSorobanConfigFromEnv(process.env));
   const sender = new OutboxSender(adapter);
+
+  // Rate limit for webhook subscription creation
+  const subscriptionRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // 10 subscriptions per 15 minutes per user
+    keyGenerator: (req) => {
+      const authReq = req as AuthenticatedRequest;
+      return authReq.user?.id || 'anonymous';
+    },
+    message: 'Too many webhook subscription requests, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
 
   /**
    * POST /api/webhooks/payments/:rail
@@ -484,6 +499,7 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
   router.post(
     "/subscriptions",
     authenticateToken,
+    subscriptionRateLimit,
     async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
       try {
         const userId = req.user?.id;
@@ -493,14 +509,17 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
 
         const { targetUrl, events } = subscriptionSchema.parse(req.body);
 
-        if (!targetUrl.startsWith("https://")) {
-          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, "Target URL must use HTTPS protocol");
+        // SSRF protection: validate URL doesn't point to private/internal IPs
+        try {
+          validateUrlForSSRF(targetUrl);
+        } catch (ssrfError) {
+          throw new AppError(ErrorCode.VALIDATION_ERROR, 400, ssrfError instanceof Error ? ssrfError.message : 'Invalid URL');
         }
 
         const plainSecret = `whsec_${generateRandomSecretHex(24)}`;
         const hashedSecret = sha256Hex(plainSecret);
 
-        const sub = webhookSubscriptionStore.create({
+        const sub = await webhookSubscriptionStore.create({
           ownerId: userId,
           targetUrl,
           secret: hashedSecret,
@@ -542,7 +561,7 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
           throw new AppError(ErrorCode.UNAUTHORIZED, 401, "Authentication required");
         }
 
-        const subs = webhookSubscriptionStore.listByOwner(userId);
+        const subs = await webhookSubscriptionStore.listByOwner(userId);
         res.status(200).json({
           success: true,
           subscriptions: subs.map(s => ({
@@ -575,7 +594,7 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
         }
 
         const { id } = req.params;
-        const sub = webhookSubscriptionStore.findById(id);
+        const sub = await webhookSubscriptionStore.findById(id);
         if (!sub) {
           throw new AppError(ErrorCode.NOT_FOUND, 404, "Subscription not found");
         }
@@ -584,7 +603,7 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
           throw new AppError(ErrorCode.FORBIDDEN, 403, "Access denied");
         }
 
-        webhookSubscriptionStore.delete(id);
+        await webhookSubscriptionStore.delete(id);
         res.status(200).json({ success: true, message: "Subscription removed" });
       } catch (error) {
         next(error);
@@ -607,7 +626,7 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
         }
 
         const { id } = req.params;
-        const sub = webhookSubscriptionStore.findById(id);
+        const sub = await webhookSubscriptionStore.findById(id);
         if (!sub) {
           throw new AppError(ErrorCode.NOT_FOUND, 404, "Subscription not found");
         }
@@ -616,7 +635,7 @@ export function createWebhooksRouter(ngnWalletService: NgnWalletService) {
           throw new AppError(ErrorCode.FORBIDDEN, 403, "Access denied");
         }
 
-        const deliveries = webhookDeliveryStore.getHistoryBySubscription(id);
+        const deliveries = await webhookDeliveryStore.getHistoryBySubscription(id);
         res.status(200).json({
           success: true,
           deliveries: deliveries.map(d => ({

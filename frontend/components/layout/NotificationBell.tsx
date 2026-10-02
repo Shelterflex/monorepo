@@ -4,19 +4,15 @@ import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { Bell, CheckCheck, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useNotifications } from "@/hooks/useNotifications"
-import { useUnreadMessageCount } from "@/hooks/useUnreadMessageCount"
+import { useUnreadCount } from "@/hooks/use-unread-count"
 import { NotificationItemRow } from "./NotificationItem"
 import { markAllNotificationsRead } from "@/lib/notificationsApi"
 import { isAuthenticated } from "@/lib/auth"
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
-  const { unreadCount: notifUnread, notifications, isConnected: notifConnected } = useNotifications()
-  const { unreadCount: msgUnread, isConnected: msgConnected } = useUnreadMessageCount()
+  const { totalUnread, notifUnread, msgUnread, notifications, notifConnected, msgConnected } = useUnreadCount()
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  const totalUnread = notifUnread + msgUnread
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

@@ -63,7 +63,7 @@ export default function TenantsPage() {
         userInfo={{ name: "Chief Okonkwo", roleLabel: "Landlord" }}
       />
 
-      <main className="min-h-screen w-full pt-20 lg:ml-64">
+      <main id="main-content" className="min-h-screen w-full pt-20 lg:ml-64">
         <div className="p-4 md:p-6 lg:p-8">
           <Link href="/dashboard/landlord" className="mb-6 inline-flex">
             <Button className="border-3 border-foreground bg-card px-4 py-2 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">

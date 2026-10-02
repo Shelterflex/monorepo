@@ -107,7 +107,7 @@ export default function TenantApplicationPage() {
       <div className="min-h-screen bg-background">
         <DashboardHeader />
 
-        <main className="min-h-screen pt-20 lg:ml-64">
+        <main id="main-content" className="min-h-screen pt-20 lg:ml-64">
           <div className="p-4 md:p-6 lg:p-8">
             <div className="mx-auto max-w-2xl">
               {/* Success Message */}
@@ -182,7 +182,7 @@ export default function TenantApplicationPage() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="min-h-screen pt-20 lg:ml-64">
+      <main id="main-content" className="min-h-screen pt-20 lg:ml-64">
         <div className="p-4 md:p-6 lg:p-8">
           <div className="mx-auto max-w-2xl">
             {/* Back Button */}

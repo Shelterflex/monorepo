@@ -22,7 +22,7 @@ export function SettingsPageSkeleton() {
         </div>
       </aside>
 
-      <main className="ml-64 min-h-screen pt-20">
+      <main id="main-content" className="ml-64 min-h-screen pt-20">
         <div className="p-8">
           <div className="mb-8">
             <Skeleton className="h-10 w-44" />

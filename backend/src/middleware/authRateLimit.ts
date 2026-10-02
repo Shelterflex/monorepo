@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
 import { slidingWindowLimiter } from '../services/SlidingWindowLimiter.js'
+import { logger } from '../utils/logger.js'
 
 type Counter = {
   count: number
@@ -28,6 +29,8 @@ function bumpCounter(map: Map<string, Counter>, key: string, windowMs: number): 
 
 const emailOtpRequestCounters = new Map<string, Counter>()
 const ipOtpRequestCounters = new Map<string, Counter>()
+const ipOtpVerifyCounters = new Map<string, Counter>()
+const ipRefreshCounters = new Map<string, Counter>()
 const walletChallengeRequestCounters = new Map<string, Counter>()
 const ipWalletChallengeRequestCounters = new Map<string, Counter>()
 
@@ -40,33 +43,43 @@ export function otpRequestRateLimit(options?: {
   const maxPerEmail = options?.maxPerEmail ?? 100
   const maxPerIp = options?.maxPerIp ?? 100
 
-  return (req: Request, _res: Response, next: NextFunction) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
     const email = typeof req.body?.email === 'string' ? req.body.email : ''
     const ip = req.ip
 
     if (email) {
-      const c = bumpCounter(emailOtpRequestCounters, email.toLowerCase(), windowMs)
-      if (c.count > maxPerEmail) {
-        return next(
-          new AppError(
-            ErrorCode.TOO_MANY_REQUESTS,
-            429,
-            'Too many OTP requests for this email. Please try again later.',
-          ),
-        )
+      const key = `auth:otp:email:${email.toLowerCase()}`
+      try {
+        const result = await slidingWindowLimiter.checkLimit(key, maxPerEmail, windowMs)
+        if (!result.allowed) {
+          return next(
+            new AppError(
+              ErrorCode.TOO_MANY_REQUESTS,
+              429,
+              'Too many OTP requests for this email. Please try again later.',
+            ),
+          )
+        }
+      } catch (error) {
+        logger.warn('[authRateLimit] Redis error for OTP email rate limit, failing open', { error: String(error), key })
       }
     }
 
     if (ip) {
-      const c = bumpCounter(ipOtpRequestCounters, ip, windowMs)
-      if (c.count > maxPerIp) {
-        return next(
-          new AppError(
-            ErrorCode.TOO_MANY_REQUESTS,
-            429,
-            'Too many OTP requests from this IP. Please try again later.',
-          ),
-        )
+      const key = `auth:otp:ip:${ip}`
+      try {
+        const result = await slidingWindowLimiter.checkLimit(key, maxPerIp, windowMs)
+        if (!result.allowed) {
+          return next(
+            new AppError(
+              ErrorCode.TOO_MANY_REQUESTS,
+              429,
+              'Too many OTP requests from this IP. Please try again later.',
+            ),
+          )
+        }
+      } catch (error) {
+        logger.warn('[authRateLimit] Redis error for OTP IP rate limit, failing open', { error: String(error), key })
       }
     }
 
@@ -83,31 +96,107 @@ export function walletAuthRateLimit(options?: {
   const maxPerAddress = options?.maxPerAddress ?? 20
   const maxPerIp = options?.maxPerIp ?? 50
 
-  return (req: Request, _res: Response, next: NextFunction) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
     const address = typeof req.body?.address === 'string' ? req.body.address : ''
     const ip = req.ip
 
     if (address) {
-      const c = bumpCounter(walletChallengeRequestCounters, address.toLowerCase(), windowMs)
-      if (c.count > maxPerAddress) {
-        return next(
-          new AppError(
-            ErrorCode.TOO_MANY_REQUESTS,
-            429,
-            'Too many requests for this wallet. Please try again later.',
-          ),
-        )
+      const key = `auth:wallet:address:${address.toLowerCase()}`
+      try {
+        const result = await slidingWindowLimiter.checkLimit(key, maxPerAddress, windowMs)
+        if (!result.allowed) {
+          return next(
+            new AppError(
+              ErrorCode.TOO_MANY_REQUESTS,
+              429,
+              'Too many requests for this wallet. Please try again later.',
+            ),
+          )
+        }
+      } catch (error) {
+        logger.warn('[authRateLimit] Redis error for wallet address rate limit, failing open', { error: String(error), key })
       }
     }
 
     if (ip) {
-      const c = bumpCounter(ipWalletChallengeRequestCounters, ip, windowMs)
+      const key = `auth:wallet:ip:${ip}`
+      try {
+        const result = await slidingWindowLimiter.checkLimit(key, maxPerIp, windowMs)
+        if (!result.allowed) {
+          return next(
+            new AppError(
+              ErrorCode.TOO_MANY_REQUESTS,
+              429,
+              'Too many requests from this IP. Please try again later.',
+            ),
+          )
+        }
+      } catch (error) {
+        logger.warn('[authRateLimit] Redis error for wallet IP rate limit, failing open', { error: String(error), key })
+      }
+    }
+
+    next()
+  }
+}
+
+/**
+ * Per-IP limiter for OTP verification attempts. Mirrors the stricter
+ * `rateLimitProfiles.otp` posture (5 attempts / 10 minutes) applied to
+ * /request-otp, and complements the per-challenge attempt cap: the cap only
+ * protects a single email address, this one protects against a single IP
+ * brute-forcing many challenges.
+ */
+export function otpVerifyRateLimit(options?: {
+  windowMs?: number
+  maxPerIp?: number
+}) {
+  const windowMs = options?.windowMs ?? 10 * 60 * 1000
+  const maxPerIp = options?.maxPerIp ?? 5
+
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const ip = req.ip
+
+    if (ip) {
+      const c = bumpCounter(ipOtpVerifyCounters, ip, windowMs)
       if (c.count > maxPerIp) {
         return next(
           new AppError(
             ErrorCode.TOO_MANY_REQUESTS,
             429,
-            'Too many requests from this IP. Please try again later.',
+            'Too many OTP verification attempts from this IP. Please try again later.',
+          ),
+        )
+      }
+    }
+
+    next()
+  }
+}
+
+/**
+ * Per-IP limiter for refresh-token exchanges. Each call performs a database
+ * lookup and can mint a new access token, so it needs the same protection as
+ * the other sensitive auth routes.
+ */
+export function refreshTokenRateLimit(options?: {
+  windowMs?: number
+  maxPerIp?: number
+}) {
+  const windowMs = options?.windowMs ?? 15 * 60 * 1000
+  const maxPerIp = options?.maxPerIp ?? 10
+
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const ip = req.ip
+
+    if (ip) {
+      const c = bumpCounter(ipRefreshCounters, ip, windowMs)
+      if (c.count > maxPerIp) {
+        return next(
+          new AppError(
+            ErrorCode.TOO_MANY_REQUESTS,
+            429,
+            'Too many token refresh attempts from this IP. Please try again later.',
           ),
         )
       }
@@ -118,15 +207,31 @@ export function walletAuthRateLimit(options?: {
 }
 
 export function _testOnly_clearAuthRateLimits() {
+  slidingWindowLimiter.clear()
   emailOtpRequestCounters.clear()
   ipOtpRequestCounters.clear()
+  ipOtpVerifyCounters.clear()
+  ipRefreshCounters.clear()
   walletChallengeRequestCounters.clear()
   ipWalletChallengeRequestCounters.clear()
-  slidingWindowLimiter.clear()
 }
 
 export function _testOnly_prefillEmailOtpCounter(email: string, count: number) {
   emailOtpRequestCounters.set(email.toLowerCase(), {
+    count,
+    resetAtMs: nowMs() + 15 * 60 * 1000,
+  })
+}
+
+export function _testOnly_prefillIpOtpVerifyCounter(ip: string, count: number) {
+  ipOtpVerifyCounters.set(ip, {
+    count,
+    resetAtMs: nowMs() + 10 * 60 * 1000,
+  })
+}
+
+export function _testOnly_prefillIpRefreshCounter(ip: string, count: number) {
+  ipRefreshCounters.set(ip, {
     count,
     resetAtMs: nowMs() + 15 * 60 * 1000,
   })

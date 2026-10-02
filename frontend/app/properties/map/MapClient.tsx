@@ -329,7 +329,7 @@ function MapPageContent() {
   };
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-background">
+    <main id="main-content" className="flex h-screen flex-col overflow-hidden bg-background">
       {/* Hero header */}
       <section className="shrink-0 border-b-3 border-foreground bg-muted py-6">
         <div className="container mx-auto px-4">

@@ -5,6 +5,7 @@ use soroban_sdk::testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke
 use soroban_sdk::{token::StellarAssetClient, Address, Env, IntoVal};
 
 fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Address, Address) {
+    env.mock_all_auths();
     let contract_id = env.register(StakingPool, ());
     let client = StakingPoolClient::new(env, &contract_id);
 
@@ -16,7 +17,7 @@ fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Addres
     let token_contract = env.register_stellar_asset_contract_v2(token_admin);
     let token_contract_id = token_contract.address();
 
-    // Initialize contract
+    // Initialization now authenticates the configured administrator.
     client.init(&admin, &token_contract_id);
 
     (contract_id, client, admin, user, token_contract_id)
@@ -143,7 +144,6 @@ fn restake_after_unstake() {
 }
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn admin_pause_stake_fails() {
     let env = Env::default();
     env.mock_all_auths();
@@ -157,11 +157,13 @@ fn admin_pause_stake_fails() {
     assert!(client.is_paused());
 
     // Stake should fail when paused
-    client.stake(&user, &100i128);
+    let result = client.try_stake(&user, &100i128);
+    assert!(result.is_err());
+    let err = result.unwrap_err().unwrap();
+    assert_eq!(err, ContractError::ContractPaused);
 }
 
 #[test]
-#[should_panic(expected = "contract is paused")]
 fn admin_pause_unstake_fails() {
     let env = Env::default();
     env.mock_all_auths();
@@ -177,12 +179,16 @@ fn admin_pause_unstake_fails() {
     assert!(client.is_paused());
 
     // Unstake should fail when paused
-    client.unstake(&user, &50i128);
+    let result = client.try_unstake(&user, &50i128);
+    assert!(result.is_err());
+    let err = result.unwrap_err().unwrap();
+    assert_eq!(err, ContractError::ContractPaused);
 }
 
 #[test]
 fn non_admin_initialize_unauthorized() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register(StakingPool, ());
     let client = StakingPoolClient::new(&env, &contract_id);
 
@@ -193,8 +199,8 @@ fn non_admin_initialize_unauthorized() {
     let token_contract = env.register_stellar_asset_contract_v2(token_admin);
     let token_contract_id = token_contract.address();
 
-    // Try to initialize with non-admin (should succeed since init doesn't check admin)
-    // But let's test that only the admin can perform admin operations after init
+    // Initialization authenticates the administrator; the later call verifies
+    // that a different address still cannot perform admin operations.
     client.init(&admin, &token_contract_id);
 
     // Now try pause with non-admin

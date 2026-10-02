@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 soroban-pausable = { version = "0.1.0", path = "../soroban_pausable" }
 soroban-sdk = "22"
+soroban_access_control = { path = "../soroban_access_control" }
 
 [dev-dependencies]
 soroban-sdk = { version = "22", features = ["testutils"] }

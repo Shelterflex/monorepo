@@ -129,6 +129,7 @@ impl RentToOwn {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         if forfeiture_bps > 10_000 {
             return Err(ContractError::InvalidAmount);
         }
@@ -461,8 +462,11 @@ impl RentToOwn {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+#[cfg(kani)]
+mod formal_properties;
+
 #[cfg(test)]
-mod tests {
+mod test {
     extern crate std;
 
     use super::*;
@@ -476,6 +480,17 @@ mod tests {
         // Default: 20% forfeiture on default
         client.init(&admin, &2000u32);
         (admin, client)
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let id = env.register(RentToOwn, ());
+        let client = RentToOwnClient::new(&env, &id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin, &2000u32);
     }
 
     fn make_deal_id(env: &Env, seed: u8) -> BytesN<32> {
