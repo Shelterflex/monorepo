@@ -228,6 +228,7 @@ name = "bond_collateral"
 version = "0.1.0"
 dependencies = [
  "slashing_module",
+ "soroban-pausable",
  "soroban-sdk",
  "soroban_access_control",
 ]
@@ -595,6 +596,7 @@ dependencies = [
 name = "epoch_rewards"
 version = "0.1.0"
 dependencies = [
+ "soroban-pausable",
  "soroban-sdk",
 ]
 
@@ -1249,6 +1251,7 @@ dependencies = [
 name = "rent_schedule"
 version = "0.1.0"
 dependencies = [
+ "soroban-pausable",
  "soroban-sdk",
 ]
 
@@ -1484,6 +1487,7 @@ dependencies = [
 name = "slashing_module"
 version = "0.1.0"
 dependencies = [
+ "soroban-pausable",
  "soroban-sdk",
 ]
 
@@ -1716,6 +1720,7 @@ dependencies = [
 name = "stake_delegation"
 version = "0.1.0"
 dependencies = [
+ "soroban-pausable",
  "soroban-sdk",
  "soroban_access_control",
 ]

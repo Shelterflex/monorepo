@@ -1,5 +1,6 @@
 #![no_std]
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env,
     IntoVal, String, Symbol, Vec,
@@ -1007,31 +1008,31 @@ impl BondCollateral {
         );
         Ok(())
     }
+}
 
-    /// Pause the contract. Admin-only.
-    pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
-        require_admin(&env, &admin)?;
+#[contractimpl]
+impl Pausable for BondCollateral {
+    fn pause(env: Env, admin: Address) -> Result<(), PausableError> {
+        require_admin(&env, &admin).map_err(|_| PausableError::NotAuthorized)?;
         env.storage().instance().set(&DataKey::Paused, &true);
         env.events().publish(
-            (Symbol::new(&env, "bond"), Symbol::new(&env, "paused")),
-            admin,
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
         );
         Ok(())
     }
 
-    /// Unpause the contract. Admin-only.
-    pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
-        require_admin(&env, &admin)?;
+    fn unpause(env: Env, admin: Address) -> Result<(), PausableError> {
+        require_admin(&env, &admin).map_err(|_| PausableError::NotAuthorized)?;
         env.storage().instance().set(&DataKey::Paused, &false);
         env.events().publish(
-            (Symbol::new(&env, "bond"), Symbol::new(&env, "unpaused")),
-            admin,
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
         );
         Ok(())
     }
 
-    /// True iff the contract is currently paused.
-    pub fn is_paused(env: Env) -> bool {
+    fn is_paused(env: Env) -> bool {
         env.storage()
             .instance()
             .get::<_, bool>(&DataKey::Paused)
@@ -1065,12 +1066,7 @@ fn require_admin(env: &Env, caller: &Address) -> Result<(), ContractError> {
 }
 
 fn require_not_paused(env: &Env) -> Result<(), ContractError> {
-    if env
-        .storage()
-        .instance()
-        .get::<_, bool>(&DataKey::Paused)
-        .unwrap_or(false)
-    {
+    if <BondCollateral as Pausable>::is_paused(env.clone()) {
         return Err(ContractError::Paused);
     }
     Ok(())
@@ -1433,7 +1429,7 @@ mod inspector_bond_tests {
         let attacker = Address::generate(&s.env);
 
         let result = s.bond.try_pause(&attacker);
-        assert_eq!(result, Err(Ok(ContractError::NotAuthorized)));
+        assert_eq!(result, Err(Ok(PausableError::NotAuthorized)));
     }
 
     #[test]
@@ -1443,7 +1439,7 @@ mod inspector_bond_tests {
 
         s.bond.pause(&s.admin);
         let result = s.bond.try_unpause(&attacker);
-        assert_eq!(result, Err(Ok(ContractError::NotAuthorized)));
+        assert_eq!(result, Err(Ok(PausableError::NotAuthorized)));
     }
 
     #[test]

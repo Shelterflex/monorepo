@@ -1,5 +1,6 @@
 #![no_std]
 
+use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
 };
@@ -58,7 +59,7 @@ pub struct Config {
     pub operator: Address,
 }
 
-fn is_paused(env: &Env) -> bool {
+fn is_paused_state(env: &Env) -> bool {
     env.storage()
         .instance()
         .get::<_, bool>(&DataKey::Paused)
@@ -66,7 +67,7 @@ fn is_paused(env: &Env) -> bool {
 }
 
 fn require_not_paused(env: &Env) {
-    if is_paused(env) {
+    if <RentSchedule as Pausable>::is_paused(env.clone()) {
         panic!("ContractPaused");
     }
 }
@@ -103,50 +104,6 @@ impl RentSchedule {
             ),
             (),
         );
-    }
-
-    pub fn pause(env: Env, caller: Address) {
-        caller.require_auth();
-        let cfg: Config = env
-            .storage()
-            .instance()
-            .get(&DataKey::Config)
-            .expect("NotInitialized");
-        if caller != cfg.admin {
-            panic!("NotAuthorized");
-        }
-        env.storage().instance().set(&DataKey::Paused, &true);
-        env.events().publish(
-            (
-                Symbol::new(&env, "rent_schedule"),
-                Symbol::new(&env, "paused"),
-            ),
-            (),
-        );
-    }
-
-    pub fn unpause(env: Env, caller: Address) {
-        caller.require_auth();
-        let cfg: Config = env
-            .storage()
-            .instance()
-            .get(&DataKey::Config)
-            .expect("NotInitialized");
-        if caller != cfg.admin {
-            panic!("NotAuthorized");
-        }
-        env.storage().instance().set(&DataKey::Paused, &false);
-        env.events().publish(
-            (
-                Symbol::new(&env, "rent_schedule"),
-                Symbol::new(&env, "unpaused"),
-            ),
-            (),
-        );
-    }
-
-    pub fn is_paused(env: Env) -> bool {
-        is_paused(&env)
     }
 
     pub fn create_schedule(
@@ -426,6 +383,49 @@ impl RentSchedule {
             .iter()
             .find(|i| i.instalment_number == instalment_number)
             .unwrap()
+    }
+}
+
+#[contractimpl]
+impl Pausable for RentSchedule {
+    fn pause(env: Env, caller: Address) -> Result<(), PausableError> {
+        caller.require_auth();
+        let cfg: Config = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .ok_or(PausableError::NotAuthorized)?;
+        if caller != cfg.admin {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "pause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn unpause(env: Env, caller: Address) -> Result<(), PausableError> {
+        caller.require_auth();
+        let cfg: Config = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .ok_or(PausableError::NotAuthorized)?;
+        if caller != cfg.admin {
+            return Err(PausableError::NotAuthorized);
+        }
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "Pausable"), Symbol::new(&env, "unpause")),
+            (),
+        );
+        Ok(())
+    }
+
+    fn is_paused(env: Env) -> bool {
+        is_paused_state(&env)
     }
 }
 
@@ -992,18 +992,17 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn pause_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
-        client.pause(&Address::generate(&env));
+        let result = client.try_pause(&Address::generate(&env));
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn unpause_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1011,7 +1010,8 @@ mod test {
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
         client.pause(&admin);
-        client.unpause(&Address::generate(&env));
+        let result = client.try_unpause(&Address::generate(&env));
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     /// PINS CURRENT BEHAVIOR pending a maintainer decision (recon flag #3):
@@ -1099,13 +1099,13 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn pause_before_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
-        client.pause(&admin);
+        let result = client.try_pause(&admin);
+        assert_eq!(result.unwrap_err().unwrap(), PausableError::NotAuthorized);
     }
 
     #[test]
@@ -1549,7 +1549,7 @@ mod test {
             .unwrap()
             .try_into_val(&env)
             .unwrap();
-        assert_eq!(paused_action, Symbol::new(&env, "paused"));
+        assert_eq!(paused_action, Symbol::new(&env, "pause"));
 
         client.unpause(&admin);
         let unpaused_action: Symbol = last_event_topics(&env)
@@ -1557,6 +1557,6 @@ mod test {
             .unwrap()
             .try_into_val(&env)
             .unwrap();
-        assert_eq!(unpaused_action, Symbol::new(&env, "unpaused"));
+        assert_eq!(unpaused_action, Symbol::new(&env, "unpause"));
     }
 }
