@@ -114,10 +114,14 @@ fn get_forfeiture_bps(env: &Env) -> u32 {
 }
 
 /// Compute `(refundable, forfeited)` from accumulated equity and the forfeiture rate.
-fn equity_split(equity: i128, forfeiture_bps: u32) -> (i128, i128) {
-    let forfeited = equity * forfeiture_bps as i128 / 10_000;
+fn equity_split(equity: i128, forfeiture_bps: u32) -> Result<(i128, i128), ContractError> {
+    let forfeited = equity
+        .checked_mul(forfeiture_bps as i128)
+        .ok_or(ContractError::EquityOverflow)?
+        .checked_div(10_000)
+        .ok_or(ContractError::EquityOverflow)?;
     let refundable = equity - forfeited;
-    (refundable, forfeited)
+    Ok((refundable, forfeited))
 }
 
 #[contractimpl]
@@ -302,7 +306,7 @@ impl RentToOwn {
 
         let accumulated = deal.equity_accumulated_usdc;
         let forfeiture_bps = get_forfeiture_bps(&env);
-        let (refundable, forfeited) = equity_split(accumulated, forfeiture_bps);
+        let (refundable, forfeited) = equity_split(accumulated, forfeiture_bps)?;
 
         deal.status = DealStatus::Defaulted;
         env.storage()

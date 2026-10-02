@@ -327,7 +327,10 @@ impl VestingScheduleContract {
             return Err(ContractError::AlreadyRevoked);
         }
 
-        let unclaimed = schedule.total_amount - schedule.claimed_amount;
+        let unclaimed = schedule
+            .total_amount
+            .checked_sub(schedule.claimed_amount)
+            .unwrap_or(0);
         schedule.revoked = true;
         set_vesting_schedule(&env, &beneficiary, &schedule);
 

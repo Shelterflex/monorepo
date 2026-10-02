@@ -162,6 +162,30 @@ fn calculate_collateral_ratio_oracle(collateral: i128, bond: i128, price: i128) 
     (collateral * price * 100 / (PRICE_SCALE * bond)) as u32
 }
 
+fn calculate_bond_reduction(
+    seize_amount: i128,
+    effective_price: i128,
+    bond: i128,
+) -> Result<i128, ContractError> {
+    let value = seize_amount
+        .checked_mul(effective_price)
+        .ok_or(ContractError::InvalidAmount)?;
+    let reduction = value
+        .checked_div(PRICE_SCALE)
+        .ok_or(ContractError::InvalidAmount)?;
+    Ok(reduction.min(bond))
+}
+
+fn calculate_keeper_reward(seize_amount: i128, reward_cap: u32) -> Result<i128, ContractError> {
+    let value = seize_amount
+        .checked_mul(reward_cap as i128)
+        .ok_or(ContractError::InvalidAmount)?;
+    let reward = value
+        .checked_div(10_000)
+        .ok_or(ContractError::InvalidAmount)?;
+    Ok(reward.min(seize_amount))
+}
+
 /// Minimum collateral to seize so the position reaches target_ratio after
 /// proportional bond reduction.  Returns collateral (full seizure) when the
 /// position is too far underwater to reach target_ratio partially.
@@ -177,20 +201,6 @@ fn compute_seize_amount(collateral: i128, bond: i128, price: i128, target_ratio:
         return collateral;
     }
     numerator / denominator
-}
-
-fn calculate_bond_reduction(
-    seize_amount: i128,
-    effective_price: i128,
-    bond: i128,
-) -> Result<i128, ContractError> {
-    let value = seize_amount
-        .checked_mul(effective_price)
-        .ok_or(ContractError::InvalidAmount)?;
-    let reduction = value
-        .checked_div(PRICE_SCALE)
-        .ok_or(ContractError::InvalidAmount)?;
-    Ok(reduction.min(bond))
 }
 
 /// Fetch oracle price from the configured feed contract.  Returns None when no
@@ -616,7 +626,7 @@ impl BondCollateral {
         let token_client = token::Client::new(&env, &token_address);
         token_client.transfer(&env.current_contract_address(), &owner, &amount);
 
-        let total = get_total_collateral(&env) - amount;
+        let total = get_total_collateral(&env).saturating_sub(amount);
         put_total_collateral(&env, total);
 
         // Emit collateral_withdrawn with the resulting ratio
@@ -700,13 +710,7 @@ impl BondCollateral {
 
         // Keeper reward bounded by reward cap bps of seized collateral.
         let reward_cap = get_keeper_reward_cap(&env);
-        let keeper_reward = match seize_amount.checked_mul(reward_cap as i128) {
-            Some(prod) => match prod.checked_div(10_000) {
-                Some(res) => res.min(seize_amount),
-                None => return Err(ContractError::InvalidAmount),
-            },
-            None => return Err(ContractError::InvalidAmount),
-        };
+        let keeper_reward = calculate_keeper_reward(seize_amount, reward_cap)?;
 
         // Update position accounting.
         let new_collateral = collateral - seize_amount;

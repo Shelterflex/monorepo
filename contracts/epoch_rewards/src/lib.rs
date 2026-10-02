@@ -444,7 +444,10 @@ impl EpochRewards {
         // Dust = funded - claimable (always ≥ 0 by integer division).
         // We use epoch.dust already accumulated during fund_epoch_rewards
         // but recalculate from first principles to keep it consistent.
-        let dust = epoch.total_rewards - total_claimable_at_seal;
+        let dust = epoch
+            .total_rewards
+            .checked_sub(total_claimable_at_seal)
+            .unwrap_or(0);
         let dust = if dust < 0 { 0 } else { dust };
 
         // Determine unclaimed rewards to carry forward to the next epoch.

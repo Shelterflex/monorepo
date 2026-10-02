@@ -54,6 +54,7 @@ pub enum ContractError {
     ProposalAlreadyExecuted = 10,
     QuorumNotReached = 11,
     NegativeStake = 12,
+    ArithmeticOverflow = 13,
 }
 
 // ── Data Structures ───────────────────────────────────────────────────────────
@@ -274,9 +275,15 @@ impl Governance {
         // Use the snapshotted weight for voting
         let weight = current_stake;
         if support {
-            proposal.votes_for += weight;
+            proposal.votes_for = proposal
+                .votes_for
+                .checked_add(weight)
+                .ok_or(ContractError::ArithmeticOverflow)?;
         } else {
-            proposal.votes_against += weight;
+            proposal.votes_against = proposal
+                .votes_against
+                .checked_add(weight)
+                .ok_or(ContractError::ArithmeticOverflow)?;
         }
 
         env.storage()
@@ -310,8 +317,15 @@ impl Governance {
 
         // Use the snapshotted total staked (captured at proposal creation) for quorum calculation
         let total_staked = proposal.snapshotted_total_staked;
-        let total_votes = proposal.votes_for + proposal.votes_against;
-        let quorum_required = total_staked * QUORUM_BPS / 10_000;
+        let total_votes = proposal
+            .votes_for
+            .checked_add(proposal.votes_against)
+            .ok_or(ContractError::ArithmeticOverflow)?;
+        let quorum_required = total_staked
+            .checked_mul(QUORUM_BPS)
+            .ok_or(ContractError::ArithmeticOverflow)?
+            .checked_div(10_000)
+            .ok_or(ContractError::ArithmeticOverflow)?;
 
         proposal.status = if total_votes < quorum_required {
             ProposalStatus::Rejected
@@ -1220,12 +1234,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "overflow")]
-    fn vote_counting_overflow_panics() {
-        // Vote weights are summed as unchecked i128 additions. Two voters whose
-        // combined weight exceeds i128::MAX overflow-panic under the dev
-        // profile's debug assertions. Documents an overflow-prone arithmetic
-        // path (requires admin to set adversarial stake weights).
+    fn vote_counting_overflow_checked() {
         let env = Env::default();
         let (admin, client) = setup(&env, 1_000_000);
         let proposer = Address::generate(&env);
@@ -1234,8 +1243,10 @@ mod tests {
         give_stake(&env, &client, &admin, &voter, 1);
 
         let pid = client.create_proposal(&proposer, &Symbol::new(&env, "param"), &1, &2);
-        client.vote(&proposer, &pid, &true); // votes_for = i128::MAX
-        client.vote(&voter, &pid, &true); // i128::MAX + 1 → overflow panic
+        client.vote(&proposer, &pid, &true);
+        let result = client.try_vote(&voter, &pid, &true);
+        assert_eq!(result, Err(Ok(ContractError::ArithmeticOverflow)));
+        assert_eq!(client.get_proposal(&pid).unwrap().votes_for, i128::MAX);
     }
 
     // --- Event assertions ---------------------------------------------------

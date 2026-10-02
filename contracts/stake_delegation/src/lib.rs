@@ -68,6 +68,7 @@ pub enum ContractError {
     SlashExceedsBalance = 11,
     // ── Issue #1134 ──────────────────────────────────────────────────────────
     CommissionTooHigh = 12,
+    ArithmeticOverflow = 13,
 }
 
 // ── Data Structures ───────────────────────────────────────────────────────────
@@ -219,7 +220,7 @@ impl StakeDelegation {
         }
         // Settle current rewards before changing the rate
         let reward_index = Self::get_reward_index(&env);
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         env.storage().persistent().set(
             &DataKey::DelegateeCommissionRate(delegatee.clone()),
@@ -246,7 +247,7 @@ impl StakeDelegation {
         delegatee.require_auth();
 
         let reward_index = Self::get_reward_index(&env);
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         let commission: i128 = env
             .storage()
@@ -349,7 +350,7 @@ impl StakeDelegation {
 
         // Settle pending rewards before touching stakes
         let reward_index = Self::get_reward_index(&env);
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         let new_delegatee_stake = delegatee_stake - slash_amount;
         env.storage().persistent().set(
@@ -381,12 +382,18 @@ impl StakeDelegation {
                 if d.delegatee == delegatee {
                     // Proportional reduction: new_amount = d.amount * new_stake / old_stake
                     let new_amount = if delegatee_stake > 0 {
-                        d.amount * new_delegatee_stake / delegatee_stake
+                        d.amount
+                            .checked_mul(new_delegatee_stake)
+                            .ok_or(ContractError::ArithmeticOverflow)?
+                            .checked_div(delegatee_stake)
+                            .ok_or(ContractError::ArithmeticOverflow)?
                     } else {
                         0
                     };
                     let delta = d.amount - new_amount;
-                    total_balance_slashed += delta;
+                    total_balance_slashed = total_balance_slashed
+                        .checked_add(delta)
+                        .ok_or(ContractError::ArithmeticOverflow)?;
 
                     // Reduce delegator's staked balance
                     let bal: i128 = env
@@ -482,7 +489,7 @@ impl StakeDelegation {
             return Err(ContractError::InvalidAmount);
         }
 
-        Self::settle_all_delegates(&env, &from);
+        Self::settle_all_delegates(&env, &from)?;
 
         let bal: i128 = env
             .storage()
@@ -531,7 +538,7 @@ impl StakeDelegation {
             return Err(ContractError::InsufficientStake);
         }
 
-        Self::settle_all_delegates(&env, &from);
+        Self::settle_all_delegates(&env, &from)?;
 
         env.storage()
             .persistent()
@@ -580,7 +587,7 @@ impl StakeDelegation {
         let current_epoch = Self::current_epoch(&env);
         let reward_index = Self::get_reward_index(&env);
 
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         let current_stake = Self::get_delegatee_stake(&env, &delegatee);
         env.storage().persistent().set(
@@ -713,7 +720,7 @@ impl StakeDelegation {
         }
 
         let reward_index = Self::get_reward_index(&env);
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         let delegations: Vec<Delegation> = env
             .storage()
@@ -860,7 +867,7 @@ impl StakeDelegation {
         }
 
         let reward_index = Self::get_reward_index(&env);
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         let delegations: Vec<Delegation> = env
             .storage()
@@ -957,7 +964,7 @@ impl StakeDelegation {
         delegatee.require_auth();
 
         let reward_index = Self::get_reward_index(&env);
-        Self::settle_pending_for(&env, &delegatee, reward_index);
+        Self::settle_pending_for(&env, &delegatee, reward_index)?;
 
         let banked: i128 = env
             .storage()
@@ -1085,19 +1092,37 @@ impl StakeDelegation {
     }
 
     /// Settle pending rewards for a delegatee, splitting commission from net rewards.
-    fn settle_pending_for(env: &Env, addr: &Address, current_reward_index: i128) {
+    fn settle_pending_for(
+        env: &Env,
+        addr: &Address,
+        current_reward_index: i128,
+    ) -> Result<(), ContractError> {
         let delegatee_stake = Self::get_delegatee_stake(env, addr);
         let delegatee_index = Self::get_delegatee_index(env, addr);
         if delegatee_stake > 0 && current_reward_index > delegatee_index {
-            let gross = delegatee_stake * (current_reward_index - delegatee_index) / SCALE;
+            let gross = delegatee_stake
+                .checked_mul(
+                    current_reward_index
+                        .checked_sub(delegatee_index)
+                        .ok_or(ContractError::ArithmeticOverflow)?,
+                )
+                .ok_or(ContractError::ArithmeticOverflow)?
+                .checked_div(SCALE)
+                .ok_or(ContractError::ArithmeticOverflow)?;
             if gross > 0 {
                 let commission_rate: u32 = env
                     .storage()
                     .persistent()
                     .get(&DataKey::DelegateeCommissionRate(addr.clone()))
                     .unwrap_or(0);
-                let commission = gross * commission_rate as i128 / 10_000;
-                let net_rewards = gross - commission;
+                let commission = gross
+                    .checked_mul(commission_rate as i128)
+                    .ok_or(ContractError::ArithmeticOverflow)?
+                    .checked_div(10_000)
+                    .ok_or(ContractError::ArithmeticOverflow)?;
+                let net_rewards = gross
+                    .checked_sub(commission)
+                    .ok_or(ContractError::ArithmeticOverflow)?;
 
                 if commission > 0 {
                     let prev: i128 = env
@@ -1107,7 +1132,9 @@ impl StakeDelegation {
                         .unwrap_or(0);
                     env.storage().persistent().set(
                         &DataKey::DelegateeCommissionBalance(addr.clone()),
-                        &(prev + commission),
+                        &prev
+                            .checked_add(commission)
+                            .ok_or(ContractError::ArithmeticOverflow)?,
                     );
                     extend_storage_ttl(
                         env,
@@ -1122,7 +1149,9 @@ impl StakeDelegation {
                         .unwrap_or(0);
                     env.storage().persistent().set(
                         &DataKey::PendingRewards(addr.clone()),
-                        &(banked + net_rewards),
+                        &banked
+                            .checked_add(net_rewards)
+                            .ok_or(ContractError::ArithmeticOverflow)?,
                     );
                     extend_storage_ttl(env, &DataKey::PendingRewards(addr.clone()).into_val(env));
                 }
@@ -1136,9 +1165,10 @@ impl StakeDelegation {
             env,
             &DataKey::DelegateeRewardIndex(addr.clone()).into_val(env),
         );
+        Ok(())
     }
 
-    fn settle_all_delegates(env: &Env, delegator: &Address) {
+    fn settle_all_delegates(env: &Env, delegator: &Address) -> Result<(), ContractError> {
         let reward_index = Self::get_reward_index(env);
         let delegations: Vec<Delegation> = env
             .storage()
@@ -1146,8 +1176,9 @@ impl StakeDelegation {
             .get(&DataKey::Delegations(delegator.clone()))
             .unwrap_or_else(|| Vec::new(env));
         for d in delegations.iter() {
-            Self::settle_pending_for(env, &d.delegatee, reward_index);
+            Self::settle_pending_for(env, &d.delegatee, reward_index)?;
         }
+        Ok(())
     }
 
     fn total_delegated(env: &Env, delegator: &Address) -> i128 {
@@ -1223,7 +1254,7 @@ impl StakeDelegation {
             return Err(ContractError::SlashExceedsBalance);
         }
 
-        Self::settle_all_delegates(&env, &delegator);
+        Self::settle_all_delegates(&env, &delegator)?;
 
         let new_balance = balance - amount;
         env.storage()
