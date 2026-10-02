@@ -221,6 +221,7 @@ impl InspectorBondContract {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -623,6 +624,17 @@ mod tests {
         // min_bond=1000, slash_bps=1000 (10%), lock_days=0 for easy testing
         client.init(&admin, &1_000, &1_000, &0);
         (admin, client)
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let id = env.register(InspectorBondContract, ());
+        let client = InspectorBondContractClient::new(&env, &id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin, &1_000, &1_000, &0);
     }
 
     /// Return `(topics, data)` of the most recent

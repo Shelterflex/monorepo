@@ -54,7 +54,7 @@ describe('messageNotificationService', () => {
     })
 
     const [key] = _getPendingMessageDigestKeysForTests()
-    await flushQueuedMessageNotificationDigest(key)
+    await flushQueuedMessageNotificationDigest({ key })
 
     expect(createNotificationMock).toHaveBeenCalledTimes(1)
     expect(createNotificationMock).toHaveBeenCalledWith(
@@ -100,7 +100,7 @@ describe('messageNotificationService', () => {
     })
 
     const [key] = _getPendingMessageDigestKeysForTests()
-    await sendQueuedMessageNotificationEmail(key)
+    await sendQueuedMessageNotificationEmail({ key })
 
     expect(enqueueMock).not.toHaveBeenCalled()
   })

@@ -180,6 +180,20 @@ fn compute_seize_amount(collateral: i128, bond: i128, price: i128, target_ratio:
     numerator / denominator
 }
 
+fn calculate_bond_reduction(
+    seize_amount: i128,
+    effective_price: i128,
+    bond: i128,
+) -> Result<i128, ContractError> {
+    let value = seize_amount
+        .checked_mul(effective_price)
+        .ok_or(ContractError::InvalidAmount)?;
+    let reduction = value
+        .checked_div(PRICE_SCALE)
+        .ok_or(ContractError::InvalidAmount)?;
+    Ok(reduction.min(bond))
+}
+
 /// Fetch oracle price from the configured feed contract.  Returns None when no
 /// feed address has been set, allowing callers to fall back to 1:1 pricing.
 fn try_fetch_oracle_price(env: &Env) -> Option<OraclePrice> {
@@ -683,11 +697,17 @@ impl BondCollateral {
         let seize_amount = raw_seize.max(1).min(collateral);
 
         // Bond debt retired is proportional to the oracle value of seized collateral.
-        let bond_reduction = (seize_amount * effective_price / PRICE_SCALE).min(bond);
+        let bond_reduction = calculate_bond_reduction(seize_amount, effective_price, bond)?;
 
         // Keeper reward bounded by reward cap bps of seized collateral.
         let reward_cap = get_keeper_reward_cap(&env);
-        let keeper_reward = (seize_amount * reward_cap as i128 / 10_000).min(seize_amount);
+        let keeper_reward = match seize_amount.checked_mul(reward_cap as i128) {
+            Some(prod) => match prod.checked_div(10_000) {
+                Some(res) => res.min(seize_amount),
+                None => return Err(ContractError::InvalidAmount),
+            },
+            None => return Err(ContractError::InvalidAmount),
+        };
 
         // Update position accounting.
         let new_collateral = collateral - seize_amount;
@@ -1453,6 +1473,14 @@ mod additional_coverage_tests {
         let mut bytes = [0u8; 32];
         bytes[0..8].copy_from_slice(&seed.to_be_bytes());
         BytesN::from_array(env, &bytes)
+    }
+
+    #[test]
+    fn liquidation_arithmetic_overflow_is_rejected() {
+        assert_eq!(
+            calculate_bond_reduction(2, i128::MAX, 1),
+            Err(ContractError::InvalidAmount)
+        );
     }
 
     // ── Initialization edge cases ──────────────────────────────────────────

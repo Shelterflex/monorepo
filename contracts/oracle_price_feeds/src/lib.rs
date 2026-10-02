@@ -170,6 +170,7 @@ impl OraclePriceFeeds {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         let threshold = if staleness_threshold == 0 {
             DEFAULT_STALENESS_SECONDS
         } else {
@@ -644,11 +645,24 @@ mod test {
         let admin = Address::generate(env);
         let operator = Address::generate(env);
         let p = pair(env);
+        env.mock_all_auths();
         client
             .try_init(&admin, &operator, &600u64, &500u64)
             .unwrap()
             .unwrap();
         (contract_id, client, admin, operator, p)
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let id = env.register(OraclePriceFeeds, ());
+        let client = OraclePriceFeedsClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+
+        client.init(&admin, &operator, &600u64, &500u64);
     }
 
     #[test]
@@ -1235,6 +1249,7 @@ mod test {
     #[test]
     fn init_defaults_zero_staleness_to_600() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(OraclePriceFeeds, ());
         let client = OraclePriceFeedsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -1269,6 +1284,7 @@ mod test {
     #[test]
     fn init_defaults_zero_deviation_to_500() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(OraclePriceFeeds, ());
         let client = OraclePriceFeedsClient::new(&env, &contract_id);
         let admin = Address::generate(&env);

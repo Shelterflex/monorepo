@@ -172,6 +172,7 @@ fn non_admin_cannot_distribute_rewards() {
     let client = StakingRewardsClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
+    env.mock_all_auths();
     client.init(&admin);
 
     let non_admin = Address::generate(&env);
@@ -212,6 +213,7 @@ fn claim_rewards_when_paused() {
     let client = StakingRewardsClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
+    env.mock_all_auths();
     client.init(&admin);
 
     let user = Address::generate(&env);

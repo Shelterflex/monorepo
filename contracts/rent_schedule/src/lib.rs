@@ -429,6 +429,9 @@ impl Pausable for RentSchedule {
     }
 }
 
+#[cfg(kani)]
+mod formal_properties;
+
 #[cfg(test)]
 mod test {
     extern crate std;

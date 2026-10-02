@@ -34,6 +34,7 @@ mod integration_test {
     }
 
     fn setup(env: &Env) -> (TimelockClient<'_>, Address, Address, Address) {
+        env.mock_all_auths();
         let timelock_id = env.register(Timelock, ());
         let timelock_client = TimelockClient::new(env, &timelock_id);
 

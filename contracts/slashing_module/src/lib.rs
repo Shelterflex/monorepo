@@ -15,6 +15,9 @@ mod formal_properties;
 /// 500 bps = 5 %.
 pub const MAX_REPORTER_REWARD_BPS: u32 = 500;
 
+/// Maximum number of inspector slash records retained in history.
+pub const MAX_INSPECTOR_HISTORY: u32 = 50;
+
 // ── Storage Keys ─────────────────────────────────────────────────────────────
 
 #[contracttype]
@@ -198,6 +201,7 @@ impl SlashingModule {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.events().publish(
             (Symbol::new(&env, "slashing"), Symbol::new(&env, "init")),
@@ -1069,6 +1073,9 @@ impl SlashingModule {
             .get(&key)
             .unwrap_or_else(|| Vec::new(&env));
         history.push_back(record.clone());
+        while history.len() > MAX_INSPECTOR_HISTORY {
+            let _ = history.pop_front();
+        }
         env.storage().persistent().set(&key, &history);
 
         env.events().publish(
@@ -1160,6 +1167,17 @@ mod tests {
         client.init(&admin);
         client.set_submitter(&admin, &submitter, &true);
         (admin, submitter, client)
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let id = env.register(SlashingModule, ());
+        let client = SlashingModuleClient::new(&env, &id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin);
     }
 
     // Seed the actor's staked balance directly via admin helper.
@@ -1697,6 +1715,43 @@ mod tests {
         assert_eq!(entry.amount, 500);
         assert_eq!(entry.inspection_id, inspection);
         assert_eq!(entry.reason, reason);
+    }
+
+    #[test]
+    fn slash_history_respects_max_cap() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(SlashingModule, ());
+        let client = SlashingModuleClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let bond_contract = Address::generate(&env);
+        client.set_bond_contract(&admin, &bond_contract);
+
+        let inspector = Address::generate(&env);
+        let reason = soroban_sdk::String::from_str(&env, "excessive_slashes");
+
+        // Perform more slashes than MAX_INSPECTOR_HISTORY (50)
+        for i in 0..60 {
+            let insp_id = soroban_sdk::String::from_str(&env, &std::format!("INSP-{i}"));
+            client.slash(&bond_contract, &inspector, &100, &insp_id, &reason);
+        }
+
+        let history = client.get_slash_history(&inspector);
+        assert_eq!(history.len(), MAX_INSPECTOR_HISTORY as u32);
+
+        // The oldest items should be dropped, so the first recorded inspection should be INSP-10 (60 - 50 = 10)
+        let first_entry = history.get(0).unwrap();
+        assert_eq!(
+            first_entry.inspection_id,
+            soroban_sdk::String::from_str(&env, "INSP-10")
+        );
+
+        let last_entry = history.get(history.len() - 1).unwrap();
+        assert_eq!(
+            last_entry.inspection_id,
+            soroban_sdk::String::from_str(&env, "INSP-59")
+        );
     }
 
     // ── Pausable tests ───────────────────────────────────────────────────────

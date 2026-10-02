@@ -143,20 +143,20 @@ function buildEmailNotification(digest: PendingMessageDigest) {
   }
 }
 
-async function scheduleDigestJobs(key: string) {
+async function scheduleDigestJobs(digest: PendingMessageDigest) {
   const scheduler = getScheduler()
   await scheduler.schedule({
-    name: `message-notification-digest:${key}`,
+    name: `message-notification-digest:${digest.key}`,
     handler: 'messaging.notification.digest',
-    payload: { key },
+    payload: { digest },
     nextRunAt: new Date(Date.now() + QUIET_WINDOW_MS),
     maxRetries: 3,
     priority: 4,
   })
   await scheduler.schedule({
-    name: `message-notification-email:${key}`,
+    name: `message-notification-email:${digest.key}`,
     handler: 'messaging.notification.email',
-    payload: { key },
+    payload: { digest },
     nextRunAt: new Date(Date.now() + EMAIL_DELAY_MS),
     maxRetries: 5,
     priority: 4,
@@ -207,7 +207,7 @@ export async function queueMessageNotifications(input: {
       continue
     }
 
-    pendingDigests.set(key, {
+    const digest = {
       key,
       recipientId: participant.userId,
       conversationId: input.conversationId,
@@ -217,15 +217,23 @@ export async function queueMessageNotifications(input: {
       preview,
       count: 1,
       inAppDelivered: false,
-    })
+    }
 
-    await scheduleDigestJobs(key)
+    pendingDigests.set(key, digest)
+    await scheduleDigestJobs(digest)
   }
 }
 
-export async function flushQueuedMessageNotificationDigest(key: string) {
-  const digest = pendingDigests.get(key)
+export async function flushQueuedMessageNotificationDigest(payload: { key: string; digest?: PendingMessageDigest }) {
+  const { key, digest: payloadDigest } = payload
+  
+  // Try to get digest from payload first (new behavior), fall back to in-memory map (backward compatibility)
+  const digest = payloadDigest || pendingDigests.get(key)
+  
   if (!digest || digest.inAppDelivered) {
+    if (!payloadDigest && !digest) {
+      logger.warn('[messageNotificationService] Digest not found for key, may have been lost due to process restart', { key })
+    }
     return
   }
 
@@ -257,9 +265,14 @@ export async function flushQueuedMessageNotificationDigest(key: string) {
   pendingDigests.set(key, digest)
 }
 
-export async function sendQueuedMessageNotificationEmail(key: string) {
-  const digest = pendingDigests.get(key)
+export async function sendQueuedMessageNotificationEmail(payload: { key: string; digest?: PendingMessageDigest }) {
+  const { key, digest: payloadDigest } = payload
+  
+  // Try to get digest from payload first (new behavior), fall back to in-memory map (backward compatibility)
+  const digest = payloadDigest || pendingDigests.get(key)
+  
   if (!digest) {
+    logger.warn('[messageNotificationService] Digest not found for email key, may have been lost due to process restart', { key })
     return
   }
 

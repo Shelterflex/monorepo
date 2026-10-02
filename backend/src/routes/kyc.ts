@@ -127,7 +127,7 @@ router.post(
 
       if (!kycProvider.webhookAuthenticate(payload)) {
         logger.warn('kyc.webhook_unauthorized', { payload })
-        return res.status(401).json({ error: 'Unauthorized' })
+        return next(new AppError(ErrorCode.UNAUTHORIZED, 401, 'Unauthorized'))
       }
 
       const { id, status, reason } = payload as { id: string; status: string; reason?: string }
@@ -135,7 +135,7 @@ router.post(
 
       if (!record) {
         logger.warn('kyc.webhook_record_not_found', { id })
-        return res.status(404).json({ error: 'Not found' })
+        return next(new AppError(ErrorCode.NOT_FOUND, 404, 'Not found'))
       }
 
       const newStatus = kycStatusSchema.parse(status)
@@ -391,11 +391,11 @@ export function createKycWebhookRouter(): Router {
       if (secret) {
         if (!signature) {
           logger.warn('kyc.provider_webhook_missing_signature', { provider })
-          return res.status(401).json({ error: 'Missing signature' })
+          throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Missing signature')
         }
         if (!verifyHmacSha256(secret, rawBody, signature)) {
           logger.warn('kyc.provider_webhook_invalid_signature', { provider })
-          return res.status(401).json({ error: 'Invalid signature' })
+          throw new AppError(ErrorCode.UNAUTHORIZED, 401, 'Invalid signature')
         }
       }
 
@@ -427,7 +427,12 @@ export function createKycWebhookRouter(): Router {
       await kycRepository.updateStatus(record.id, parsed.data, provider, undefined, reason)
       await emitKycStatusChanged(record.userId, parsed.data)
     } catch (error) {
-      logger.error('kyc.provider_webhook_error', { error })
+      // Only pass to error handler if we haven't already sent a response
+      if (!res.headersSent) {
+        next(error)
+      } else {
+        logger.error('kyc.provider_webhook_error', { error })
+      }
     }
   })
   return webhookRouter

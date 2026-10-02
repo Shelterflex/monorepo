@@ -428,6 +428,7 @@ impl DealEscrow {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Operator, &operator);
         env.storage().instance().set(&DataKey::Token, &token);
@@ -1562,6 +1563,7 @@ mod test {
     #[test]
     fn init_sets_version_to_one() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(DealEscrow, ());
         let client = DealEscrowClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -1580,6 +1582,7 @@ mod test {
     #[test]
     fn init_cannot_be_called_twice() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register(DealEscrow, ());
         let client = DealEscrowClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
@@ -1599,6 +1602,22 @@ mod test {
         assert_eq!(err, ContractError::AlreadyInitialized);
     }
 
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(DealEscrow, ());
+        let client = DealEscrowClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        let token_id = env
+            .register_stellar_asset_contract_v2(Address::generate(&env))
+            .address();
+        let receipt = Address::generate(&env);
+
+        client.init(&admin, &operator, &token_id, &receipt);
+    }
+
     fn setup(
         env: &Env,
     ) -> (
@@ -1610,6 +1629,7 @@ mod test {
         Address,
         Address,
     ) {
+        env.mock_all_auths();
         let contract_id = env.register(DealEscrow, ());
         let client = DealEscrowClient::new(env, &contract_id);
         let admin = Address::generate(env);

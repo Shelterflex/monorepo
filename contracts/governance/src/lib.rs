@@ -139,6 +139,7 @@ impl Governance {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
@@ -830,6 +831,17 @@ mod tests {
             result.unwrap_err().unwrap(),
             ContractError::AlreadyInitialized
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(Governance, ());
+        let client = GovernanceClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin, &1_000_000);
     }
 
     #[test]

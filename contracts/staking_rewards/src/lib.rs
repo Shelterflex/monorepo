@@ -66,6 +66,7 @@ impl StakingRewards {
             return Err(ContractError::AlreadyInitialized);
         }
 
+        admin.require_auth();
         env.storage().instance().set(&StorageKey::Admin, &admin);
         env.storage()
             .instance()
@@ -700,6 +701,17 @@ mod test {
         let (_contract_id, client) = setup(&env);
         assert_eq!(client.version(), 1u32);
         assert_eq!(client.version(), client.contract_version());
+    }
+
+    #[test]
+    #[should_panic]
+    fn init_requires_admin_auth() {
+        let env = Env::default();
+        let contract_id = env.register(StakingRewards, ());
+        let client = StakingRewardsClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.init(&admin);
     }
 
     #[test]

@@ -695,6 +695,9 @@ impl WhistleblowerRewards {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+#[cfg(kani)]
+mod formal_properties;
+
 #[cfg(test)]
 mod test {
     extern crate std;

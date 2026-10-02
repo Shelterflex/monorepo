@@ -222,6 +222,8 @@ export class InMemoryTenantDocumentVaultStore implements TenantDocumentVaultStor
   async delete(documentId: string, userId: string): Promise<boolean> {
     const doc = this.documents.get(documentId)
     if (!doc || doc.userId !== userId) return false
+    // In-memory implementation: simulate soft-delete by removing from map
+    // (Note: in-memory store doesn't support retention holds check)
     this.documents.delete(documentId)
     return true
   }
@@ -296,7 +298,7 @@ export class PostgresTenantDocumentVaultStore implements TenantDocumentVaultStor
     if (!pool) throw new Error('Database not configured')
 
     const { rows } = await pool.query(
-      `SELECT * FROM tenant_documents WHERE id = $1 AND user_id = $2`,
+      `SELECT * FROM tenant_documents WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [documentId, userId],
     )
     if (rows.length === 0) return null
@@ -317,7 +319,7 @@ export class PostgresTenantDocumentVaultStore implements TenantDocumentVaultStor
     const pool = await getPool()
     if (!pool) throw new Error('Database not configured')
 
-    const conditions: string[] = ['user_id = $1']
+    const conditions: string[] = ['user_id = $1', 'deleted_at IS NULL']
     const params: unknown[] = [userId]
     let paramIndex = 2
 
@@ -407,11 +409,41 @@ export class PostgresTenantDocumentVaultStore implements TenantDocumentVaultStor
     const pool = await getPool()
     if (!pool) throw new Error('Database not configured')
 
-    const { rowCount } = await pool.query(
-      `DELETE FROM tenant_documents WHERE id = $1 AND user_id = $2`,
-      [documentId, userId],
-    )
-    return (rowCount ?? 0) > 0
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // Check for active retention holds before allowing deletion
+      const holdCheck = await client.query(
+        `SELECT 1 FROM data_retention_holds
+         WHERE table_name = 'tenant_documents'
+           AND record_id = $1::text
+           AND released_at IS NULL
+         LIMIT 1`,
+        [documentId],
+      )
+
+      if (holdCheck.rows.length > 0) {
+        await client.query('ROLLBACK')
+        return false
+      }
+
+      // Soft delete by setting deleted_at timestamp
+      const { rowCount } = await client.query(
+        `UPDATE tenant_documents
+         SET deleted_at = NOW()
+         WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+        [documentId, userId],
+      )
+
+      await client.query('COMMIT')
+      return (rowCount ?? 0) > 0
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
   }
 }
 

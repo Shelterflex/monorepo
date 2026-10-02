@@ -8,6 +8,7 @@ use soroban_sdk::{
 use std::println;
 
 fn setup(env: &Env) -> (Address, RentPaymentsClient<'_>, Address) {
+    env.mock_all_auths();
     let contract_id = env.register(RentPayments, ());
     let client = RentPaymentsClient::new(env, &contract_id);
     let admin = Address::generate(env);
