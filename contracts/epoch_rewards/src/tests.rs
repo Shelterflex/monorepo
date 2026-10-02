@@ -3,7 +3,7 @@ extern crate std;
 use crate::{ContractError, EpochRewards, EpochRewardsClient};
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
-    Address, Env, Symbol,
+    Address, Env, Symbol, TryIntoVal,
 };
 
 fn setup(env: &Env, duration: u64) -> (Address, EpochRewardsClient<'_>) {
