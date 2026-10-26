@@ -6,6 +6,31 @@ import { conversionStore } from '../models/conversionStore.js'
 import { depositStore } from '../models/depositStore.js'
 import { OutboxStatus } from '../outbox/types.js'
 
+// Mock authenticateToken to bypass authentication for functional tests
+vi.mock('../middleware/auth.js', () => ({
+  authenticateToken: (req: any, res: any, next: any) => {
+    req.user = {
+      id: 'admin-user-id',
+      role: 'admin',
+      email: 'admin@example.com',
+    }
+    ;(req as any).isSuperAdmin = true
+    ;(req as any).permissions = ['deposits:confirm']
+    next()
+  },
+}))
+
+// Mock requirePermission to pass for tests
+vi.mock('../middleware/rbac.js', () => ({
+  requirePermission: (resource: string, action: string) => {
+    return (req: any, res: any, next: any) => {
+      ;(req as any).isSuperAdmin = true
+      ;(req as any).permissions = [`${resource}:${action}`]
+      next()
+    }
+  },
+}))
+
 describe('POST /api/staking/stake_from_deposit', () => {
   let app: any
 

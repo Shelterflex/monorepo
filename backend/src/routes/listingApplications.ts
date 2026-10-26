@@ -3,7 +3,9 @@
  * API endpoints for tenant application workflow
  */
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
+import { authenticateToken } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/rbac.js";
 import { applicationService } from "../services/applicationService.js";
 import { listingApplicationRepository } from "../repositories/ListingApplicationRepository.js";
 import {
@@ -22,6 +24,7 @@ const router = Router();
  */
 router.post(
   "/listings/:listingId/apply",
+  authenticateToken,
   idempotency(),
   async (req: Request, res: Response, next) => {
     try {
@@ -54,12 +57,28 @@ router.post(
         );
       }
 
-      // Persist the listing owner's real ID so subsequent reviews can enforce
-      // ownership against the landlord associated with this specific listing.
+      // Verify landlord owns this listing
       const landlordId =
         await listingApplicationRepository.getListingLandlordId(listingId);
       if (!landlordId) {
         throw new AppError(ErrorCode.NOT_FOUND, 404, "Listing not found");
+      }
+
+      // Check for duplicate active applications by the same tenant for this listing
+      const existingApplications =
+        await listingApplicationRepository.findByTenantId(tenantId);
+      const hasActiveApplication = existingApplications.some(
+        (app) =>
+          app.listingId === listingId &&
+          app.status !== ListingApplicationStatus.WITHDRAWN &&
+          app.status !== ListingApplicationStatus.REJECTED
+      );
+      if (hasActiveApplication) {
+        throw new AppError(
+          ErrorCode.VALIDATION_ERROR,
+          400,
+          "You already have an active application for this listing",
+        );
       }
 
       const application = await applicationService.apply({
@@ -85,7 +104,7 @@ router.post(
  * GET /api/applications/my
  * Tenant views their applications
  */
-router.get("/applications/my", async (req: Request, res: Response, next) => {
+router.get("/applications/my", authenticateToken, async (req: Request, res: Response, next) => {
   try {
     const tenantId = (req as any).user?.id;
     if (!tenantId) {
@@ -108,30 +127,35 @@ router.get("/applications/my", async (req: Request, res: Response, next) => {
 /**
  * GET /api/listings/:listingId/applications
  * Landlord views applicants for their listing
+ * Admins with applications:view permission can also view
  */
 router.get(
   "/listings/:listingId/applications",
+  authenticateToken,
   async (req: Request, res: Response, next) => {
     try {
       const { listingId } = req.params;
       const landlordId = (req as any).user?.id;
+      const isSuperAdmin = (req as any).isSuperAdmin;
+      const permissions = (req as any).permissions || [];
 
       if (!landlordId) {
         throw new AppError(
           ErrorCode.UNAUTHORIZED,
           401,
-          "Must be authenticated as a landlord",
+          "Must be authenticated",
         );
       }
 
-      // Verify landlord owns this listing
+      // Verify landlord owns this listing (unless admin with applications:view)
       const listingOwner =
         await listingApplicationRepository.getListingLandlordId(listingId);
       if (!listingOwner) {
         throw new AppError(ErrorCode.NOT_FOUND, 404, "Listing not found");
       }
 
-      if (listingOwner !== landlordId) {
+      const hasViewPermission = isSuperAdmin || permissions.includes('applications:view');
+      if (listingOwner !== landlordId && !hasViewPermission) {
         throw new AppError(
           ErrorCode.FORBIDDEN,
           403,
@@ -159,6 +183,7 @@ router.get(
  */
 router.post(
   "/applications/:id/review",
+  authenticateToken,
   async (req: Request, res: Response, next) => {
     try {
       const { id } = req.params;
@@ -181,7 +206,27 @@ router.post(
         );
       }
 
-      const application = await applicationService.reviewApplication(
+      // Verify landlord owns the listing this application is for
+      const application = await listingApplicationRepository.findById(id);
+      if (!application) {
+        throw new AppError(ErrorCode.NOT_FOUND, 404, "Application not found");
+      }
+
+      const listingOwner =
+        await listingApplicationRepository.getListingLandlordId(application.listingId);
+      if (!listingOwner) {
+        throw new AppError(ErrorCode.NOT_FOUND, 404, "Listing not found");
+      }
+
+      if (listingOwner !== landlordId) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          403,
+          "You can only review applications for your own listings",
+        );
+      }
+
+      const reviewedApplication = await applicationService.reviewApplication(
         id,
         landlordId,
         decision,
@@ -190,7 +235,7 @@ router.post(
 
       res.json({
         success: true,
-        application,
+        application: reviewedApplication,
       });
     } catch (error) {
       next(error);
@@ -204,6 +249,7 @@ router.post(
  */
 router.delete(
   "/applications/:id",
+  authenticateToken,
   async (req: Request, res: Response, next) => {
     try {
       const { id } = req.params;
@@ -233,4 +279,6 @@ router.delete(
   },
 );
 
-export default router;
+export function createListingApplicationsRouter(): Router {
+  return router;
+}

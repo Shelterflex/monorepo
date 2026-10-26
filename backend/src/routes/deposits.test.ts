@@ -1,8 +1,33 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../app.js'
 import { conversionStore } from '../models/conversionStore.js'
 import { depositStore } from '../models/depositStore.js'
+
+// Mock authenticateToken to bypass authentication for functional tests
+vi.mock('../middleware/auth.js', () => ({
+  authenticateToken: (req: any, res: any, next: any) => {
+    req.user = {
+      id: 'admin-user-id',
+      role: 'admin',
+      email: 'admin@example.com',
+    }
+    ;(req as any).isSuperAdmin = true
+    ;(req as any).permissions = ['deposits:confirm']
+    next()
+  },
+}))
+
+// Mock requirePermission to pass for tests
+vi.mock('../middleware/rbac.js', () => ({
+  requirePermission: (resource: string, action: string) => {
+    return (req: any, res: any, next: any) => {
+      ;(req as any).isSuperAdmin = true
+      ;(req as any).permissions = [`${resource}:${action}`]
+      next()
+    }
+  },
+}))
 
 describe('POST /api/deposits/confirm', () => {
   const app = createApp()

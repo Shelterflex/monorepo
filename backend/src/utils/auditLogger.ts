@@ -49,8 +49,6 @@ export type AuditEventType =
   | "AUTH_LOGIN_FAILED"
   | "AUTH_LOGOUT"
   | "AUTH_LOGOUT_ALL"
-  | "AUTH_SESSION_REVOKED"
-  | "ADMIN_USER_SESSIONS_REVOKED"
   | "AUTH_WALLET_CHALLENGE_ISSUED"
   | "AUTH_WALLET_LOGIN_SUCCESS"
   | "AUTH_WALLET_LOGIN_FAILED"
@@ -99,32 +97,9 @@ export type AuditEventType =
   | 'INSPECTOR_REPORT_SUBMITTED'
   | 'INSPECTOR_REPORT_APPROVED'
   | 'INSPECTOR_REPORT_REJECTED'
-  // Property inspections (#1904) and inspector verification
-  | 'INSPECTION_CREATED'
-  | 'INSPECTION_STARTED'
-  | 'INSPECTION_SUBMITTED'
-  | 'INSPECTION_APPROVED'
-  | 'INSPECTION_REJECTED'
-  | 'INSPECTOR_VERIFICATION_UPDATED'
-  | 'INSPECTOR_ONBOARDING_SUBMITTED'
-  | 'INSPECTOR_VERIFIED'
-  | 'INSPECTOR_SUSPENDED'
-  // Inspection job board (#1903)
-  | 'INSPECTION_JOB_CREATED'
-  | 'INSPECTION_JOB_CLAIMED'
-  | 'INSPECTION_JOB_REPORT_SUBMITTED'
-  | 'INSPECTION_JOB_APPROVED'
-  | 'INSPECTION_JOB_REJECTED'
-  // Tenant rating card (#1905)
-  | 'TENANT_RATING_CREATED'
-  | 'RATING_CARD_SHARE_CREATED'
-  | 'RATING_CARD_SHARE_REVOKED'
-  // Tenant reputation scoring (#1980)
-  | 'TENANT_REPUTATION_SYNCED'
   // Rent guarantee insurance
   | 'INSURANCE_QUOTE_REQUESTED'
   | 'INSURANCE_POLICY_PURCHASED'
-  | 'INSURANCE_POLICY_CANCELLED'
   | 'INSURANCE_CLAIM_FILED'
   // Tenant document vault
   | 'DOCUMENT_UPLOAD_URL_ISSUED'
@@ -146,10 +121,6 @@ export type AuditEventType =
   // Data privacy / erasure
   | 'USER_ERASURE_REQUESTED'
   | 'USER_ERASURE_COMPLETED'
-  | 'USER_ERASURE_CANCELLED'
-  | 'USER_ERASURE_EXPIRED'
-  | 'TENANT_DATA_EXPORT_REQUESTED'
-  | 'TENANT_DATA_EXPORT_DOWNLOADED'
   // Credit bureau
   | 'CREDIT_REPORT_PULLED'
   | 'CREDIT_REPORT_VIEWED'
@@ -158,25 +129,13 @@ export type AuditEventType =
   | 'AGREEMENT_SIGNATURE_REQUESTED'
   | 'AGREEMENT_SIGNED'
   | 'AGREEMENT_FULLY_EXECUTED'
-  // Lease integrity / signing (#1960)
-  | 'LEASE_SIGNED'
   // Landlord verification
   | 'LANDLORD_VERIFICATION_UPDATED'
-  // Messaging attachments
-  | 'MESSAGE_ATTACHMENT_UPLOAD_URL_ISSUED'
-  | 'MESSAGE_ATTACHMENT_DOWNLOAD_URL_ISSUED'
-  | 'MESSAGE_DELETED'
   // State-changing operations (auto-generated)
   | 'STATE_CHANGED'
   | 'STATE_DELETED'
   // Admin operations (auto-generated)
   | 'ADMIN_OPERATION'
-  // Admin RBAC-guarded configuration and audit-log access (#1934, #1936, #1940)
-  | 'ADMIN_UNDERWRITING_CONFIG_UPDATED'
-  | 'ADMIN_QUOTA_OVERRIDE_CREATED'
-  | 'ADMIN_QUOTA_OVERRIDE_REMOVED'
-  | 'ADMIN_QUOTA_RESET'
-  | 'ADMIN_AUDIT_LOG_VIEWED'
 
 /**
  * Valid actor types
@@ -232,17 +191,14 @@ function extractUserId(req: Request): string {
     if (user.sub) return String(user.sub)
   }
   if ((req as any).userId) return String((req as any).userId)
+  // Only use authenticated principal - do not trust x-user-id header
   return 'anonymous'
 }
 
 function extractIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for']
-  if (typeof forwarded === 'string' && forwarded) {
-    return forwarded.split(',')[0].trim()
-  }
-  const realIp = req.headers['x-real-ip']
-  if (typeof realIp === 'string' && realIp) return realIp
-  return req.socket?.remoteAddress || req.ip || 'unknown'
+  // Use req.ip which respects app.set("trust proxy", 1) configured in app.ts
+  // Do not manually parse x-forwarded-for or x-real-ip as they can be forged
+  return req.ip || 'unknown'
 }
 
 /**
@@ -398,20 +354,6 @@ export function auditAuthLogoutAll(
   metadata: { userId?: string; sessionCount?: number } = {},
 ): void {
   auditLog('AUTH_LOGOUT_ALL', extractAuditContext(req, 'user'), metadata)
-}
-
-export function auditAuthSessionRevoked(
-  req: Request,
-  metadata: { userId?: string; sessionId?: string; sessionCount?: number; others?: boolean } = {},
-): void {
-  auditLog('AUTH_SESSION_REVOKED', extractAuditContext(req, 'user'), metadata)
-}
-
-export function auditAdminUserSessionsRevoked(
-  req: Request,
-  metadata: { targetUserId: string; sessionCount: number },
-): void {
-  auditLog('ADMIN_USER_SESSIONS_REVOKED', extractAuditContext(req, 'admin'), metadata)
 }
 
 export function auditAuthWalletChallengeIssued(
