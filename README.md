@@ -209,6 +209,10 @@ Ensure you have the WASM target installed:
 rustup target add wasm32-unknown-unknown
 ```
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for:
