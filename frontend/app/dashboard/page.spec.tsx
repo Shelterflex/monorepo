@@ -35,7 +35,6 @@ describe("DashboardRootPage", () => {
 
   it.each([
     ["landlord", "/dashboard/landlord"],
-    ["inspector", "/dashboard/inspector"],
     ["admin", "/admin"],
   ])("redirects the %s role to its dashboard", async (role, path) => {
     authState.role = role;

@@ -49,6 +49,13 @@ export type AuditEventType =
   | "AUTH_LOGIN_FAILED"
   | "AUTH_LOGOUT"
   | "AUTH_LOGOUT_ALL"
+  | "AUTH_SESSION_REVOKED"
+  | "ADMIN_AUDIT_LOG_VIEWED"
+  | "ADMIN_QUOTA_OVERRIDE_CREATED"
+  | "ADMIN_QUOTA_OVERRIDE_REMOVED"
+  | "ADMIN_QUOTA_RESET"
+  | "ADMIN_UNDERWRITING_CONFIG_UPDATED"
+  | "LEASE_SIGNED"
   | "AUTH_WALLET_CHALLENGE_ISSUED"
   | "AUTH_WALLET_LOGIN_SUCCESS"
   | "AUTH_WALLET_LOGIN_FAILED"
@@ -333,6 +340,13 @@ export function auditAuthLoginSuccess(
   metadata: { userId?: string; email?: string } = {},
 ): void {
   auditLog('AUTH_LOGIN_SUCCESS', extractAuditContext(req, 'user'), metadata)
+}
+
+export function auditAuthSessionRevoked(
+  req: Request,
+  metadata: Record<string, unknown> = {},
+): void {
+  auditLog('AUTH_SESSION_REVOKED', extractAuditContext(req, 'user'), metadata)
 }
 
 export function auditAuthLoginFailed(

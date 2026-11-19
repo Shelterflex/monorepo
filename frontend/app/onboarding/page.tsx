@@ -307,12 +307,6 @@ export default function OnboardingPage() {
           <p className="text-gray-500 mt-1">
             Step {currentStepIndex + 1} of {STEPS.length}
           </p>
-          <p className="mt-3 text-sm text-gray-500">
-            Getting paid to verify listings instead?{" "}
-            <Link href="/onboarding/inspector" className="font-bold text-blue-600 underline">
-              Apply as a property inspector
-            </Link>
-          </p>
         </div>
 
         {/* Progress bar */}

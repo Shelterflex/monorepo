@@ -17,7 +17,6 @@ export const envSchema = z.object({
   // Soroban contract IDs are StrKey-encoded, always starting with 'C' and 56 characters long (base32).
   USDC_TOKEN_ADDRESS: z.string().optional(),
   SOROBAN_USDC_TOKEN_ID: z.string().optional(),
-  SOROBAN_INSPECTOR_BOND_ID: z.string().optional(),
   ENCRYPTION_KEY: z.string().min(32, 'Encryption key must be at least 32 characters'),
   // HMAC key used by webhookVerifier.ts to sign/verify outbound webhook rotation.
   // Distinct from WEBHOOK_SECRET, which validates inbound provider (Paystack/Flutterwave) signatures.
@@ -38,8 +37,8 @@ export const envSchema = z.object({
   FLUTTERWAVE_SECRET: z.string().optional(),
   MANUAL_ADMIN_SECRET: z.string().optional(),
   FX_RATE_NGN_PER_USDC: z.coerce.number().positive().default(1600),
-  /** NGN/USDC conversion: `stub` (FX_RATE only), `http` (CONVERSION_RATE_URL required), `fallback` (HTTP then stub), `oracle` (on-chain oracle_price_feeds via SOROBAN_ORACLE_PRICE_FEEDS_ID, then stub). */
-  CONVERSION_PROVIDER: z.enum(['stub', 'http', 'fallback', 'oracle']).default('stub'),
+  /** NGN/USDC conversion: `stub` (FX_RATE only), `http` (CONVERSION_RATE_URL required), `fallback` (HTTP then stub). */
+  CONVERSION_PROVIDER: z.enum(['stub', 'http', 'fallback']).default('stub'),
   /** JSON endpoint returning { "fxRateNgnPerUsdc": number } (or `rate` / `ngnPerUsdc`). Required when CONVERSION_PROVIDER=http. */
   CONVERSION_RATE_URL: z.preprocess(
     (v) => (v === '' || v === undefined ? undefined : v),

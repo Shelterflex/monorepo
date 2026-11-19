@@ -19,7 +19,6 @@ import { ApplicationsTable } from "@/components/user-dashboard/ApplicationsTable
 import { WalletLedgerTable } from "@/components/user-dashboard/WalletLedgerTable";
 import { getNgnBalance, getNgnLedger } from "@/lib/walletApi";
 import { listTenantApplications } from "@/lib/tenantApi";
-import { fetchSavedListingIds } from "@/lib/savedPropertiesApi";
 import { listPublicListings } from "@/lib/propertiesApi";
 import type {
   WalletBalance,
@@ -50,40 +49,12 @@ export default function UserDashboardPage() {
   );
   const [ledgerEntries, setLedgerEntries] = useState<WalletLedgerEntry[]>([]);
 
-  const [savedLoading, setSavedLoading] = useState(true);
+  const [savedLoading] = useState(false);
   const [savedError, setSavedError] = useState<string | null>(null);
   const [appsLoading, setAppsLoading] = useState(true);
   const [appsError, setAppsError] = useState<string | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
-
-  const loadSaved = useCallback(() => {
-    fetchSavedListingIds()
-      .then((ids) => {
-        if (ids.length === 0) {
-          setSavedProperties([]);
-          return;
-        }
-        return listPublicListings({ listingIds: ids }).then((listings) => {
-          const props: UserSavedProperty[] = listings.data.map((l) => ({
-            id: parseInt(l.listingId, 10),
-            title: l.address,
-            location: [l.area, l.city].filter(Boolean).join(", "),
-            priceNgnPerYear: l.annualRentNgn,
-          }));
-          setSavedProperties(props);
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to load saved properties:", err);
-        setSavedError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load saved properties",
-        );
-      })
-      .finally(() => setSavedLoading(false));
-  }, []);
 
   const loadApplications = useCallback(() => {
     listTenantApplications()
@@ -145,10 +116,6 @@ export default function UserDashboardPage() {
   }, []);
 
   useEffect(() => {
-    loadSaved();
-  }, [loadSaved]);
-
-  useEffect(() => {
     loadApplications();
   }, [loadApplications]);
 
@@ -158,12 +125,6 @@ export default function UserDashboardPage() {
 
   // Retry handlers reset to the loading state before re-fetching. Kept separate
   // from the loaders above so the mount effects never call setState synchronously.
-  const retrySaved = useCallback(() => {
-    setSavedLoading(true);
-    setSavedError(null);
-    loadSaved();
-  }, [loadSaved]);
-
   const retryApplications = useCallback(() => {
     setAppsLoading(true);
     setAppsError(null);
@@ -227,7 +188,7 @@ export default function UserDashboardPage() {
                 <ErrorState
                   title="Failed to load saved properties"
                   description={savedError}
-                  onRetry={retrySaved}
+                  onRetry={() => setSavedError(null)}
                 />
               ) : savedProperties.length === 0 ? (
                 <EmptyState

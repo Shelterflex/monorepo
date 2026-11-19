@@ -225,16 +225,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bond_collateral"
-version = "0.1.0"
-dependencies = [
- "slashing_module",
- "soroban-pausable",
- "soroban-sdk",
- "soroban_access_control",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -709,15 +699,6 @@ dependencies = [
  "r-efi",
  "wasip2",
  "wasip3",
-]
-
-[[package]]
-name = "governance"
-version = "0.1.0"
-dependencies = [
- "soroban-pausable",
- "soroban-sdk",
- "soroban_access_control",
 ]
 
 [[package]]
@@ -1296,15 +1277,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schema_registry"
-version = "0.1.0"
-dependencies = [
- "soroban-pausable",
- "soroban-sdk",
- "soroban_access_control",
-]
-
-[[package]]
 name = "schemars"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1456,14 +1428,6 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest",
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "slashing_module"
-version = "0.1.0"
-dependencies = [
- "soroban-pausable",
- "soroban-sdk",
 ]
 
 [[package]]
@@ -1792,15 +1756,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tenant_reputation"
-version = "0.1.0"
-dependencies = [
- "soroban-pausable",
- "soroban-sdk",
- "soroban_access_control",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1898,15 +1853,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vesting_schedule"
-version = "0.1.0"
-dependencies = [
- "soroban-pausable",
- "soroban-sdk",
- "soroban_access_control",
-]
 
 [[package]]
 name = "wait-timeout"

@@ -29,11 +29,9 @@ import { createBalanceRouter } from "./routes/balance.js";
 import { createPaymentsRouter } from "./routes/payments.js";
 import { createAdminRouter } from "./routes/admin.js";
 import { createAdminContractAccessRouter } from "./routes/adminContractAccess.js";
-import { createAdminUpgradeableProxyRouter } from "./routes/adminUpgradeableProxy.js";
 import { createDealsRouter } from "./routes/deals.js";
 import { createWhistleblowerRouter } from "./routes/whistleblower.js";
 import { createStakingRouter } from "./routes/staking.js";
-import { createStakingDelegationRouter } from "./routes/stakingDelegation.js";
 import { createWebhooksRouter } from "./routes/webhooks.js";
 import { createDepositsRouter } from "./routes/deposits.js";
 import { EarningsServiceImpl } from "./services/earnings.js";
@@ -58,7 +56,6 @@ import {
 import { CustodialWalletServiceImpl } from "./services/CustodialWalletServiceImpl.js";
 import { NgnWalletService } from "./services/ngnWalletService.js";
 import { createAdminReconciliationRouter } from "./routes/adminReconciliation.js";
-import { createGasMetricsRouter } from "./routes/gas-metrics.js";
 import {
   InMemoryWalletStore,
   PostgresWalletStore,
@@ -85,14 +82,12 @@ import { OutboxSender } from "./outbox/sender.js";
 import { OutboxWorker } from "./outbox/worker.js";
 import { DealStatusSyncWorker } from "./workers/dealStatusSyncWorker.js";
 import { RentReleaseDisputeWorker } from "./workers/rentReleaseDisputeWorker.js";
-import { RentToOwnSyncWorker } from "./workers/rentToOwnSyncWorker.js";
 import {
   initializeAppSecretRotation,
   secretRotationMiddleware,
   createSecretRotationRouter,
 } from "./middleware/secretRotation.js";
 import { getSecretRotationService } from "./services/secretRotationService.js";
-import migrationGuideRouter from "./routes/migrationGuide.js";
 import adminTimelockRouter from "./routes/admin-timelock.js";
 import { TimelockIndexer } from "./indexer/timelock-worker.js";
 import {
@@ -137,8 +132,6 @@ import { createConversionProviderFromEnv } from "./services/conversionProviderFa
 import { ConversionRateService } from "./services/conversionRateService.js";
 import { createConversionRouter } from "./routes/conversion.js";
 import { createUserPreferencesRouter } from "./routes/userPreferences.js";
-import { createUserErasureRouter } from "./routes/userErasure.js";
-import { createAdminErasureRouter } from "./routes/adminErasure.js";
 import { createAdminAuditRouter } from "./routes/adminAudit.js";
 import { createAdminAuditLogsRouter } from "./routes/adminAuditLogs.js";
 import { createAdminUnderwritingRouter } from "./routes/adminUnderwriting.js";
@@ -148,7 +141,6 @@ import {
   createTimelockRepository,
 } from "./indexer/repositoryBootstrap.js";
 import { createLandlordPropertiesRouter } from "./routes/landlordProperties.js";
-import { createEpochRewardsRouter } from "./routes/epochRewards.js";
 import { createLandlordRouter } from "./routes/landlord.js";
 import {
   createAdminLandlordVerificationRouter,
@@ -158,7 +150,6 @@ import { authenticateToken } from "./middleware/auth.js";
 import { requireFlag } from "./middleware/requireFlag.js";
 import { createFeatureFlagsRouter } from "./routes/featureFlags.js";
 import { createTenantApplicationsRouter } from "./routes/tenantApplications.js";
-import { createTenantSavedPropertiesRouter } from "./routes/tenantSavedProperties.js";
 import { createTenantPaymentsRouter } from "./routes/tenantPayments.js";
 import { createNotificationsRouter } from "./routes/notifications.js";
 import { createSettlementAdminRouter } from "./routes/settlementAdmin.js";
@@ -166,10 +157,7 @@ import { createDisputeAdminRouter } from "./routes/disputeAdmin.js";
 import { SettlementOutboxWorker } from "./settlement/worker.js";
 import { createLedgerReconciliationRouter } from "./routes/ledgerReconciliation.js";
 import { createAdminTransactionLedgerRouter } from "./routes/adminTransactionLedger.js";
-import { createAdminSessionsRouter } from "./routes/adminSessions.js";
 import { durableIdempotencyService } from "./services/durableIdempotencyService.js";
-import { createSupportRouter } from "./routes/support.js";
-import { createPropertyIssueReportsRouter } from "./routes/propertyIssueReports.js";
 import { createPropertyPhotosRouter } from "./routes/propertyPhotos.js";
 import { createAccountRouter } from "./routes/account.js";
 import { createAdminDataRetentionRouter } from "./routes/adminDataRetention.js";
@@ -190,46 +178,15 @@ import {
   initWhistleblowerSignupApplicationStore,
 } from "./models/whistleblowerSignupApplicationStore.js";
 import { createPartnerLandlordApplicationsRouter } from "./routes/partnerLandlordApplications.js";
-import { createApartmentReviewsRouter } from "./routes/apartmentReviews.js";
-import { createComplianceReportRouter } from "./routes/complianceReport.js";
-import { flushQueuedMessageNotificationDigest, sendQueuedMessageNotificationEmail, type PendingMessageDigest } from "./services/messageNotificationService.js";
-import { createWhistleblowerReportsRouter } from "./routes/whistleblowerReports.js";
-import { createTenantDataExportRouter } from "./routes/tenantDataExport.js";
-import { createTenantErasureRouter } from "./routes/tenantErasure.js";
-import { createTenantCreditScoringRouter } from "./routes/tenantCreditScoring.js";
 import { createTenantOnboardingRouter } from "./routes/tenantOnboarding.js";
-import { createAdminTenantCreditScoreRouter } from "./routes/adminTenantCreditScore.js";
-import { createTenantDocumentVaultRouter } from "./routes/tenantDocumentVault.js";
-import { createReferralsRouter } from "./routes/referrals.js";
-import { createLandlordPayoutScheduleRouter } from "./routes/landlordPayoutSchedule.js";
 import { createDocsRouter } from "./routes/docs.js";
 import { createListingsRouter } from "./routes/listings.js";
 import { createLeaseAgreementsRouter } from "./routes/leaseAgreements.js";
 import { createListingApplicationsRouter } from "./routes/listingApplications.js";
 import { createKycRouter } from "./routes/kyc.js";
 import { createAdminRolesRouter } from "./routes/adminRoles.js";
-import { createAbuseRouter } from "./routes/abuse.js";
-import {
-  createInspectorJobsRouter,
-  createAdminInspectorJobsRouter,
-} from "./routes/inspectorJobs.js";
-import { createInspectorOnboardingRouter } from "./routes/inspectorOnboarding.js";
-import { createPropertyInspectionsRouter } from "./routes/propertyInspections.js";
-import { createGovernanceRouter } from "./routes/governance.js";
-import { createRentGuaranteeRouter } from "./routes/rentGuarantee.js";
-import { createTenantRatingCardRouter } from "./routes/tenantRatingCard.js";
-import { createRentGuaranteeProviderFromEnv } from "./services/insurance/rentGuaranteeProviderFactory.js";
-import {
-  createAdminCreditScoreRouter,
-  createCreditScoreRouter,
-} from "./routes/creditScore.js";
 import { createSorobanContractsRouter } from "./routes/sorobanContracts.js";
 import { createContractEventsRouter } from "./routes/contractEvents.js";
-import {
-  createAdminVestingScheduleRouter,
-  createVestingScheduleRouter,
-} from "./routes/vestingSchedule.js";
-import { createWhistleblowerRewardsRouter } from "./routes/whistleblowerRewards.js";
 import { createCircuitBreakerRouter } from "./routes/circuitBreaker.js";
 
 import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
@@ -241,9 +198,6 @@ import {
 } from "./services/cacheInvalidation.js";
 import { createKycWebhookRouter } from "./routes/kyc.js";
 import { createOnboardingRouter } from "./routes/onboarding.js";
-import { createEmployersRouter } from "./routes/employers.js";
-import { createMessagingRouter } from "./routes/messaging.js";
-import { createAttachmentsRouter } from "./routes/attachments.js";
 import { getStorageProvider } from "./services/storageService.js";
 import { MonthlyDeductionReminderJob } from "./jobs/monthlyDeductionReminderJob.js";
 import {
@@ -397,10 +351,7 @@ export function createApp() {
   const rewardsDataLayer = process.env.DATABASE_URL
     ? new PostgresRewardsDataLayer()
     : new StubRewardsDataLayer();
-  const conversionProvider = createConversionProviderFromEnv(env, {
-    sorobanAdapter,
-    oracleContractId: sorobanConfig.oraclePriceFeedsId,
-  });
+  const conversionProvider = createConversionProviderFromEnv(env);
   const conversionRateService = new ConversionRateService(conversionProvider);
   const conversionService = new ConversionService(conversionProvider, "onramp");
   app.set("conversionService", conversionService);
@@ -499,13 +450,6 @@ export function createApp() {
     rentReleaseDisputeWorker.start(rentReleaseDisputeIntervalMs);
     workers.push(rentReleaseDisputeWorker);
 
-    const rentToOwnSyncWorker = new RentToOwnSyncWorker(sorobanAdapter);
-    const rentToOwnSyncIntervalMs = parseInt(
-      process.env.RENT_TO_OWN_SYNC_WORKER_INTERVAL_MS ?? "30000",
-      10,
-    );
-    rentToOwnSyncWorker.start(rentToOwnSyncIntervalMs);
-    workers.push(rentToOwnSyncWorker);
   }
 
   // Job Scheduler — swap to Postgres store when DATABASE_URL is set
@@ -526,23 +470,10 @@ export function createApp() {
   jobScheduler.registerHandler('notification.send', async (job) => {
     await notificationService.send(job.payload as any)
   })
-  jobScheduler.registerHandler('messaging.notification.digest', async (job) => {
-    await flushQueuedMessageNotificationDigest(job.payload as { key: string; digest?: PendingMessageDigest })
-  })
-  jobScheduler.registerHandler('messaging.notification.email', async (job) => {
-    await sendQueuedMessageNotificationEmail(job.payload as { key: string; digest?: PendingMessageDigest })
-  })
 
   // Register webhook delivery job handler
   jobScheduler.registerHandler("webhook.delivery", async (job) => {
     await processWebhookDeliveryJob(job.payload as any);
-  });
-
-  jobScheduler.registerHandler("erasure.requested", async (job) => {
-    logger.info("erasure.requested", {
-      userId: (job.payload as { userId?: string }).userId,
-      requestId: (job.payload as { requestId?: string }).requestId,
-    });
   });
 
   // Register data retention purge job handler
@@ -759,7 +690,6 @@ export function createApp() {
   app.use("/api/v1/auth", createAuthRateLimiter(env), authRouter);
   app.use("/api/v1/conversion", createConversionRouter(conversionRateService));
   app.use("/api/v1/user", createUserPreferencesRouter());
-  app.use("/api/v1/user", createUserErasureRouter());
   app.use(createPublicRateLimiter(env));
 
   app.use("/", publicRouter);
@@ -790,24 +720,8 @@ export function createApp() {
     createAdminContractAccessRouter(sorobanAdapter),
   );
   app.use(
-    "/api/v1/admin/upgradeable-proxy",
-    createAdminUpgradeableProxyRouter(sorobanAdapter),
-  );
-  app.use(
     "/api/v1/admin/reconciliation",
     createAdminReconciliationRouter(ngnWalletService),
-  );
-  app.use(
-    "/api/v1/admin/vesting-schedule",
-    createAdminVestingScheduleRouter(sorobanAdapter),
-  );
-  app.use(
-    "/api/v1/vesting-schedule",
-    createVestingScheduleRouter(sorobanAdapter),
-  );
-  app.use(
-    "/api/v1/whistleblower-rewards",
-    createWhistleblowerRewardsRouter(sorobanAdapter),
   );
   app.use(
     "/api/v1/admin/circuit-breaker",
@@ -838,8 +752,6 @@ export function createApp() {
   );
   app.use("/api/v1/webhooks", createWebhooksRouter(ngnWalletService));
   app.use("/api/v1/deposits", createDepositsRouter(conversionService));
-  app.use("/api/v1/gas-metrics", createGasMetricsRouter());
-  app.use("/api/v1", migrationGuideRouter);
   app.use("/health", createHealthRouter(sorobanAdapter));
 
   // Global API Rate Limiting
@@ -847,15 +759,12 @@ export function createApp() {
 
   app.use("/api/v1/auth", authRouter);
 
-  app.use("/api/v1/support", createSupportRouter());
-  app.use("/api/v1/property-issue-reports", createPropertyIssueReportsRouter());
 
   // In test mode, also mount routes at /api/ for backward compatibility with existing tests
   if (env.NODE_ENV === "test") {
     app.use("/api/auth", createAuthRateLimiter(env), authRouter);
     app.use("/api/conversion", createConversionRouter(conversionRateService));
     app.use("/api/user", createUserPreferencesRouter());
-    app.use("/api/user", createUserErasureRouter());
     app.use("/api", createBalanceRouter(sorobanAdapter));
     app.use("/api", createReceiptsRouter(receiptRepo));
     app.use(
@@ -882,24 +791,8 @@ export function createApp() {
       createAdminContractAccessRouter(sorobanAdapter),
     );
     app.use(
-      "/api/admin/upgradeable-proxy",
-      createAdminUpgradeableProxyRouter(sorobanAdapter),
-    );
-    app.use(
       "/api/admin/reconciliation",
       createAdminReconciliationRouter(ngnWalletService),
-    );
-    app.use(
-      "/api/admin/vesting-schedule",
-      createAdminVestingScheduleRouter(sorobanAdapter),
-    );
-    app.use(
-      "/api/vesting-schedule",
-      createVestingScheduleRouter(sorobanAdapter),
-    );
-    app.use(
-      "/api/whistleblower-rewards",
-      createWhistleblowerRewardsRouter(sorobanAdapter),
     );
     app.use(
       "/api/admin/circuit-breaker",
@@ -915,15 +808,10 @@ export function createApp() {
     app.use("/api/webhooks", createWebhooksRouter(ngnWalletService));
     app.use("/api/deposits", createDepositsRouter(conversionService));
     app.use("/api", createListingApplicationsRouter());
-    app.use("/api/admin/compliance/reports", createComplianceReportRouter());
-    app.use("/api/gas-metrics", createGasMetricsRouter());
-    app.use("/api", migrationGuideRouter);
     app.use("/api", createComprehensiveRateLimiter());
     app.use("/api/auth", authRouter);
     app.use("/api", createBalanceRouter(sorobanAdapter));
     app.use("/api", createReceiptsRouter(receiptRepo));
-    app.use("/api/support", createSupportRouter());
-    app.use("/api/property-issue-reports", createPropertyIssueReportsRouter());
     app.use("/api/wallet", createWalletRouter(walletService));
     app.use("/api/wallet/ngn", createNgnWalletRouter(ngnWalletService));
     app.use("/api/risk", createRiskRouter(ngnWalletService));
@@ -944,10 +832,6 @@ export function createApp() {
       createAdminContractAccessRouter(sorobanAdapter),
     );
     app.use(
-      "/api/admin/upgradeable-proxy",
-      createAdminUpgradeableProxyRouter(sorobanAdapter),
-    );
-    app.use(
       "/api/admin/reconciliation",
       createAdminReconciliationRouter(ngnWalletService),
     );
@@ -959,17 +843,14 @@ export function createApp() {
       "/api/admin/transaction-ledger",
       createAdminTransactionLedgerRouter(),
     );
-    app.use("/api/admin/sessions", createAdminSessionsRouter());
     app.use("/api/admin/secrets", createSecretRotationRouter());
     app.use("/api/admin/jobs", createAdminJobsRouter());
     app.use("/api/admin/quota", createAdminQuotaRouter());
     app.use("/api/admin/fraud", createAdminFraudRouter());
     app.use("/api/admin/outbox", createAdminOutboxRouter(sorobanAdapter));
     app.use("/api/admin", createAdminAuditRouter());
-    app.use("/api/admin/erasure", createAdminErasureRouter());
     app.use("/api/deals", createDealsRouter());
     app.use("/api", createLeaseAgreementsRouter());
-    app.use("/api", createEmployersRouter());
     app.use("/api/whistleblower", createWhistleblowerRouter(earningsService));
     app.use(
       "/api/whistleblower-applications",
@@ -981,22 +862,11 @@ export function createApp() {
     );
     app.use("/api/admin/underwriting", createAdminUnderwritingRouter());
     app.use("/api/admin/analytics", createAdminAnalyticsRouter());
-    app.use("/api/admin", createAdminTenantCreditScoreRouter());
-    app.use("/api/admin/credit-score", createAdminCreditScoreRouter());
     app.use("/api/admin", createSettlementAdminRouter());
     app.use("/api", createContractEventsRouter());
     app.use("/api/config/feature-flags", createFeatureFlagsRouter());
     // Mounted ahead of "/api/staking" so the delegation prefix wins; the
     // stake_delegation contract is a separate ledger from staking_pool.
-    app.use(
-      "/api/staking/delegation",
-      requireFlag("STAKING_ENABLED"),
-      createStakingDelegationRouter(
-        sorobanAdapter,
-        walletService,
-        linkedAddressStore,
-      ),
-    );
     app.use(
       "/api/staking",
       requireFlag("STAKING_ENABLED"),
@@ -1013,20 +883,14 @@ export function createApp() {
     );
     app.use("/api/webhooks", createWebhooksRouter(ngnWalletService));
     app.use("/api/deposits", createDepositsRouter(conversionService));
-    app.use("/api/gas-metrics", createGasMetricsRouter());
     app.use("/api", createPropertyPhotosRouter());
     app.use("/api/landlord/properties", createLandlordPropertiesRouter());
-    app.use("/api/epoch-rewards", createEpochRewardsRouter());
     app.use(
       "/api/landlord/partner-applications",
       createPartnerLandlordApplicationsRouter(),
     );
     app.use("/api/landlord", authenticateToken, createLandlordRouter());
     app.use("/api/tenant/applications", createTenantApplicationsRouter());
-    app.use(
-      "/api/tenant/saved-properties",
-      createTenantSavedPropertiesRouter(),
-    );
     app.use(
       "/api/whistleblower/applications",
       createWhistleblowerApplicationsRouter(),
@@ -1035,11 +899,6 @@ export function createApp() {
     app.use("/api/notifications", createNotificationsRouter());
     app.use("/api/admin", createSettlementAdminRouter());
     app.use("/api/admin", createAdminRolesRouter());
-    app.use("/api/apartment-reviews", createApartmentReviewsRouter());
-    app.use("/api/reports", createWhistleblowerReportsRouter());
-    app.use("/api/tenant/data-export", createTenantDataExportRouter());
-    app.use("/api/tenant/erasure", createTenantErasureRouter());
-    app.use("/api/inspector/onboarding", createInspectorOnboardingRouter());
   }
 
   app.use("/api/v1/wallet", createWalletRouter(walletService));
@@ -1062,10 +921,6 @@ export function createApp() {
     createAdminContractAccessRouter(sorobanAdapter),
   );
   app.use(
-    "/api/v1/admin/upgradeable-proxy",
-    createAdminUpgradeableProxyRouter(sorobanAdapter),
-  );
-  app.use(
     "/api/v1/admin/reconciliation",
     createAdminReconciliationRouter(ngnWalletService),
   );
@@ -1077,7 +932,6 @@ export function createApp() {
     "/api/v1/admin/transaction-ledger",
     createAdminTransactionLedgerRouter(),
   );
-  app.use("/api/v1/admin/sessions", createAdminSessionsRouter());
   app.use("/api/v1/admin/secrets", createSecretRotationRouter());
   app.use("/api/v1/admin/jobs", createAdminJobsRouter());
   app.use("/api/v1/admin/quota", createAdminQuotaRouter());
@@ -1085,7 +939,6 @@ export function createApp() {
   app.use("/api/v1/admin/outbox", createAdminOutboxRouter(sorobanAdapter));
   app.use("/api/v1/admin", createAdminAuditRouter());
   app.use("/api/v1/admin/audit-logs", createAdminAuditLogsRouter());
-  app.use("/api/v1/admin/erasure", createAdminErasureRouter());
   app.use("/api/v1/deals", createDealsRouter());
   app.use("/api/v1", createLeaseAgreementsRouter());
   app.use("/api/v1/whistleblower", createWhistleblowerRouter(earningsService));
@@ -1099,21 +952,10 @@ export function createApp() {
   );
   app.use("/api/v1/admin/underwriting", createAdminUnderwritingRouter());
   app.use("/api/v1/admin/analytics", createAdminAnalyticsRouter());
-  app.use("/api/v1/admin", createAdminTenantCreditScoreRouter());
-  app.use("/api/v1/admin/credit-score", createAdminCreditScoreRouter());
   app.use("/api/v1/admin", createSettlementAdminRouter());
   app.use("/api/v1/admin/disputes", createDisputeAdminRouter());
   app.use("/api/v1/config/feature-flags", createFeatureFlagsRouter());
 
-  app.use(
-    "/api/v1/staking/delegation",
-    requireFlag("STAKING_ENABLED"),
-    createStakingDelegationRouter(
-      sorobanAdapter,
-      walletService,
-      linkedAddressStore,
-    ),
-  );
   app.use(
     "/api/v1/staking",
     requireFlag("STAKING_ENABLED"),
@@ -1130,7 +972,6 @@ export function createApp() {
   );
   app.use("/api/v1/webhooks", createWebhooksRouter(ngnWalletService));
   app.use("/api/v1/deposits", createDepositsRouter(conversionService));
-  app.use("/api/v1/gas-metrics", createGasMetricsRouter());
   app.use("/api/v1", createPropertyPhotosRouter());
   app.use("/api/v1/landlord/properties", createLandlordPropertiesRouter());
   app.use(
@@ -1142,83 +983,27 @@ export function createApp() {
   app.use("/api/v1/admin", createAdminLandlordVerificationRouter());
   app.use("/api/v1/tenant/applications", createTenantApplicationsRouter());
   app.use(
-    "/api/v1/tenant/saved-properties",
-    createTenantSavedPropertiesRouter(),
-  );
-  app.use(
     "/api/v1/whistleblower/applications",
     createWhistleblowerApplicationsRouter(),
   );
-  app.use("/api/v1/admin/compliance/reports", createComplianceReportRouter());
   app.use("/api/tenant/payments", createTenantPaymentsRouter());
   app.use("/api/notifications", createNotificationsRouter());
   app.use("/api/admin", createSettlementAdminRouter());
   app.use("/api/admin", createAdminRolesRouter());
   app.use("/api/admin/disputes", createDisputeAdminRouter());
-  app.use("/api/apartment-reviews", createApartmentReviewsRouter());
-  app.use("/api/compliance/reports", createComplianceReportRouter());
   app.use("/api/kyc", createKycRouter());
-  app.use("/api/admin/abuse", createAbuseRouter());
-  app.use("/api/tenant/credit-scoring", createTenantCreditScoringRouter());
-  app.use("/api/tenant/credit-score", createCreditScoreRouter());
   app.use("/api/tenant/onboarding", createTenantOnboardingRouter());
-  app.use("/api/tenant/vault", createTenantDocumentVaultRouter());
   app.use("/api/listings", createListingsRouter());
   app.use("/api/v1", createListingApplicationsRouter());
-  app.use(
-    "/api/landlord/payout-schedule",
-    createLandlordPayoutScheduleRouter(),
-  );
   app.use("/api/webhooks/kyc", createKycWebhookRouter());
   app.use("/api/onboarding", createOnboardingRouter());
-  app.use("/api", migrationGuideRouter);
 
   // Account and data retention routes
   app.use("/api/v1", createAccountRouter());
   app.use("/api/v1", createAdminDataRetentionRouter());
 
-  // Inspector job routes — gated by INSPECTOR_DASHBOARD_ENABLED flag
-  app.use(
-    "/api/v1/inspector",
-    authenticateToken,
-    requireFlag("INSPECTOR_DASHBOARD_ENABLED"),
-    createInspectorJobsRouter(sorobanAdapter),
-  );
-  app.use(
-    "/api/v1/admin/inspector",
-    authenticateToken,
-    requireFlag("INSPECTOR_DASHBOARD_ENABLED"),
-    createAdminInspectorJobsRouter(),
-  );
-  app.use("/api/v1/inspector/onboarding", createInspectorOnboardingRouter());
-
-  // Property inspection routes
-  app.use("/api/v1", createPropertyInspectionsRouter());
-
-  // Rent guarantee insurance routes
-  const rentGuaranteeProvider = createRentGuaranteeProviderFromEnv(
-    process.env.RENT_GUARANTEE_PROVIDER,
-  );
-  app.use("/api/v1", createRentGuaranteeRouter(rentGuaranteeProvider));
-
-  // Referrals routes
-  app.use("/api/v1/referrals", createReferralsRouter());
-
-  // Tenant rating card routes
-  app.use("/api/v1", createTenantRatingCardRouter(sorobanAdapter));
-
-  // Stake-weighted governance proposal/voting routes — gated by GOVERNANCE_ENABLED flag.
-  // Distinct from the timelock admin queue (admin-timelock.js); see contracts/governance.
-  app.use(
-    "/api/v1/governance",
-    authenticateToken,
-    requireFlag("GOVERNANCE_ENABLED"),
-    createGovernanceRouter(sorobanAdapter, linkedAddressStore),
-  );
 
   // Interactive API documentation
-  app.use("/api/v1/messaging", createMessagingRouter());
-  app.use("/api/v1/messaging/attachments", createAttachmentsRouter(getStorageProvider()));
   app.use("/docs", createDocsRouter());
 
   // Backward compatibility redirect from /api/* to /api/v1/*

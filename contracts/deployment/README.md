@@ -142,5 +142,3 @@ The full workspace includes these contracts:
 | deal_escrow                   | Soroban |
 | contract_access               | Soroban |
 | timelock                      | Soroban |
-| bond_collateral               | Soroban |
-| slashing_module               | Soroban |

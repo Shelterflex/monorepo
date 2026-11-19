@@ -94,8 +94,6 @@ CONTRACTS=(
   deal_escrow
   contract_access
   timelock
-  bond_collateral
-  slashing_module
 )
 
 # ── Deployed-state file ─────────────────────────────────────────────────────

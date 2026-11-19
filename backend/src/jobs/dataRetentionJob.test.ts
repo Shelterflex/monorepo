@@ -9,12 +9,6 @@ vi.mock('../db.js', () => ({
   })),
 }))
 
-vi.mock('../services/erasureService.js', () => ({
-  erasureService: {
-    expireOverdueRequests: vi.fn(async () => 0),
-  },
-}))
-
 describe('DataRetentionJob', () => {
   beforeEach(() => {
     mockQuery.mockReset()

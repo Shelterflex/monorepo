@@ -165,19 +165,6 @@ export default function SignupPage() {
                 </Link>
               </div>
 
-              <div className="mb-6">
-                <p className="text-xs text-muted-foreground mb-2">Or get paid verifying listings in person:</p>
-                <Link href="/onboarding/inspector">
-                  <Button
-                    variant="outline"
-                    disabled={isSubmitting}
-                    className="w-full border-3 border-foreground px-4 py-3 font-mono font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]"
-                  >
-                    Become an Inspector
-                  </Button>
-                </Link>
-              </div>
-
               {errors.root?.serverError?.message && (
                 <div role="alert" className="border-2 border-destructive bg-destructive/10 p-3 text-sm font-medium text-destructive">
                   {errors.root.serverError.message}

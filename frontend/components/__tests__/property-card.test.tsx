@@ -111,6 +111,7 @@ describe("PropertyCard", () => {
           bathrooms: 2,
           annualRentNgn: 2_000_000,
         }}
+        showFavorite
         isFavorited={false}
       />,
     );
@@ -132,6 +133,7 @@ describe("PropertyCard", () => {
           bathrooms: 2,
           annualRentNgn: 2_000_000,
         }}
+        showFavorite
         isFavorited
       />,
     );

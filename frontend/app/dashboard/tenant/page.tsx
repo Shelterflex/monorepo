@@ -46,7 +46,6 @@ import {
   type PaymentScheduleItem,
   type PaymentHistoryItem,
 } from "@/lib/tenantApi";
-import { fetchSavedListingIds } from "@/lib/savedPropertiesApi";
 import { listPublicListings, type PublicListing } from "@/lib/propertiesApi";
 
 type PaymentItem =
@@ -58,7 +57,7 @@ export default function TenantDashboard() {
   const userName = user?.name ?? user?.email ?? "";
   const firstName = user?.name?.trim().split(/\s+/)[0] || "there";
   const isStakingEnabled = useFeatureFlag("STAKING_ENABLED");
-  const [activeTab, setActiveTab] = useState<"overview" | "payments" | "saved">(
+  const [activeTab, setActiveTab] = useState<"overview" | "payments">(
     "overview",
   );
 
@@ -69,14 +68,11 @@ export default function TenantDashboard() {
     [],
   );
   const [pastPayments, setPastPayments] = useState<PaymentHistoryItem[]>([]);
-  const [savedProperties, setSavedProperties] = useState<PublicListing[]>([]);
 
   const [leaseLoading, setLeaseLoading] = useState(true);
   const [leaseError, setLeaseError] = useState<string | null>(null);
   const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
-  const [savedLoading, setSavedLoading] = useState(true);
-  const [savedError, setSavedError] = useState<string | null>(null);
 
   const [onboardingStatus, setOnboardingStatus] = useState<{
     completedSteps: string[];
@@ -125,28 +121,6 @@ export default function TenantDashboard() {
       .finally(() => setPaymentsLoading(false));
   }, []);
 
-  const loadSaved = useCallback(() => {
-    fetchSavedListingIds()
-      .then((ids) => {
-        if (ids.length === 0) {
-          setSavedProperties([]);
-          return;
-        }
-        return listPublicListings({ listingIds: ids }).then((listings) => {
-          setSavedProperties(listings.data);
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to load saved properties:", err);
-        setSavedError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load saved properties",
-        );
-      })
-      .finally(() => setSavedLoading(false));
-  }, []);
-
   useEffect(() => {
     loadLease();
   }, [loadLease]);
@@ -154,10 +128,6 @@ export default function TenantDashboard() {
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
-
-  useEffect(() => {
-    loadSaved();
-  }, [loadSaved]);
 
   // Retry handlers reset to the loading state before re-fetching. Kept separate
   // from the loaders above so the mount effects never call setState synchronously.
@@ -172,12 +142,6 @@ export default function TenantDashboard() {
     setPaymentsError(null);
     loadPayments();
   }, [loadPayments]);
-
-  const retrySaved = useCallback(() => {
-    setSavedLoading(true);
-    setSavedError(null);
-    loadSaved();
-  }, [loadSaved]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-NG", {
@@ -420,7 +384,6 @@ export default function TenantDashboard() {
             {[
               { id: "overview", label: "Overview" },
               { id: "payments", label: "Payments" },
-              { id: "saved", label: "Saved" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -698,58 +661,6 @@ export default function TenantDashboard() {
                 </div>
               )}
             </Card>
-            </SectionBoundary>
-          )}
-
-          {activeTab === "saved" && (
-            <SectionBoundary section="tenant-dashboard-saved" userRole="tenant">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {savedLoading ? (
-                <LoadingState
-                  label="Loading saved properties"
-                  className="col-span-full grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-                >
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <PropertyCardSkeleton key={`saved-${i}`} />
-                  ))}
-                </LoadingState>
-              ) : savedError ? (
-                <ErrorState
-                  className="col-span-full"
-                  title="Failed to load saved properties"
-                  description={savedError}
-                  onRetry={retrySaved}
-                />
-              ) : savedProperties.length > 0 ? (
-                <>
-                  {savedProperties.map((property) => (
-                    <PropertyCard
-                      key={property.listingId}
-                      property={property}
-                      isFavorited
-                      href={`/properties/${property.listingId}`}
-                    />
-                  ))}
-                  <Card className="flex items-center justify-center border-3 border-dashed border-foreground p-8">
-                    <Link href="/properties" className="text-center">
-                      <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
-                      <p className="mt-2 font-bold">Browse More Properties</p>
-                      <p className="text-sm text-muted-foreground">
-                        Find your next home
-                      </p>
-                    </Link>
-                  </Card>
-                </>
-              ) : (
-                <EmptyState
-                  className="col-span-full"
-                  icon={Heart}
-                  title="No saved properties yet"
-                  description="Tap the heart on any listing to keep it here, so you can compare your shortlist later."
-                  action={{ label: "Browse properties", href: "/properties" }}
-                />
-              )}
-            </div>
             </SectionBoundary>
           )}
         </div>

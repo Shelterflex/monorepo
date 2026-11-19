@@ -3,8 +3,6 @@ import request from 'supertest'
 import { describe, it, expect, vi } from 'vitest'
 import { createConversionRouter } from './conversion.js'
 import { ConversionRateService } from '../services/conversionRateService.js'
-import { OracleConversionProvider } from '../services/conversionProvider.js'
-import type { OracleClient, PriceFeed } from '../soroban/oracle.js'
 
 function buildApp(rateService: Partial<ConversionRateService>) {
   const app = express()
@@ -84,59 +82,3 @@ describe('GET /api/conversion/rate', () => {
   })
 })
 
-describe('GET /api/v1/conversion/rate with CONVERSION_PROVIDER=oracle (issue #1488)', () => {
-  function mockOracleClient(overrides: Partial<OracleClient> = {}): OracleClient {
-    return {
-      init: vi.fn(),
-      updatePrice: vi.fn(),
-      getPrice: vi.fn(),
-      getPriceUnsafe: vi.fn(),
-      isStale: vi.fn().mockResolvedValue(false),
-      setStalenessThreshold: vi.fn(),
-      setMaxDeviationBps: vi.fn(),
-      ...overrides,
-    } as OracleClient
-  }
-
-  it('reflects the on-chain oracle price end-to-end through the real ConversionRateService', async () => {
-    const feed: PriceFeed = {
-      pair: 'NGN_USDC',
-      price: '16500000000', // 1650.0000000 scaled by 10^7
-      decimals: 7,
-      updatedAt: 1_000,
-      sequence: 7,
-    }
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(false),
-      getPrice: vi.fn().mockResolvedValue(feed),
-    })
-    const provider = new OracleConversionProvider(oracleClient)
-    const rateService = new ConversionRateService(provider)
-
-    const app = express()
-    app.use('/api/v1/conversion', createConversionRouter(rateService))
-
-    const res = await request(app).get('/api/v1/conversion/rate').expect(200)
-
-    expect(res.body.rate).toBe(1650)
-    expect(res.body.source).toBe('oracle')
-  })
-
-  it('does not serve a stale on-chain price silently', async () => {
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(true),
-    })
-    const provider = new OracleConversionProvider(oracleClient)
-    const rateService = new ConversionRateService(provider)
-
-    const app = express()
-    app.use('/api/v1/conversion', createConversionRouter(rateService))
-    app.use((err: any, _req: any, res: any, _next: any) => {
-      res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: err.message } })
-    })
-
-    const res = await request(app).get('/api/v1/conversion/rate').expect(500)
-
-    expect(res.body.error.message).toMatch(/stale/i)
-  })
-})

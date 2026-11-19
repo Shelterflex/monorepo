@@ -1,5 +1,4 @@
 import { logger } from '../utils/logger.js'
-import type { OracleClient } from '../soroban/oracle.js'
 
 export interface ConvertNgnToUsdcInput {
   amountNgn: number
@@ -237,70 +236,6 @@ export class StubConversionProvider implements ConversionProvider {
       amountUsdc: toUsdcDecimalString(amountUsdc),
       fxRateNgnPerUsdc: this.fxRateNgnPerUsdc,
       providerRef: `stub:${input.depositId}`,
-    }
-  }
-}
-
-/** Soroban `Symbol` values only allow `[A-Za-z0-9_]` — no `/` — so the pair is `NGN_USDC`, not `NGN/USDC`. */
-export const DEFAULT_ORACLE_PAIR = 'NGN_USDC'
-
-/**
- * Reads NGN-per-USDC from the on-chain oracle_price_feeds contract via
- * {@link OracleSorobanClient} (issue #1488). Explicitly checks `isStale`
- * before trusting a reading, and maps any oracle failure (stale, no quorum,
- * unconfigured contract, RPC error) to a {@link ConversionProviderError} so
- * callers can fall back rather than silently serving an untrustworthy rate.
- */
-export class OracleConversionProvider implements ConversionProvider {
-  constructor(
-    private readonly oracleClient: OracleClient,
-    private readonly pair: string = DEFAULT_ORACLE_PAIR,
-  ) {}
-
-  async getRate(): Promise<ConversionRateQuote> {
-    let stale: boolean
-    try {
-      stale = await this.oracleClient.isStale(this.pair)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      throw new ConversionProviderError(`Oracle staleness check failed for ${this.pair}: ${msg}`, 'NETWORK')
-    }
-    if (stale) {
-      throw new ConversionProviderError(`Oracle price for ${this.pair} is stale`, 'INVALID_RESPONSE')
-    }
-
-    let feed: Awaited<ReturnType<OracleClient['getPrice']>>
-    try {
-      feed = await this.oracleClient.getPrice(this.pair)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      throw new ConversionProviderError(`Oracle price fetch failed for ${this.pair}: ${msg}`, 'NETWORK')
-    }
-
-    const price = BigInt(feed.price)
-    if (price <= 0n) {
-      throw new ConversionProviderError(`Oracle price for ${this.pair} must be positive`, 'INVALID_RESPONSE')
-    }
-    const rate = Number(price) / 10 ** feed.decimals
-    if (!Number.isFinite(rate) || rate <= 0) {
-      throw new ConversionProviderError(`Oracle price for ${this.pair} produced an invalid rate`, 'INVALID_RESPONSE')
-    }
-
-    return { rate, source: 'oracle', providerRef: `oracle:${this.pair}:${feed.sequence}` }
-  }
-
-  async convertNgnToUsdc(input: ConvertNgnToUsdcInput): Promise<ConvertNgnToUsdcOutput> {
-    if (input.amountNgn <= 0) {
-      throw new ConversionProviderError('amountNgn must be positive', 'VALIDATION')
-    }
-
-    const quote = await this.getRate()
-    const amountUsdc = input.amountNgn / quote.rate
-
-    return {
-      amountUsdc: toUsdcDecimalString(amountUsdc),
-      fxRateNgnPerUsdc: quote.rate,
-      providerRef: quote.providerRef ?? `oracle:${input.depositId}`,
     }
   }
 }

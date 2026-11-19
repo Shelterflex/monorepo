@@ -239,7 +239,4 @@ npm test -- webhooks.reversal.test.ts --run
 
 ## 📚 Further Reading
 
-- `REVERSAL_POLICY_IMPLEMENTATION.md` - Complete implementation guide
 - `IMPLEMENTATION_SUMMARY.md` - Summary and status
-- `openapi-risk-endpoints.yml` - API documentation
-- `REVERSAL_CHECKLIST.md` - Implementation checklist

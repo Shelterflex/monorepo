@@ -33,8 +33,8 @@ describe('GET /soroban/contracts', () => {
       configured: true,
       address: VALID_CONTRACT_ID,
     })
-    expect(response.body.contracts.tenantReputation.configured).toBe(false)
-    expect(response.body.contracts.tenantReputation.address).toBeNull()
+    expect(response.body.contracts.rentPayments.configured).toBe(false)
+    expect(response.body.contracts.rentPayments.address).toBeNull()
     expect(JSON.stringify(response.body)).not.toContain('secret')
   })
 })

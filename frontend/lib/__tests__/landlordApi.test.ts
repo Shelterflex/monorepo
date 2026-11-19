@@ -90,41 +90,6 @@ describe("landlordApi", () => {
     });
   });
 
-  describe("getAnalytics", () => {
-    it("fetches analytics with no params", async () => {
-      vi.mocked(apiFetch).mockResolvedValue({
-        occupancyTrend: [],
-        revenueBreakdown: [],
-        paymentTrends: [],
-        vacancyMetrics: { averageTimeToFill: 0, currentVacancyCount: 0 },
-      });
-
-      await landlordApi.getAnalytics();
-
-      expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining("/api/landlord/analytics?"));
-    });
-
-    it("includes date range and propertyId in query", async () => {
-      vi.mocked(apiFetch).mockResolvedValue({
-        occupancyTrend: [],
-        revenueBreakdown: [],
-        paymentTrends: [],
-        vacancyMetrics: { averageTimeToFill: 0, currentVacancyCount: 0 },
-      });
-
-      await landlordApi.getAnalytics({
-        startDate: "2025-01-01",
-        endDate: "2025-06-30",
-        propertyId: "P-001",
-      });
-
-      const calledUrl = vi.mocked(apiFetch).mock.calls[0][0] as string;
-      expect(calledUrl).toContain("startDate=2025-01-01");
-      expect(calledUrl).toContain("endDate=2025-06-30");
-      expect(calledUrl).toContain("propertyId=P-001");
-    });
-  });
-
   describe("createProperty", () => {
     it("POSTs property payload", async () => {
       vi.mocked(apiPost).mockResolvedValue({ id: "P-002" });

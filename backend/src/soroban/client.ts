@@ -8,24 +8,16 @@ export type SorobanConfig = {
   stakingPoolId?: string
   stakingRewardsId?: string
   mvpStakingPoolId?: string
-  stakeDelegationId?: string
   usdcTokenId?: string
   dealEscrowId?: string
   rentPaymentsId?: string
-  inspectorBondId?: string
   contractAccessId?: string
   rentToOwnId?: string
-  oraclePriceFeedsId?: string
   transactionReceiptId?: string
   allowlistRegistryId?: string
   rentWalletId?: string
-  slashingModuleId?: string
-  bondCollateralId?: string
-  vestingScheduleId?: string
-  epochRewardsId?: string
   multisigAdminId?: string
   whistleblowerRewardsId?: string
-  tenantReputationId?: string
   adminSecret?: string
   seed?: string | number
 }
@@ -40,24 +32,16 @@ export function getSorobanConfigFromEnv(env: NodeJS.ProcessEnv): SorobanConfig {
     stakingPoolId: addresses.stakingPool,
     stakingRewardsId: addresses.stakingRewards,
     mvpStakingPoolId: addresses.mvpStakingPool,
-    stakeDelegationId: addresses.stakeDelegation,
     usdcTokenId: addresses.usdcToken,
     dealEscrowId: addresses.dealEscrow,
     rentPaymentsId: addresses.rentPayments,
-    inspectorBondId: addresses.inspectorBond,
     contractAccessId: addresses.contractAccess,
     rentToOwnId: addresses.rentToOwn,
-    oraclePriceFeedsId: addresses.oraclePriceFeeds,
     transactionReceiptId: addresses.transactionReceipt,
     allowlistRegistryId: addresses.allowlistRegistry,
     rentWalletId: addresses.rentWallet,
-    slashingModuleId: addresses.slashingModule,
-    bondCollateralId: addresses.bondCollateral,
-    vestingScheduleId: addresses.vestingSchedule,
-    epochRewardsId: addresses.epochRewards,
     multisigAdminId: addresses.multisigAdmin,
     whistleblowerRewardsId: addresses.whistleblowerRewards,
-    tenantReputationId: addresses.tenantReputation,
     adminSecret: env.SOROBAN_ADMIN_SECRET,
     seed: env.SOROBAN_STUB_SEED,
   }

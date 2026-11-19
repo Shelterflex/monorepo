@@ -29,7 +29,6 @@ export default function robots(): MetadataRoute.Robots {
           "/tenant/",
           "/verify-otp",
           "/forgot-password",
-          "/rating-card/",
           "/offline",
           "/whistleblower/dashboard",
           "/whistleblower/earnings",

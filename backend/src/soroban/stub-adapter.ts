@@ -2,7 +2,6 @@ import {
      SorobanAdapter,
      RecordReceiptParams,
      SyncDealStatusParams,
-     TenantReputationRecord,
      RequestRentReleaseParams,
      ChallengeRentReleaseParams,
      ResolveRentDisputeParams,
@@ -11,12 +10,7 @@ import {
      RegisterRentToOwnDealParams,
      RecordRentToOwnEquityPaymentParams,
      RentToOwnDealActionParams,
-     OraclePriceReading,
      OnChainReceipt,
-     CreateVestingScheduleParams,
-     VestingScheduleRecord,
-     EpochRewardsCall,
-     EpochRewardsEpoch,
      MultisigArg,
      MultisigCall,
      MultisigCallParams,
@@ -30,19 +24,12 @@ import { logger } from '../utils/logger.js'
 import { Account, Keypair, TransactionBuilder, nativeToScVal, Address, xdr } from '@stellar/stellar-sdk'
 import { AppError } from '../errors/AppError.js'
 import { ErrorCode } from '../errors/errorCodes.js'
-import { assertVestingClaimXdr, buildVestingClaimOperation } from './vestingClaim.js'
-import { vestedAmount } from './vestingMath.js'
 import { assertSignedInvocation, buildInvokeOperation } from './userSignedTx.js'
 import { encodeMultisigArg } from './multisigArgs.js'
-import { StubEpochRewards } from './stub-epoch-rewards.js'
 import { StubMultisig } from './stub-multisig.js'
 
 export class StubSorobanAdapter implements SorobanAdapter {
      private static stubBalances = new Map<string, bigint>()
-     private static stubBonds = new Map<string, bigint>()
-     private static stubReputations = new Map<string, TenantReputationRecord>()
-     private static stubVestings = new Map<string, VestingScheduleRecord>()
-     private static stubEpochRewards = new StubEpochRewards()
      private static stubMultisig = new StubMultisig()
      private config: SorobanConfig
 
@@ -60,12 +47,8 @@ export class StubSorobanAdapter implements SorobanAdapter {
       */
      public static _testOnlyReset(): void {
           this.stubBalances.clear()
-          this.stubBonds.clear()
-          this.stubReputations.clear()
-          this.stubVestings.clear()
-          this.stubEpochRewards = new StubEpochRewards()
           this.stubMultisig = new StubMultisig()
-          logger.debug('Soroban stub: static reset complete (balances, bonds, reputations and vestings cleared)')
+          logger.debug('Soroban stub: static reset complete (balances cleared)')
      }
 
      /**
@@ -258,29 +241,6 @@ export class StubSorobanAdapter implements SorobanAdapter {
     return `stub_stellar_tx_hash_cancel_${txHash}`
   }
 
-  async stakeBond(inspectorId: string, amount: bigint): Promise<void> {
-       StubSorobanAdapter.stubBonds.set(inspectorId, amount)
-       logger.debug('Soroban stub: stakeBond', { inspectorId, amount: amount.toString() })
-  }
-
-  async unstakeBond(inspectorId: string): Promise<void> {
-       StubSorobanAdapter.stubBonds.delete(inspectorId)
-       logger.debug('Soroban stub: unstakeBond', { inspectorId })
-  }
-
-  async isBonded(inspectorId: string): Promise<boolean> {
-       const bonded = StubSorobanAdapter.stubBonds.has(inspectorId)
-       logger.debug('Soroban stub: isBonded', { inspectorId, bonded })
-       return bonded
-  }
-
-  async getBond(inspectorId: string): Promise<{ isBonded: boolean; amount: bigint }> {
-       const amount = StubSorobanAdapter.stubBonds.get(inspectorId) ?? 0n
-       const bonded = StubSorobanAdapter.stubBonds.has(inspectorId)
-       logger.debug('Soroban stub: getBond', { inspectorId, bonded, amount: amount.toString() })
-       return { isBonded: bonded, amount }
-  }
-
   // Admin operations (stub implementations)
      async pause(contractId: string): Promise<string> {
           logger.info('Soroban stub: pause', { contractId })
@@ -340,37 +300,6 @@ async requestRentRelease(params: RequestRentReleaseParams): Promise<void> {
 
      async defaultRentToOwnDeal(params: RentToOwnDealActionParams): Promise<void> {
           logger.info('Soroban stub: defaultRentToOwnDeal', { ...params })
-     }
-
-     async updateTenantReputation(tenantId: string, record: TenantReputationRecord): Promise<void> {
-          const updated: TenantReputationRecord = {
-               ...record,
-               lastUpdated: BigInt(Math.floor(Date.now() / 1000)),
-          }
-          StubSorobanAdapter.stubReputations.set(tenantId, updated)
-          logger.info('Soroban stub: updateTenantReputation', { tenantId, compositeScore: record.compositeScore })
-     }
-
-     async getTenantReputation(tenantId: string): Promise<TenantReputationRecord | null> {
-          const record = StubSorobanAdapter.stubReputations.get(tenantId) ?? null
-          logger.debug('Soroban stub: getTenantReputation', { tenantId, found: record !== null })
-          return record
-     }
-
-     /**
-      * Deterministic stub price: matches the default FX_RATE_NGN_PER_USDC
-      * (1600) scaled to the contract's 7-decimal precision, always fresh.
-      */
-     async getOraclePrice(pair: string): Promise<OraclePriceReading> {
-          const decimals = 7
-          const price = 1600n * 10n ** BigInt(decimals)
-          logger.debug('Soroban stub: getOraclePrice', { pair, price: price.toString() })
-          return { price, decimals, updatedAt: Math.floor(Date.now() / 1000), sequence: 1 }
-     }
-
-     async isOraclePriceStale(pair: string): Promise<boolean> {
-          logger.debug('Soroban stub: isOraclePriceStale', { pair })
-          return false
      }
 
      // Direct query methods for transaction-receipt-contract (stub implementations)
@@ -433,325 +362,6 @@ async requestRentRelease(params: RequestRentReleaseParams): Promise<void> {
           return BigInt(0)
      }
 
-     // vesting_schedule contract methods (#1911). These follow the contract's rules
-     // (see contracts/vesting_schedule) so that routes can be tested end to end.
-     async createVestingSchedule(params: CreateVestingScheduleParams): Promise<string> {
-          const { beneficiary, totalAmount, startTime, cliffTime, endTime, revocable } = params
-          if (totalAmount <= 0n) {
-               throw new Error('Stub: vesting amount must be positive')
-          }
-          if (!(startTime < endTime && startTime <= cliffTime && cliffTime <= endTime)) {
-               throw new Error('Stub: invalid vesting schedule times')
-          }
-          if (StubSorobanAdapter.stubVestings.has(beneficiary)) {
-               throw new Error('Stub: vesting schedule already exists for beneficiary')
-          }
-
-          StubSorobanAdapter.stubVestings.set(beneficiary, {
-               beneficiary,
-               totalAmount,
-               claimedAmount: 0n,
-               startTime,
-               cliffTime,
-               endTime,
-               revocable,
-               revoked: false,
-          })
-          logger.debug('Soroban stub: createVestingSchedule', { beneficiary, totalAmount: totalAmount.toString() })
-          return `stub_tx_hash_create_vesting_${beneficiary}`
-     }
-
-     async revokeVesting(beneficiary: string): Promise<string> {
-          const record = StubSorobanAdapter.stubVestings.get(beneficiary)
-          if (!record) {
-               throw new Error('Stub: no vesting schedule for beneficiary')
-          }
-          if (!record.revocable) {
-               throw new Error('Stub: vesting schedule is not revocable')
-          }
-          if (record.revoked) {
-               throw new Error('Stub: vesting schedule already revoked')
-          }
-
-          const now = Math.floor(Date.now() / 1000)
-          const vested = vestedAmount(
-               record.totalAmount,
-               BigInt(record.startTime),
-               BigInt(record.cliffTime),
-               BigInt(record.endTime),
-               BigInt(now),
-          )
-          // Same truncation as the contract: nothing vests after the revocation time.
-          const cutoff = Math.max(now, record.startTime)
-          StubSorobanAdapter.stubVestings.set(beneficiary, {
-               ...record,
-               totalAmount: vested,
-               claimedAmount: vested,
-               endTime: cutoff,
-               cliffTime: Math.min(record.cliffTime, cutoff),
-               revoked: true,
-          })
-          logger.debug('Soroban stub: revokeVesting', { beneficiary, vested: vested.toString() })
-          return `stub_tx_hash_revoke_vesting_${beneficiary}`
-     }
-
-     async getVestingSchedule(beneficiary: string): Promise<VestingScheduleRecord | null> {
-          const record = StubSorobanAdapter.stubVestings.get(beneficiary)
-          return record ? { ...record } : null
-     }
-
-     async getClaimableVested(beneficiary: string): Promise<bigint> {
-          const record = StubSorobanAdapter.stubVestings.get(beneficiary)
-          return record ? this.claimableFor(record) : 0n
-     }
-
-     async prepareVestingClaim(beneficiary: string): Promise<string> {
-          const contractId = this.requireVestingContractId()
-          const tx = new TransactionBuilder(new Account(beneficiary, '0'), {
-               fee: '100',
-               networkPassphrase: this.config.networkPassphrase,
-          })
-               .addOperation(buildVestingClaimOperation(contractId, beneficiary))
-               .setTimeout(300)
-               .build()
-          return tx.toXDR()
-     }
-
-     async submitVestingClaim(signedXdr: string, beneficiary: string): Promise<string> {
-          const contractId = this.requireVestingContractId()
-          assertVestingClaimXdr(signedXdr, contractId, this.config.networkPassphrase, beneficiary)
-
-          const record = StubSorobanAdapter.stubVestings.get(beneficiary)
-          const claimable = record ? this.claimableFor(record) : 0n
-          if (!record || claimable <= 0n) {
-               throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Nothing vested to claim')
-          }
-
-          StubSorobanAdapter.stubVestings.set(beneficiary, {
-               ...record,
-               claimedAmount: record.claimedAmount + claimable,
-          })
-          return `stub_tx_hash_claim_vesting_${beneficiary}`
-     }
-
-     // epoch_rewards contract (#1965), in memory.
-     async epochRewardsCurrentEpoch(): Promise<number> {
-          this.requireEpochRewardsId()
-          return StubSorobanAdapter.stubEpochRewards.currentEpoch()
-     }
-
-     async epochRewardsGetEpoch(epochNumber: number): Promise<EpochRewardsEpoch | null> {
-          this.requireEpochRewardsId()
-          return StubSorobanAdapter.stubEpochRewards.getEpoch(epochNumber)
-     }
-
-     async epochRewardsTotalStaked(): Promise<bigint> {
-          this.requireEpochRewardsId()
-          return StubSorobanAdapter.stubEpochRewards.totalStaked()
-     }
-
-     async epochRewardsGetClaimable(user: string): Promise<bigint> {
-          this.requireEpochRewardsId()
-          return StubSorobanAdapter.stubEpochRewards.claimable(user)
-     }
-
-     async epochRewardsGetStake(user: string): Promise<bigint | null> {
-          this.requireEpochRewardsId()
-          return StubSorobanAdapter.stubEpochRewards.getStake(user)
-     }
-
-     async epochRewardsFund(amount: bigint): Promise<string> {
-          this.requireEpochRewardsId()
-          StubSorobanAdapter.stubEpochRewards.fund(amount)
-          return `stub_tx_hash_epoch_fund_${amount}`
-     }
-
-     async epochRewardsSeal(targetEpoch: number, nextEpochDurationSecs: number): Promise<string> {
-          this.requireEpochRewardsId()
-          StubSorobanAdapter.stubEpochRewards.seal(targetEpoch, nextEpochDurationSecs)
-          return `stub_tx_hash_epoch_seal_${targetEpoch}`
-     }
-
-     private epochRewardsArgs(call: EpochRewardsCall, user: string, amount?: bigint): xdr.ScVal[] {
-          const userArg = nativeToScVal(new Address(user))
-          if (call === 'claim') return [userArg]
-          if (amount === undefined || amount <= 0n) {
-               throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Amount must be positive')
-          }
-          return [userArg, nativeToScVal(amount, { type: 'i128' })]
-     }
-
-     async prepareEpochRewardsCall(call: EpochRewardsCall, user: string, amount?: bigint): Promise<string> {
-          const contractId = this.requireEpochRewardsId()
-          return this.buildUnsigned(contractId, user, call, this.epochRewardsArgs(call, user, amount))
-     }
-
-     async submitEpochRewardsCall(
-          signedXdr: string,
-          call: EpochRewardsCall,
-          user: string,
-          amount?: bigint,
-     ): Promise<string> {
-          const contractId = this.requireEpochRewardsId()
-          assertSignedInvocation(signedXdr, {
-               contractId,
-               functionName: call,
-               args: this.epochRewardsArgs(call, user, amount),
-               signer: user,
-               networkPassphrase: this.config.networkPassphrase,
-               label: `epoch rewards ${call}`,
-          })
-          const book = StubSorobanAdapter.stubEpochRewards
-          if (call === 'stake') book.stake(user, amount!)
-          else if (call === 'unstake') book.unstake(user, amount!)
-          else book.claim(user)
-          return `stub_tx_hash_epoch_${call}_${user}`
-     }
-
-     // stake_delegation contract (#1885), in memory.
-     private static stubDelegations = new Map<string, Array<{ delegatee: string; amount: bigint; cooldownEndTs: number }>>()
-     private static stubDelegatees = new Map<string, { address: string; totalDelegated: bigint; commissionBps: number }>()
-     private static stubDelegationEpoch = 1
-
-     private requireStakeDelegationId(): string {
-          if (!this.config.stakeDelegationId) {
-               throw new Error('SOROBAN_STAKE_DELEGATION_ID not configured')
-          }
-          return this.config.stakeDelegationId
-     }
-
-     async prepareDelegationCall(call: string, user: string, amount?: bigint, delegatee?: string): Promise<string> {
-          const contractId = this.requireStakeDelegationId()
-          const args = this.delegationCallArgs(call, user, amount, delegatee)
-          return this.buildUnsigned(contractId, user, call, args)
-     }
-
-     async submitDelegationCall(
-          signedXdr: string,
-          call: string,
-          user: string,
-          amount?: bigint,
-          delegatee?: string,
-     ): Promise<string> {
-          const contractId = this.requireStakeDelegationId()
-          assertSignedInvocation(signedXdr, {
-               contractId,
-               functionName: call,
-               args: this.delegationCallArgs(call, user, amount, delegatee),
-               signer: user,
-               networkPassphrase: this.config.networkPassphrase,
-               label: `delegation ${call}`,
-          })
-          // Update stub state based on the call
-          if (call === 'stake' && amount) {
-               // Stake adds to the user's delegated amount (or creates new delegation)
-               const existing = StubSorobanAdapter.stubDelegations.get(user) ?? []
-               if (existing.length === 0) {
-                    StubSorobanAdapter.stubDelegations.set(user, [{ delegatee: user, amount, cooldownEndTs: 0 }])
-               } else {
-                    existing[0].amount += amount
-               }
-          } else if (call === 'unstake' && amount) {
-               const existing = StubSorobanAdapter.stubDelegations.get(user)
-               if (existing && existing.length > 0) {
-                    existing[0].amount = existing[0].amount > amount ? existing[0].amount - amount : 0n
-               }
-          } else if (call === 'delegate' && delegatee) {
-               // Replace any existing delegation with the new delegatee
-               const cooldown = 7 * 24 * 60 * 60 // 7 days in seconds
-               StubSorobanAdapter.stubDelegations.set(user, [{
-                    delegatee,
-                    amount: 0n,
-                    cooldownEndTs: Math.floor(Date.now() / 1000) + cooldown,
-               }])
-          } else if (call === 'request_undelegate') {
-               const existing = StubSorobanAdapter.stubDelegations.get(user)
-               if (existing && existing.length > 0) {
-                    const cooldown = 7 * 24 * 60 * 60
-                    existing[0].cooldownEndTs = Math.floor(Date.now() / 1000) + cooldown
-               }
-          } else if (call === 'complete_undelegate') {
-               StubSorobanAdapter.stubDelegations.delete(user)
-          }
-          return `stub_tx_hash_delegation_${call}_${user}`
-     }
-
-     private delegationCallArgs(call: string, user: string, amount?: bigint, delegatee?: string): xdr.ScVal[] {
-          const userArg = nativeToScVal(new Address(user))
-          switch (call) {
-               case 'stake':
-               case 'unstake':
-                    if (!amount || amount <= 0n) throw new Error(`${call} needs a positive amount`)
-                    return [userArg, nativeToScVal(amount, { type: 'i128' })]
-               case 'delegate':
-                    if (!delegatee) throw new Error('delegate needs a delegatee')
-                    return [userArg, nativeToScVal(new Address(delegatee))]
-               case 'request_undelegate':
-               case 'complete_undelegate':
-                    return [userArg]
-               default:
-                    throw new Error(`Unknown delegation call: ${call}`)
-          }
-     }
-
-     async getDelegations(user: string): Promise<Array<{ delegatee: string; amount: bigint; cooldownEndTs: number }>> {
-          return StubSorobanAdapter.stubDelegations.get(user) ?? []
-     }
-
-     async delegationStakedBalance(user: string): Promise<bigint> {
-          const delegations = await this.getDelegations(user)
-          return delegations.reduce((sum, d) => sum + d.amount, 0n)
-     }
-
-     async listDelegatees(): Promise<Array<{ address: string; totalDelegated: bigint; commissionBps: number }>> {
-          return Array.from(StubSorobanAdapter.stubDelegatees.values())
-     }
-
-     async delegationCurrentEpoch(): Promise<number> {
-          return StubSorobanAdapter.stubDelegationEpoch
-     }
-
-     async setCommission(operator: string, commissionBps: number): Promise<string> {
-          const existing = StubSorobanAdapter.stubDelegatees.get(operator)
-          StubSorobanAdapter.stubDelegatees.set(operator, {
-               address: operator,
-               totalDelegated: existing?.totalDelegated ?? 0n,
-               commissionBps,
-          })
-          return `stub_tx_hash_set_commission_${operator}`
-     }
-
-     async claimCommission(operator: string): Promise<string> {
-          return `stub_tx_hash_claim_commission_${operator}`
-     }
-
-     async claimDelegateeRewards(user: string): Promise<string> {
-          return `stub_tx_hash_claim_delegatee_rewards_${user}`
-     }
-
-     async prepareSetCommission(operator: string, commissionBps: number): Promise<string> {
-          return this.prepareDelegationCall('set_commission', operator, BigInt(commissionBps))
-     }
-
-     async submitSetCommission(signedXdr: string, operator: string, commissionBps: number): Promise<string> {
-          return this.submitDelegationCall(signedXdr, 'set_commission', operator, BigInt(commissionBps))
-     }
-
-     async prepareClaimCommission(operator: string): Promise<string> {
-          return this.prepareDelegationCall('claim_commission', operator)
-     }
-
-     async submitClaimCommission(signedXdr: string, operator: string): Promise<string> {
-          return this.submitDelegationCall(signedXdr, 'claim_commission', operator)
-     }
-
-     async prepareClaimDelegateeRewards(user: string): Promise<string> {
-          return this.prepareDelegationCall('claim_delegatee_rewards', user)
-     }
-
-     async submitClaimDelegateeRewards(signedXdr: string, user: string): Promise<string> {
-          return this.submitDelegationCall(signedXdr, 'claim_delegatee_rewards', user)
-     }
 
      // multisig_admin contract (#1972), in memory.
      multisigTargetFor(contract: 'dealEscrow' | 'contractAccess'): string | undefined {
@@ -775,7 +385,6 @@ async requestRentRelease(params: RequestRentReleaseParams): Promise<void> {
 
      /** Test helper: restarts the epoch_rewards stub with epochs of `durationSecs`. */
      public static _testOnlyConfigureEpochs(durationSecs: number): void {
-          this.stubEpochRewards = new StubEpochRewards(durationSecs)
      }
 
      /** Test helper: sets the multisig's signers and threshold. */
@@ -884,75 +493,11 @@ async requestRentRelease(params: RequestRentReleaseParams): Promise<void> {
                .toXDR()
      }
 
-     private requireEpochRewardsId(): string {
-          if (!this.config.epochRewardsId) {
-               throw new Error('SOROBAN_EPOCH_REWARDS_ID not configured')
-          }
-          return this.config.epochRewardsId
-     }
-
      private requireMultisigId(): string {
           if (!this.config.multisigAdminId) {
                throw new Error('MULTISIG_ADMIN_ID not configured')
           }
           return this.config.multisigAdminId
-     }
-
-     private requireVestingContractId(): string {
-          if (!this.config.vestingScheduleId) {
-               throw new Error('SOROBAN_VESTING_SCHEDULE_ID not configured')
-          }
-          return this.config.vestingScheduleId
-     }
-
-     private claimableFor(record: VestingScheduleRecord): bigint {
-          const now = BigInt(Math.floor(Date.now() / 1000))
-          const vested = vestedAmount(
-               record.totalAmount,
-               BigInt(record.startTime),
-               BigInt(record.cliffTime),
-               BigInt(record.endTime),
-               now,
-          )
-          const claimable = vested - record.claimedAmount
-          return claimable > 0n ? claimable : 0n
-     }
-
-     // slashing_module contract methods (stub implementations)
-     async submitEvidence(submitter: string, commitment: string, actor: string, offence: string): Promise<number> {
-          logger.debug('Soroban stub: submitEvidence', { submitter, actor, offence })
-          return 1 // Return stub slash ID
-     }
-
-     async revealEvidence(submitter: string, slashId: number, evidence: string, salt: string): Promise<void> {
-          logger.debug('Soroban stub: revealEvidence', { submitter, slashId })
-     }
-
-     async proposeSlash(submitter: string, actor: string, penaltyBps: number): Promise<number> {
-          logger.debug('Soroban stub: proposeSlash', { submitter, actor, penaltyBps })
-          return 1 // Return stub slash ID
-     }
-
-     async finalizeSlash(caller: string, slashId: number): Promise<void> {
-          logger.debug('Soroban stub: finalizeSlash', { caller, slashId })
-     }
-
-     async cancelSlash(admin: string, slashId: number): Promise<void> {
-          logger.debug('Soroban stub: cancelSlash', { admin, slashId })
-     }
-
-     // bond_collateral contract methods (stub implementations)
-     async depositBond(inspector: string, amount: bigint): Promise<void> {
-          logger.debug('Soroban stub: depositBond', { inspector, amount: amount.toString() })
-     }
-
-     async withdrawBond(inspector: string, amount: bigint): Promise<void> {
-          logger.debug('Soroban stub: withdrawBond', { inspector, amount: amount.toString() })
-     }
-
-     async getBondBalance(inspector: string): Promise<bigint> {
-          logger.debug('Soroban stub: getBondBalance', { inspector })
-          return BigInt(0)
      }
 
      // ── whistleblower_rewards contract ───────────────────────────────────────────

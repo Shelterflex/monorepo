@@ -50,9 +50,9 @@ function VerifyOtpForm() {
         const roleRoutes: Record<string, string> = {
           tenant: "/dashboard/tenant",
           landlord: "/dashboard/landlord",
-          inspector: "/dashboard/inspector",
+          inspector: "/",
           admin: "/admin",
-          agent: "/dashboard/agent",
+          agent: "/dashboard/user",
           user: "/dashboard/user",
           super_admin: "/admin",
         };

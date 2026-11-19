@@ -95,11 +95,6 @@ export const landlordApi = {
     return apiFetch<any[]>("/api/landlord/applications");
   },
 
-  getAnalytics: async (params?: { startDate?: string; endDate?: string; propertyId?: string }): Promise<LandlordAnalytics> => {
-    const query = new URLSearchParams(params as any).toString();
-    return apiFetch<LandlordAnalytics>(`/api/landlord/analytics?${query}`);
-  },
-
   createProperty: async (payload: unknown): Promise<any> => {
     return apiPost<any>("/api/landlord/properties", payload);
   },

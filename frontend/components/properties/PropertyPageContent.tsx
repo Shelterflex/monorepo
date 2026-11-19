@@ -10,30 +10,16 @@ import { Button } from "@/components/ui/button"
 import { SectionBoundary } from "@/components/section-boundary"
 import useAuthStore from "@/store/useAuthStore"
 import { getProperty, type PropertyListing } from "@/lib/propertiesApi"
-import { propertyInspectionApi, type InspectionSummary } from "@/lib/propertyInspectionApi"
 import { PropertyGallery } from "@/components/properties/PropertyGallery"
 import { PropertyInfo } from "@/components/properties/PropertyInfo"
 import { PropertyDescription } from "@/components/properties/PropertyDescription"
 import { PropertyAmenities } from "@/components/properties/PropertyAmenities"
 import { PropertyLightbox } from "@/components/properties/PropertyLightbox"
-import { PropertyReportDialog } from "@/components/properties/PropertyReportDialog"
 import { TrustIndicatorBar } from "@/components/properties/TrustIndicatorBar"
 import type { GalleryImage } from "@/components/properties/PropertyLightbox"
 
 const PropertySidebar = dynamic(() =>
   import("@/components/properties/PropertySidebar").then((mod) => mod.PropertySidebar)
-)
-
-const InspectionReportAccordion = dynamic(() =>
-  import("@/components/properties/InspectionReportAccordion").then(
-    (mod) => mod.InspectionReportAccordion
-  )
-)
-
-const ApartmentReviews = dynamic(() =>
-  import("@/components/properties/ApartmentReviews").then(
-    (mod) => mod.ApartmentReviews
-  )
 )
 
 interface PropertyPageContentProps {
@@ -49,10 +35,6 @@ export default function PropertyPageContent({
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [showLightbox, setShowLightbox] = useState(false)
   const [paymentMonths, setPaymentMonths] = useState(12)
-  const [showReportDialog, setShowReportDialog] = useState(false)
-  const [inspectionSummary, setInspectionSummary] =
-    useState<InspectionSummary | null>(null)
-  const [isLoadingInspection, setIsLoadingInspection] = useState(false)
   const [listing, setListing] = useState<PropertyListing | null>(null)
   const [isLoadingProperty, setIsLoadingProperty] = useState(true)
   const [propertyError, setPropertyError] = useState<string | null>(null)
@@ -74,22 +56,6 @@ export default function PropertyPageContent({
       }
     }
     fetchProperty()
-  }, [propertyId])
-
-  useEffect(() => {
-    const fetchInspectionSummary = async () => {
-      setIsLoadingInspection(true)
-      try {
-        const summary =
-          await propertyInspectionApi.getInspectionSummary(propertyId)
-        setInspectionSummary(summary)
-      } catch (error) {
-        setInspectionSummary(null)
-      } finally {
-        setIsLoadingInspection(false)
-      }
-    }
-    fetchInspectionSummary()
   }, [propertyId])
 
   const property = listing
@@ -259,14 +225,7 @@ export default function PropertyPageContent({
               <SectionBoundary section="property-trust-bar" userRole="guest">
                 <TrustIndicatorBar
                   landlordKyc={property.landlord?.verified ?? false}
-                  inspectionPass={
-                    inspectionSummary
-                      ? {
-                          date: inspectionSummary.approvedAt,
-                          inspectorName: `Inspector #${inspectionSummary.inspectionId.slice(0, 8)}`,
-                        }
-                      : null
-                  }
+                  inspectionPass={null}
                   whistleblowerCleared={!!property.whistleblower}
                   verificationStatus={property.verificationStatus as any}
                 />
@@ -275,33 +234,6 @@ export default function PropertyPageContent({
               <PropertyDescription description={property.description} />
 
               <PropertyAmenities features={property.features} />
-
-              <SectionBoundary
-                section="property-inspection-report"
-                userRole="guest"
-              >
-                <InspectionReportAccordion
-                  report={
-                    (inspectionSummary
-                      ? {
-                          overallGrade:
-                            inspectionSummary.passCount >
-                            inspectionSummary.failCount
-                              ? "A"
-                              : inspectionSummary.passCount ===
-                                  inspectionSummary.failCount
-                                ? "B"
-                                : "C",
-                          roomConditions: inspectionSummary.categoryResults,
-                          photos: property.images
-                            .slice(0, 3)
-                            .map((img) => img.url)
-                            .filter(Boolean) as string[],
-                        }
-                      : null) as any
-                  }
-                />
-              </SectionBoundary>
 
               <div className="border-3 border-foreground bg-card p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
                 <h2 className="font-mono text-xl font-bold mb-4">
@@ -345,28 +277,6 @@ export default function PropertyPageContent({
                 </div>
               </div>
 
-              <SectionBoundary section="property-reviews" userRole="guest">
-                <div className="border-3 border-foreground bg-card p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-                  <h2 className="font-mono text-xl font-bold mb-6">
-                    User Feedback & Reviews
-                  </h2>
-                  <Suspense
-                    fallback={
-                      <div className="flex flex-col items-center justify-center py-12">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-                        <p className="text-muted-foreground font-mono">
-                          Loading reviews...
-                        </p>
-                      </div>
-                    }
-                  >
-                    <ApartmentReviews
-                      key={propertyId}
-                      propertyId={propertyId}
-                    />
-                  </Suspense>
-                </div>
-              </SectionBoundary>
             </div>
 
             <div className="lg:col-span-1">
@@ -390,7 +300,6 @@ export default function PropertyPageContent({
                     listedSince: (property.landlord as any).listedSince,
                   }}
                   whistleblower={property.whistleblower}
-                  onReportOpen={() => setShowReportDialog(true)}
                 />
               </SectionBoundary>
             </div>
@@ -408,11 +317,6 @@ export default function PropertyPageContent({
         onThumbnailClick={setActiveImageIndex}
       />
 
-      <PropertyReportDialog
-        open={showReportDialog}
-        onOpenChange={setShowReportDialog}
-        propertyId={propertyId}
-      />
     </main>
   )
 }

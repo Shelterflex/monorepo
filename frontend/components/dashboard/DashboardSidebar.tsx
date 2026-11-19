@@ -47,20 +47,11 @@ const NAV_ITEMS: Record<Role, NavItem[]> = {
   tenant: [
     { href: "/dashboard/tenant", label: "Dashboard", icon: Home },
     { href: "/dashboard/tenant/payments", label: "Payments", icon: CreditCard },
-    { href: "/dashboard/tenant/lease", label: "My Lease", icon: FileText },
     { href: "/properties", label: "Browse Properties", icon: Building2 },
-    { href: "/properties/saved", label: "Saved Properties", icon: Heart },
     {
       href: "/dashboard/tenant/rate-whistleblower",
       label: "Rate Whistleblower",
       icon: MessageSquare,
-    },
-    { href: "/dashboard/tenant/credit-score", label: "Credit Score", icon: CreditCard },
-    { href: "/dashboard/tenant/referrals", label: "Refer a friend", icon: Gift },
-    {
-      href: "/dashboard/tenant/rating-card",
-      label: "Rating Card",
-      icon: Star,
     },
     { href: "/dashboard/tenant/settings", label: "Settings", icon: Settings },
   ],
@@ -75,16 +66,6 @@ const NAV_ITEMS: Record<Role, NavItem[]> = {
     { href: "/dashboard/landlord/settings", label: "Settings", icon: Settings },
   ],
   inspector: [
-    {
-      href: "/dashboard/inspector",
-      label: "Job Board",
-      icon: Briefcase,
-    },
-    {
-      href: "/dashboard/inspector/my-jobs",
-      label: "My Jobs",
-      icon: ClipboardList,
-    },
     { href: "/", label: "Back to Home", icon: Home, footer: true },
   ],
   whistleblower: [
@@ -105,7 +86,6 @@ const ROLE_CONFIG: Record<Role, { cardBg: string; cardLabel: string }> = {
 const EXACT_MATCH_PATHS = [
   "/dashboard/tenant",
   "/dashboard/landlord",
-  "/dashboard/inspector",
   "/whistleblower/dashboard",
   "/",
   "/properties",

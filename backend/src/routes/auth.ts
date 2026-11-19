@@ -28,7 +28,6 @@ import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth
 import { PostgresLinkedAddressStore } from '../models/linkedAddressStore.js'
 import { createOtpDeliveryProvider } from '../services/otpDeliveryFactory.js'
 import { detectCredentialStuffing } from '../services/abuseDetectionService.js'
-import { referralService } from '../services/referralService.js'
 import {
   auditAuthOtpRequested,
   auditAuthLoginSuccess,
@@ -198,27 +197,6 @@ router.post(
         user,
         { ip: req.ip, userAgent: req.get('User-Agent') },
       )
-
-      // Generate referral code for new tenants
-      if (isNewUser && user.role === 'tenant') {
-        try {
-          await referralService.generateReferralCode(user.id)
-        } catch (error) {
-          // Log error but don't fail registration if referral code generation fails
-          console.error('Failed to generate referral code:', error)
-        }
-      }
-
-      // Apply referral code if provided (only for new users)
-      const referralCode = (req.body as any).referralCode
-      if (isNewUser && referralCode && user.role === 'tenant') {
-        try {
-          await referralService.applyReferralCode(referralCode, user.id)
-        } catch (error) {
-          // Log error but don't fail registration if referral code application fails
-          console.error('Failed to apply referral code:', error)
-        }
-      }
 
       auditAuthLoginSuccess(req, { userId: user.id, email: user.email })
 

@@ -73,14 +73,6 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
           manualConfirmation: true,
         })
 
-        // Audit log: admin payment confirmation action
-        auditAdminWalletAction(req, {
-          action: 'MANUAL_PAYMENT_CONFIRM',
-          dealId,
-          txType,
-          txId: outboxItem.txId,
-        })
-
         // Create outbox item (idempotent by source+ref)
         const outboxItem = await outboxStore.create({
           txType,
@@ -96,6 +88,12 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
             ...(fxProvider != null && { fxProvider }),
           },
           requestId: req.requestId,
+        })
+
+        // Audit log: admin payment confirmation action
+        auditAdminWalletAction(req, {
+          action: 'MANUAL_PAYMENT_CONFIRM',
+          details: { dealId, txType, txId: outboxItem.txId },
         })
 
         logger.info('Outbox item created or retrieved', {

@@ -12,10 +12,6 @@ import { VirtualizedPropertyList } from "@/components/virtualized-property-list"
 import { EmptyState, LoadingState } from "@/components/ui/data-state";
 import useAuthStore from "@/store/useAuthStore";
 import {
-  fetchSavedListingIds,
-  setListingSaved,
-} from "@/lib/savedPropertiesApi";
-import {
   searchProperties,
   type PropertySearchFilters,
   type PropertyListing,
@@ -38,7 +34,6 @@ function PropertiesContent() {
   const searchParams = useSearchParams();
   const compareIds = parseCompareIds(searchParams.get("ids"));
 
-  const [savedListingIds, setSavedListingIds] = useState<string[]>([]);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [showFilters, setShowFilters] = useState(false);
   const [properties, setProperties] = useState<PropertyListing[]>([]);
@@ -198,49 +193,6 @@ function PropertiesContent() {
     page,
     refetchTrigger,
   ]);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setSavedListingIds([]);
-      return;
-    }
-
-    let cancelled = false;
-    fetchSavedListingIds()
-      .then((ids) => {
-        if (!cancelled) {
-          setSavedListingIds(ids);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSavedListingIds([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated]);
-
-  const handleFavoriteChange = async (listingId: string, saved: boolean) => {
-    await setListingSaved(listingId, saved);
-    setSavedListingIds((prev) =>
-      saved
-        ? prev.includes(listingId)
-          ? prev
-          : [...prev, listingId]
-        : prev.filter((id) => id !== listingId),
-    );
-  };
-
-  const handleSaveToggle = useCallback(
-    (listingId: string) => {
-      const saved = !savedListingIds.includes(listingId);
-      return handleFavoriteChange(listingId, saved);
-    },
-    [savedListingIds],
-  );
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-NG", {
@@ -630,8 +582,6 @@ function PropertiesContent() {
               <div className="h-[660px]">
                 <VirtualizedPropertyList
                   properties={properties}
-                  savedListingIds={savedListingIds}
-                  onSaveToggle={handleSaveToggle}
                   isLoading={false}
                   showCompare={true}
                   initialScrollTop={initialScrollTop}

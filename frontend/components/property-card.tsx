@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MoneyValue } from "@/components/ui/data-state";
 import { LandlordVerificationBadge } from "@/components/LandlordVerificationBadge";
-import { setListingSaved } from "@/lib/savedPropertiesApi";
 import { showErrorToast } from "@/lib/toast";
 import { formatNgn } from "@/lib/currency";
 import {
@@ -278,7 +277,7 @@ export function PropertyCard({
   property,
   variant = "grid",
   href,
-  showFavorite = true,
+  showFavorite = false,
   isFavorited = false,
   onFavoriteChange,
   imageOverlay,
@@ -364,11 +363,7 @@ export function PropertyCard({
     setFavoritePending(true);
 
     try {
-      if (onFavoriteChange) {
-        await onFavoriteChange(next);
-      } else {
-        await setListingSaved(property.listingId, next);
-      }
+      await onFavoriteChange?.(next);
     } catch (error) {
       setFavorited(!next);
       showErrorToast(error, "Could not update saved property");

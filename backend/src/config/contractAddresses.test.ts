@@ -20,38 +20,6 @@ describe('contract address config', () => {
     expect(Object.keys(addresses)).toEqual(Object.keys(CONTRACT_ENV_VARS))
   })
 
-  it('recognizes SOROBAN_ORACLE_PRICE_FEEDS_ID (issue #1488)', () => {
-    expect(CONTRACT_ENV_VARS.oraclePriceFeeds).toBe('SOROBAN_ORACLE_PRICE_FEEDS_ID')
-
-    const addresses = loadContractAddresses({
-      SOROBAN_ORACLE_PRICE_FEEDS_ID: VALID_CONTRACT_ID,
-    })
-    expect(addresses.oraclePriceFeeds).toBe(VALID_CONTRACT_ID)
-
-    expect(() =>
-      loadContractAddresses({ SOROBAN_ORACLE_PRICE_FEEDS_ID: 'not-a-contract' }),
-    ).toThrow('Invalid Soroban contract ID in SOROBAN_ORACLE_PRICE_FEEDS_ID')
-  })
-
-  it('recognizes SOROBAN_VESTING_SCHEDULE_ID (issue #1911)', () => {
-    expect(CONTRACT_ENV_VARS.vestingSchedule).toBe('SOROBAN_VESTING_SCHEDULE_ID')
-
-    const addresses = loadContractAddresses({
-      SOROBAN_VESTING_SCHEDULE_ID: VALID_CONTRACT_ID,
-    })
-    expect(addresses.vestingSchedule).toBe(VALID_CONTRACT_ID)
-  })
-
-  it('recognizes SOROBAN_EPOCH_REWARDS_ID (issue #1965)', () => {
-    expect(CONTRACT_ENV_VARS.epochRewards).toBe('SOROBAN_EPOCH_REWARDS_ID')
-
-    const addresses = loadContractAddresses({ SOROBAN_EPOCH_REWARDS_ID: VALID_CONTRACT_ID })
-    expect(addresses.epochRewards).toBe(VALID_CONTRACT_ID)
-    expect(() => loadContractAddresses({ SOROBAN_EPOCH_REWARDS_ID: 'nope' })).toThrow(
-      'Invalid Soroban contract ID in SOROBAN_EPOCH_REWARDS_ID',
-    )
-  })
-
   it('recognizes MULTISIG_ADMIN_ID (issue #1972)', () => {
     expect(CONTRACT_ENV_VARS.multisigAdmin).toBe('MULTISIG_ADMIN_ID')
 
@@ -77,10 +45,10 @@ describe('contract address config', () => {
   it('fails fast with the offending environment variable', () => {
     expect(() =>
       loadContractAddresses({
-        SOROBAN_TENANT_REPUTATION_ID: 'not-a-contract',
+        SOROBAN_DEAL_ESCROW_ID: 'not-a-contract',
       }),
     ).toThrow(
-      'Invalid Soroban contract ID in SOROBAN_TENANT_REPUTATION_ID',
+      'Invalid Soroban contract ID in SOROBAN_DEAL_ESCROW_ID',
     )
   })
 })

@@ -10,7 +10,6 @@ import { validateCreditScoringConfig } from "./config/creditScoring.js"
 import { validatePiiEncryptionKey } from "./utils/piiEncryption.js"
 import { assertProductionIntegrations } from "./config/productionIntegrations.js"
 import { startBackupJob } from "./jobs/backupJob.js"
-import { startInspectionClaimExpiryJob } from "./jobs/inspectionClaimExpiryJob.js"
 import { ReconciliationWorker } from "./reconciliation/index.js"
 import { notificationWSS } from "./services/websocket/NotificationWebSocketServer.js"
 import { loadContractAddresses } from "./config/contractAddresses.js"
@@ -51,7 +50,6 @@ async function main() {
     validateLatePaymentConfig()
     await runMigrationsIfNeeded()
     const backupInterval = startBackupJob()
-    const inspectionClaimExpiryInterval = startInspectionClaimExpiryJob()
     const app = createApp()
     const outboxWorker = maybeStartOutboxWorker()
     const reconciliationWorker = new ReconciliationWorker()
@@ -96,7 +94,6 @@ async function main() {
 
       try {
         if (backupInterval) clearInterval(backupInterval)
-        clearInterval(inspectionClaimExpiryInterval)
         await reconciliationWorker.stop()
         await rentWalletWorker.stop()
         await allowlistSyncWorker.stop()

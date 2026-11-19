@@ -3,12 +3,10 @@ import {
   ConversionProviderError,
   FallbackConversionProvider,
   HttpConversionProvider,
-  OracleConversionProvider,
   StubConversionProvider,
   parseFxRateFromJson,
 } from './conversionProvider.js'
 import { logger } from '../utils/logger.js'
-import type { OracleClient, PriceFeed } from '../soroban/oracle.js'
 
 describe('parseFxRateFromJson', () => {
   it('reads fxRateNgnPerUsdc', () => {
@@ -181,19 +179,6 @@ describe('FallbackConversionProvider', () => {
   })
 })
 
-function mockOracleClient(overrides: Partial<OracleClient> = {}): OracleClient {
-  return {
-    init: vi.fn(),
-    updatePrice: vi.fn(),
-    getPrice: vi.fn(),
-    getPriceUnsafe: vi.fn(),
-    isStale: vi.fn().mockResolvedValue(false),
-    setStalenessThreshold: vi.fn(),
-    setMaxDeviationBps: vi.fn(),
-    ...overrides,
-  } as OracleClient
-}
-
 const FRESH_NGN_USDC_FEED: PriceFeed = {
   pair: 'NGN_USDC',
   price: '16000000000', // 1600.0000000 scaled by 10^7
@@ -202,84 +187,6 @@ const FRESH_NGN_USDC_FEED: PriceFeed = {
   sequence: 5,
 }
 
-describe('OracleConversionProvider', () => {
-  it('computes NGN-per-USDC rate from a fresh oracle reading', async () => {
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(false),
-      getPrice: vi.fn().mockResolvedValue(FRESH_NGN_USDC_FEED),
-    })
-    const p = new OracleConversionProvider(oracleClient)
-
-    const quote = await p.getRate()
-
-    expect(quote.rate).toBe(1600)
-    expect(quote.source).toBe('oracle')
-    expect(quote.providerRef).toBe('oracle:NGN_USDC:5')
-  })
-
-  it('rejects a stale price rather than silently serving it', async () => {
-    const getPrice = vi.fn().mockResolvedValue(FRESH_NGN_USDC_FEED)
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(true),
-      getPrice,
-    })
-    const p = new OracleConversionProvider(oracleClient)
-
-    await expect(p.getRate()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
-    // Must not fall through to reading a stale price after the staleness check.
-    expect(getPrice).not.toHaveBeenCalled()
-  })
-
-  it('maps a staleness-check failure to a NETWORK provider error', async () => {
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockRejectedValue(new Error('RPC timeout')),
-    })
-    const p = new OracleConversionProvider(oracleClient)
-
-    await expect(p.getRate()).rejects.toMatchObject({ code: 'NETWORK' })
-  })
-
-  it('maps a getPrice failure to a NETWORK provider error', async () => {
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(false),
-      getPrice: vi.fn().mockRejectedValue(new Error('contract not configured')),
-    })
-    const p = new OracleConversionProvider(oracleClient)
-
-    await expect(p.getRate()).rejects.toMatchObject({ code: 'NETWORK' })
-  })
-
-  it('rejects a non-positive price', async () => {
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(false),
-      getPrice: vi.fn().mockResolvedValue({ ...FRESH_NGN_USDC_FEED, price: '0' }),
-    })
-    const p = new OracleConversionProvider(oracleClient)
-
-    await expect(p.getRate()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
-  })
-
-  it('converts an NGN amount using the oracle rate', async () => {
-    const oracleClient = mockOracleClient({
-      isStale: vi.fn().mockResolvedValue(false),
-      getPrice: vi.fn().mockResolvedValue(FRESH_NGN_USDC_FEED),
-    })
-    const p = new OracleConversionProvider(oracleClient)
-
-    const out = await p.convertNgnToUsdc({ amountNgn: 1600, userId: 'u', depositId: 'dep-1' })
-
-    expect(out.amountUsdc).toBe('1.000000')
-    expect(out.fxRateNgnPerUsdc).toBe(1600)
-    expect(out.providerRef).toBe('oracle:NGN_USDC:5')
-  })
-
-  it('validates amountNgn', async () => {
-    const p = new OracleConversionProvider(mockOracleClient())
-    await expect(p.convertNgnToUsdc({ amountNgn: 0, userId: 'u', depositId: 'd' })).rejects.toMatchObject({
-      code: 'VALIDATION',
-    })
-  })
-})
 
 describe('StubConversionProvider', () => {
   it('still matches legacy deterministic output', async () => {

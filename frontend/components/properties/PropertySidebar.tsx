@@ -35,7 +35,6 @@ interface PropertySidebarProps {
   verificationStatus: string
   landlord: LandlordProfile
   whistleblower: WhistleblowerProfile | null
-  onReportOpen: () => void
 }
 
 const formatPrice = (price: number) => {
@@ -56,7 +55,6 @@ export function PropertySidebar({
   verificationStatus,
   landlord,
   whistleblower,
-  onReportOpen,
 }: PropertySidebarProps) {
   const installmentPrice = installmentBasePriceNgn ?? price
   const outrightPrice = outrightPriceNgn ?? price
@@ -239,25 +237,6 @@ export function PropertySidebar({
       )}
 
       <LandlordSnippet landlord={landlord} />
-
-      <div className="border-3 border-foreground bg-card p-6 shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
-        <div className="flex items-center gap-2 mb-3">
-          <Flag className="h-5 w-5 text-muted-foreground" />
-          <h3 className="font-mono font-bold">Report an Issue</h3>
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          See something suspicious or incorrect about this listing?
-          Let us know.
-        </p>
-        <Button
-          onClick={onReportOpen}
-          variant="outline"
-          className="w-full border-3 border-foreground bg-transparent py-5 font-bold shadow-[3px_3px_0px_0px_rgba(26,26,26,1)] transition-all hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]"
-        >
-          <Flag className="mr-2 h-4 w-4" />
-          Report Listing
-        </Button>
-      </div>
     </div>
   )
 }

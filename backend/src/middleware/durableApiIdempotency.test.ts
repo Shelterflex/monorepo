@@ -196,7 +196,7 @@ describe('durableApiIdempotency (#1946)', () => {
 })
 
 describe('money-moving routes do not use the in-memory idempotency store (#1946)', () => {
-  const routes = ['payments', 'deposits', 'staking', 'deals', 'rentGuarantee']
+  const routes = ['payments', 'deposits', 'staking', 'deals']
 
   it.each(routes)('%s uses durable idempotency', (name) => {
     const source = readFileSync(join(here, '..', 'routes', `${name}.ts`), 'utf8')

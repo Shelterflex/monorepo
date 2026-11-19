@@ -52,8 +52,10 @@ export function createDepositsRouter(conversionService: ConversionService) {
         // Audit log: admin deposit confirmation action
         auditAdminWalletAction(req, {
           action: 'MANUAL_DEPOSIT_CONFIRM',
-          depositId: deposit.depositId,
-          conversionId: conversion.conversionId,
+          details: {
+            depositId: deposit.depositId,
+            conversionId: conversion.conversionId,
+          },
         })
 
         res.status(200).json({

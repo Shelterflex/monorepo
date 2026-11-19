@@ -96,17 +96,6 @@ export interface RentToOwnDealActionParams {
 }
 
 /**
- * A read from the `oracle_price_feeds` contract's `PriceFeed` struct.
- * `price` is scaled by `10^decimals` (decimals is always 7 in the contract).
- */
-export interface OraclePriceReading {
-  price: bigint
-  decimals: number
-  updatedAt: number
-  sequence: number
-}
-
-/**
  * Callback fired after a Stellar transaction is signed and hashed but *before*
  * it is broadcast to the network. Persisting the hash at this point allows a
  * worker that crashes between broadcast and result-recording to recover by
@@ -122,19 +111,6 @@ export interface TxOnChainStatus {
   status: 'success' | 'failed' | 'not_found' | 'pending'
   /** Ledger sequence in which the tx was applied (only set for 'success'). */
   ledger?: number
-}
-
-/**
- * On-chain representation of a tenant's aggregated reputation.
- * Scores are on a 0–1000 scale (off-chain 1–5 avg × 200).
- */
-export interface TenantReputationRecord {
-  compositeScore: number
-  paymentScore: number
-  propertyCareScore: number
-  communicationScore: number
-  totalRatings: number
-  lastUpdated: bigint
 }
 
 /**
@@ -156,47 +132,6 @@ export interface OnChainReceipt {
   fx_provider?: string
   metadata_hash?: string  // BytesN<32> as hex string
   timestamp: number       // u64
-}
-
-/** Parameters for the vesting_schedule contract's `create_vesting_schedule`. Times are unix seconds. */
-export interface CreateVestingScheduleParams {
-  beneficiary: string // Stellar Address
-  totalAmount: bigint // i128, token base units
-  startTime: number
-  cliffTime: number
-  endTime: number
-  revocable: boolean
-}
-
-/** Mirrors the vesting_schedule contract's `VestingSchedule` struct. */
-export interface VestingScheduleRecord {
-  beneficiary: string
-  totalAmount: bigint
-  claimedAmount: bigint
-  startTime: number
-  cliffTime: number
-  endTime: number
-  revocable: boolean
-  revoked: boolean
-}
-
-/** The user-signed calls on the epoch_rewards contract (#1965). */
-export type EpochRewardsCall = 'stake' | 'unstake' | 'claim'
-
-/** Mirrors the epoch_rewards contract's `EpochInfo`. Times are unix seconds, amounts are token base units. */
-export interface EpochRewardsEpoch {
-  epochNumber: number
-  startTs: number
-  durationSecs: number
-  /** When the epoch may be sealed: `startTs + durationSecs`. */
-  endTs: number
-  sealed: boolean
-  /** When it was sealed; 0 while open. */
-  sealTs: number
-  totalRewards: bigint
-  /** Total staked when the epoch was sealed; 0 while open. */
-  totalStakedAtSeal: bigint
-  carriedForward: bigint
 }
 
 /** An argument for a call proposed through the multisig contract, in a form that survives JSON. */
@@ -288,12 +223,6 @@ export interface SorobanAdapter {
   executeTimelock(txHash: string, target: string, functionName: string, args: any[], eta: number): Promise<string>
   cancelTimelock(txHash: string): Promise<string>
 
-  // Inspector bond operations (inspector_bond contract)
-  stakeBond(inspectorId: string, amount: bigint): Promise<void>
-  unstakeBond(inspectorId: string): Promise<void>
-  isBonded(inspectorId: string): Promise<boolean>
-  getBond(inspectorId: string): Promise<{ isBonded: boolean; amount: bigint }>
-
   /**
    * Query the current on-chain status of a previously submitted transaction.
    * Used for crash recovery: if a worker persisted a txHash but crashed before
@@ -303,10 +232,6 @@ export interface SorobanAdapter {
    * may omit this method; the sender will fall back to blind resubmission.
    */
   getTransactionStatus?(txHash: string): Promise<TxOnChainStatus>
-
-  // Tenant reputation contract (tenant_reputation)
-  updateTenantReputation?(tenantId: string, record: TenantReputationRecord): Promise<void>
-  getTenantReputation?(tenantId: string): Promise<TenantReputationRecord | null>
 
   // Admin operations (require SOROBAN_ADMIN_SIGNING_ENABLED=true)
   pause?(contractId: string): Promise<string>
@@ -336,26 +261,10 @@ export interface SorobanAdapter {
   completeRentToOwnDeal?(params: RentToOwnDealActionParams): Promise<void>
   defaultRentToOwnDeal?(params: RentToOwnDealActionParams): Promise<void>
 
-  // oracle_price_feeds contract — read-only price queries (issue #1488)
-  getOraclePrice?(pair: string): Promise<OraclePriceReading>
-  isOraclePriceStale?(pair: string): Promise<boolean>
-
   // rent_wallet contract — custodial ledger for tenant rent balances
   rentWalletCredit?(account: string, amount: bigint): Promise<string>
   rentWalletDebit?(account: string, amount: bigint): Promise<string>
   rentWalletBalance?(account: string): Promise<bigint>
-
-  // slashing_module contract — evidence-based slashing system
-  submitEvidence?(submitter: string, commitment: string, actor: string, offence: string): Promise<number>
-  revealEvidence?(submitter: string, slashId: number, evidence: string, salt: string): Promise<void>
-  proposeSlash?(submitter: string, actor: string, penaltyBps: number): Promise<number>
-  finalizeSlash?(caller: string, slashId: number): Promise<void>
-  cancelSlash?(admin: string, slashId: number): Promise<void>
-
-  // bond_collateral contract — inspector bond management
-  depositBond?(inspector: string, amount: bigint): Promise<void>
-  withdrawBond?(inspector: string, amount: bigint): Promise<void>
-  getBondBalance?(inspector: string): Promise<bigint>
 
   // whistleblower_rewards contract — on-chain reward allocation and claiming
   allocateReward?(whistleblower: string, amount: bigint): Promise<string>
@@ -374,69 +283,6 @@ export interface SorobanAdapter {
   executeDrain?(): Promise<string>
   setRecoveryDelay?(delaySeconds: number): Promise<string>
   getCircuitBreakerState?(): Promise<{ frozen: boolean; drainProposed: boolean; drainDestination?: string; recoveryDelay: number }>
-
-  // vesting_schedule contract — linear vesting with cliff and admin revocation (#1911).
-  // Admin operations are signed by the admin key. `claim` requires the beneficiary's
-  // signature, so it is prepared as an unsigned transaction and submitted after signing.
-  createVestingSchedule?(params: CreateVestingScheduleParams): Promise<string>
-  revokeVesting?(beneficiary: string): Promise<string>
-  getVestingSchedule?(beneficiary: string): Promise<VestingScheduleRecord | null>
-  getClaimableVested?(beneficiary: string): Promise<bigint>
-  prepareVestingClaim?(beneficiary: string): Promise<string>
-  submitVestingClaim?(signedXdr: string, beneficiary: string): Promise<string>
-
-  // epoch_rewards contract — sealed, epoch-based staking rewards (#1965). Funding and
-  // sealing are admin-signed; stake, unstake and claim need the user's own signature,
-  // so they are prepared as unsigned transactions and submitted after signing.
-  epochRewardsCurrentEpoch?(): Promise<number>
-  epochRewardsGetEpoch?(epochNumber: number): Promise<EpochRewardsEpoch | null>
-  epochRewardsTotalStaked?(): Promise<bigint>
-  epochRewardsGetClaimable?(user: string): Promise<bigint>
-  /** The user's staked amount, or null when the deployed contract exposes no per-user getter. */
-  epochRewardsGetStake?(user: string): Promise<bigint | null>
-  epochRewardsFund?(amount: bigint): Promise<string>
-  epochRewardsSeal?(targetEpoch: number, nextEpochDurationSecs: number): Promise<string>
-  prepareEpochRewardsCall?(call: EpochRewardsCall, user: string, amount?: bigint): Promise<string>
-  submitEpochRewardsCall?(
-    signedXdr: string,
-    call: EpochRewardsCall,
-    user: string,
-    amount?: bigint,
-  ): Promise<string>
-
-  // stake_delegation contract — delegated staking where passive holders delegate to operators (#1885).
-  // Users sign stake/delegate/undelegate/request_undelegate/complete_undelegate in their own wallet.
-  // Operators claim commission and delegatee rewards.
-  /** Prepare an unsigned user-signed delegation call for wallet signing. */
-  prepareDelegationCall?(call: string, user: string, amount?: bigint, delegatee?: string): Promise<string>
-  /** Submit a signed user-signed delegation call. */
-  submitDelegationCall?(signedXdr: string, call: string, user: string, amount?: bigint, delegatee?: string): Promise<string>
-  /** Read a user's delegations (active and pending undelegations). */
-  getDelegations?(user: string): Promise<DelegationEntry[]>
-  /** Read a user's staked balance in the delegation contract. */
-  delegationStakedBalance?(user: string): Promise<bigint>
-  /** List available delegatees (operators) from the contract. */
-  listDelegatees?(): Promise<DelegateeEntry[]>
-  /** Get the current epoch number from the delegation contract. */
-  delegationCurrentEpoch?(): Promise<number>
-  /** Operator: set commission rate (basis points). */
-  setCommission?(operator: string, commissionBps: number): Promise<string>
-  /** Operator: claim accumulated commission. */
-  claimCommission?(operator: string): Promise<string>
-  /** User: claim rewards earned from being delegated to. */
-  claimDelegateeRewards?(user: string): Promise<string>
-  /** Operator: prepare unsigned set_commission for wallet signing. */
-  prepareSetCommission?(operator: string, commissionBps: number): Promise<string>
-  /** Operator: submit signed set_commission. */
-  submitSetCommission?(signedXdr: string, operator: string, commissionBps: number): Promise<string>
-  /** Operator: prepare unsigned claim_commission for wallet signing. */
-  prepareClaimCommission?(operator: string): Promise<string>
-  /** Operator: submit signed claim_commission. */
-  submitClaimCommission?(signedXdr: string, operator: string): Promise<string>
-  /** User: prepare unsigned claim_delegatee_rewards for wallet signing. */
-  prepareClaimDelegateeRewards?(user: string): Promise<string>
-  /** User: submit signed claim_delegatee_rewards. */
-  submitClaimDelegateeRewards?(signedXdr: string, user: string): Promise<string>
 
   // multisig_admin contract — M-of-N approval for privileged on-chain actions (#1972).
   // Signers approve with their own wallets (prepare/submit). When the multisig is
@@ -460,18 +306,4 @@ export interface SorobanAdapter {
     call: MultisigCall,
     params: MultisigCallParams,
   ): Promise<string>
-}
-
-/** A delegation entry returned by the contract. */
-export interface DelegationEntry {
-  delegatee: string
-  amount: bigint
-  cooldownEndTs: number
-}
-
-/** A delegatee (operator) entry from the contract. */
-export interface DelegateeEntry {
-  address: string
-  totalDelegated: bigint
-  commissionBps: number
 }
