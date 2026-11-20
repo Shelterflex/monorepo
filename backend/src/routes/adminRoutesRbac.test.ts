@@ -16,6 +16,8 @@ import { createSettlementAdminRouter } from './settlementAdmin.js'
 import { createAdminFraudRouter } from './adminFraud.js'
 import { createAdminWhistleblowerApplicationsRouter } from './adminWhistleblowerApplications.js'
 import { createAdminJobsRouter } from './adminJobs.js'
+import { slidingWindowLimiter } from '../services/SlidingWindowLimiter.js'
+import { userStore, sessionStore, otpChallengeStore, walletChallengeStore, refreshTokenStore } from '../models/authStore.js'
 
 vi.mock('../utils/auditLogger.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../utils/auditLogger.js')>()),
@@ -62,6 +64,9 @@ describe('admin routes need an identified admin with the permission (#1937, #193
     await seedAdminSession()
     const tenant = await seedAdminSession({ email: 'rbac-tenant@example.com', token: 'rbac-tenant-token', role: 'tenant' })
     tenantHeader = tenant.header
+
+    // Clear rate limiter memory store between tests to prevent flakiness
+    slidingWindowLimiter.memoryStore.clear()
 
     app = express()
     app.use(requestIdMiddleware)

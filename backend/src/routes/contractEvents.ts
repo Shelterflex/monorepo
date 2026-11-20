@@ -109,13 +109,13 @@ router.get('/admin/contract-events', async (req: Request, res: Response, next: N
  */
 router.get('/deals/:dealId/on-chain-events', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    assertAdminSecret(req)
-
     const { dealId } = req.params
 
     if (!dealId) {
-      throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Deal ID is required')
+      throw new AppError(ErrorCode.NOT_FOUND, 404, 'Deal ID is required')
     }
+
+    assertAdminSecret(req)
 
     const pool = await getPool()
     if (!pool) {
