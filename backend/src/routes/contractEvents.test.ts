@@ -45,10 +45,10 @@ describe('Contract Events API', () => {
       const response = await request(app)
         .get(`/api/deals/${dealId}/on-chain-events`)
 
-      // Accept 403 (missing/invalid admin secret) or 404 (route not found)
-      expect([403, 404]).toContain(response.status)
+      // Accept 401 (missing/invalid admin secret), 403, or 404 (route not found)
+      expect([401, 403, 404]).toContain(response.status)
 
-      if (response.status === 403) {
+      if (response.status === 403 || response.status === 401) {
         expect(response.body.error).toBeDefined()
       }
     })

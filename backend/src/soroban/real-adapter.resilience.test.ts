@@ -93,7 +93,7 @@ describe('RealSorobanAdapter RPC resilience', () => {
 
     const adapter = new RealSorobanAdapter(config)
 
-    await expect(adapter.getBalance('GABC123')).rejects.toBeInstanceOf(ContractError)
+    await expect(adapter.getBalance('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF')).rejects.toBeInstanceOf(ContractError)
     expect(mocks.simulateTransaction).toHaveBeenCalledTimes(1)
   })
 
@@ -102,7 +102,7 @@ describe('RealSorobanAdapter RPC resilience', () => {
 
     const adapter = new RealSorobanAdapter(config)
 
-    await expect(adapter.getBalance('GABC123')).rejects.toThrow('timed out')
+    await expect(adapter.getBalance('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF')).rejects.toThrow('timed out')
     expect(mocks.simulateTransaction).toHaveBeenCalledTimes(1)
   })
 
@@ -111,7 +111,7 @@ describe('RealSorobanAdapter RPC resilience', () => {
 
     const adapter = new RealSorobanAdapter(config)
 
-    await expect(adapter.getBalance('GABC123')).rejects.toThrow('Gateway timeout')
+    await expect(adapter.getBalance('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF')).rejects.toThrow('Gateway timeout')
     expect(mocks.simulateTransaction).toHaveBeenCalledTimes(1)
   })
 })
