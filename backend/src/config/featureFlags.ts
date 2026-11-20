@@ -14,6 +14,9 @@ export const flagDefaults = {
   /** Inspector job listing, claiming, and report submission. */
   INSPECTOR_DASHBOARD_ENABLED: true,
 
+  /** Governance proposal creation, voting, and execution. */
+  GOVERNANCE_ENABLED: false,
+
   /** Rent-to-own plan selector and equity calculator (coming soon). */
   RENT_TO_OWN_ENABLED: false,
 
