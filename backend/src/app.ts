@@ -188,6 +188,10 @@ import { createAdminRolesRouter } from "./routes/adminRoles.js";
 import { createSorobanContractsRouter } from "./routes/sorobanContracts.js";
 import { createContractEventsRouter } from "./routes/contractEvents.js";
 import { createCircuitBreakerRouter } from "./routes/circuitBreaker.js";
+import { createTenantRatingCardRouter } from "./routes/tenantRatingCard.js";
+import { createInspectionJobsRouter } from "./routes/inspectionJobs.js";
+import { createAdminInspectionJobsRouter } from "./routes/adminInspectionJobs.js";
+import { createGovernanceRouter } from "./routes/governance.js";
 
 import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
 import { createAdminFraudRouter } from "./routes/adminFraud.js";
@@ -752,6 +756,10 @@ export function createApp() {
   );
   app.use("/api/v1/webhooks", createWebhooksRouter(ngnWalletService));
   app.use("/api/v1/deposits", createDepositsRouter(conversionService));
+  app.use("/api/v1", createTenantRatingCardRouter());
+  app.use("/api/v1", createInspectionJobsRouter());
+  app.use("/api/v1/admin", createAdminInspectionJobsRouter());
+  app.use("/api/v1/governance", createGovernanceRouter());
   app.use("/health", createHealthRouter(sorobanAdapter));
 
   // Global API Rate Limiting
@@ -997,6 +1005,11 @@ export function createApp() {
   app.use("/api/v1", createListingApplicationsRouter());
   app.use("/api/webhooks/kyc", createKycWebhookRouter());
   app.use("/api/onboarding", createOnboardingRouter());
+  app.use("/api", createTenantRatingCardRouter());
+  app.use("/api", createInspectionJobsRouter());
+  app.use("/api/admin", createAdminInspectionJobsRouter());
+  app.use("/api/governance", createGovernanceRouter());
+  }
 
   // Account and data retention routes
   app.use("/api/v1", createAccountRouter());
