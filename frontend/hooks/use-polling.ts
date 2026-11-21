@@ -39,27 +39,45 @@ export function usePolling<T>(
   const [error, setError] = useState<Error | null>(null)
   const [isPolling, setIsPolling] = useState(false)
   const [currentInterval, setCurrentInterval] = useState(
-    (config.initialInterval ?? DEFAULT_CONFIG.initialInterval),
+    config.initialInterval ?? DEFAULT_CONFIG.initialInterval,
   )
   const [retryCount, setRetryCount] = useState(0)
 
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const isMountedRef = useRef(true)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(false)
   const isPollingRef = useRef(false)
-  const configRef = useRef({ ...DEFAULT_CONFIG, ...config })
-  const pollFnRef = useRef(pollFn)
-  const executePollRef = useRef<(manual?: boolean) => Promise<void>>(async () => {})
+  const retryCountRef = useRef(0)
+  const requestIdRef = useRef(0)
+  const inFlightRequestRef = useRef<number | null>(null)
 
+  const configRef = useRef<Required<PollingConfig>>({
+    ...DEFAULT_CONFIG,
+    ...config,
+  })
+  const pollFnRef = useRef(pollFn)
+  const executePollRef = useRef<(manual?: boolean) => Promise<void>>(
+    async () => undefined,
+  )
+
+  // Keep the latest inputs available to scheduled polls without restarting
+  // the polling cycle whenever a caller passes a new object/function identity.
   useEffect(() => {
     configRef.current = { ...DEFAULT_CONFIG, ...config }
-  }, [config])
+  }, [
+    config.initialInterval,
+    config.maxInterval,
+    config.backoffMultiplier,
+    config.maxRetries,
+    config.stopOnStatuses,
+    config.enabled,
+  ])
 
   useEffect(() => {
     pollFnRef.current = pollFn
   }, [pollFn])
 
   const clearPendingTimeout = useCallback(() => {
-    if (timeoutRef.current) {
+    if (timeoutRef.current !== null) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
@@ -67,15 +85,26 @@ export function usePolling<T>(
 
   const stop = useCallback(() => {
     isPollingRef.current = false
-    setIsPolling(false)
+    requestIdRef.current += 1
+    inFlightRequestRef.current = null
     clearPendingTimeout()
+
+    if (isMountedRef.current) {
+      setIsPolling(false)
+    }
   }, [clearPendingTimeout])
 
   const scheduleNextPoll = useCallback(
-    (interval: number, execute: () => Promise<void>) => {
+    (interval: number) => {
       clearPendingTimeout()
+
+      if (!isMountedRef.current || !isPollingRef.current) {
+        return
+      }
+
       timeoutRef.current = setTimeout(() => {
-        void execute()
+        timeoutRef.current = null
+        void executePollRef.current()
       }, interval)
     },
     [clearPendingTimeout],
@@ -87,16 +116,33 @@ export function usePolling<T>(
         return
       }
 
+      // A manual poll should not create overlapping requests with a scheduled
+      // poll. The request ID also prevents stale responses after stop/restart.
+      if (inFlightRequestRef.current !== null) {
+        return
+      }
+
+      const requestId = ++requestIdRef.current
+      inFlightRequestRef.current = requestId
+
       try {
         const result = await pollFnRef.current()
-        if (!isMountedRef.current || (!manual && !isPollingRef.current)) {
+
+        if (
+          !isMountedRef.current ||
+          requestIdRef.current !== requestId ||
+          (!manual && !isPollingRef.current)
+        ) {
           return
         }
 
         setData(result.data)
         setError(null)
+        retryCountRef.current = 0
         setRetryCount(0)
-        setCurrentInterval(configRef.current.initialInterval)
+
+        const initialInterval = configRef.current.initialInterval
+        setCurrentInterval(initialInterval)
 
         if (configRef.current.stopOnStatuses.includes(result.status)) {
           stop()
@@ -104,38 +150,48 @@ export function usePolling<T>(
         }
 
         if (isPollingRef.current) {
-          scheduleNextPoll(configRef.current.initialInterval, () => executePollRef.current())
+          scheduleNextPoll(initialInterval)
         }
-      } catch (err) {
-        if (!isMountedRef.current || (!manual && !isPollingRef.current)) {
+      } catch (caughtError) {
+        if (
+          !isMountedRef.current ||
+          requestIdRef.current !== requestId ||
+          (!manual && !isPollingRef.current)
+        ) {
           return
         }
 
-        const nextError = err instanceof Error ? err : new Error('Polling failed')
+        const nextError =
+          caughtError instanceof Error
+            ? caughtError
+            : new Error('Polling failed')
+
         setError(nextError)
 
-        setRetryCount((previous) => {
-          const nextRetryCount = previous + 1
+        const nextRetryCount = retryCountRef.current + 1
+        retryCountRef.current = nextRetryCount
+        setRetryCount(nextRetryCount)
 
-          if (nextRetryCount >= configRef.current.maxRetries) {
-            stop()
-            return nextRetryCount
-          }
+        if (nextRetryCount >= configRef.current.maxRetries) {
+          stop()
+          return
+        }
 
-          const nextInterval = Math.min(
-            configRef.current.initialInterval *
-              Math.pow(configRef.current.backoffMultiplier, nextRetryCount),
-            configRef.current.maxInterval,
-          )
+        const nextInterval = Math.min(
+          configRef.current.initialInterval *
+            Math.pow(configRef.current.backoffMultiplier, nextRetryCount),
+          configRef.current.maxInterval,
+        )
 
-          setCurrentInterval(nextInterval)
+        setCurrentInterval(nextInterval)
 
-          if (isPollingRef.current) {
-            scheduleNextPoll(nextInterval, () => executePollRef.current())
-          }
-
-          return nextRetryCount
-        })
+        if (isPollingRef.current) {
+          scheduleNextPoll(nextInterval)
+        }
+      } finally {
+        if (inFlightRequestRef.current === requestId) {
+          inFlightRequestRef.current = null
+        }
       }
     },
     [scheduleNextPoll, stop],
@@ -146,7 +202,11 @@ export function usePolling<T>(
   }, [executePoll])
 
   const start = useCallback(() => {
-    if (isPollingRef.current || !configRef.current.enabled) {
+    if (
+      isPollingRef.current ||
+      !configRef.current.enabled ||
+      !isMountedRef.current
+    ) {
       return
     }
 
@@ -160,32 +220,48 @@ export function usePolling<T>(
   }, [executePoll])
 
   const restart = useCallback(() => {
-    stop()
+    clearPendingTimeout()
+    requestIdRef.current += 1
+    inFlightRequestRef.current = null
+    isPollingRef.current = false
+
+    if (!isMountedRef.current) {
+      return
+    }
+
+    retryCountRef.current = 0
     setData(null)
     setError(null)
     setRetryCount(0)
     setCurrentInterval(configRef.current.initialInterval)
-    isPollingRef.current = true
     setIsPolling(true)
+
+    isPollingRef.current = true
     void executePoll()
-  }, [executePoll, stop])
+  }, [clearPendingTimeout, executePoll])
+
+  // This effect intentionally precedes the auto-start effect. React Strict
+  // Mode replays effects in development, so setup must restore the mounted
+  // flag before polling is started again.
+  useEffect(() => {
+    isMountedRef.current = true
+
+    return () => {
+      isMountedRef.current = false
+      isPollingRef.current = false
+      requestIdRef.current += 1
+      inFlightRequestRef.current = null
+      clearPendingTimeout()
+    }
+  }, [clearPendingTimeout])
 
   useEffect(() => {
     if (configRef.current.enabled) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       start()
     } else {
       stop()
     }
   }, [start, stop, config.enabled])
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-      isPollingRef.current = false
-      clearPendingTimeout()
-    }
-  }, [clearPendingTimeout])
 
   return {
     data,
