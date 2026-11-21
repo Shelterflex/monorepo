@@ -3,6 +3,10 @@ import path from 'node:path'
 import { Pool } from 'pg'
 import { getOrderedMigrationFiles } from './migrationOrdering.js'
 
+const MIGRATION_ALIASES: Record<string, string[]> = {
+  '20261021100100_tenant_reputation.sql': ['20261021100000_tenant_reputation.sql'],
+}
+
 const DB_CONNECT_RETRIES = parseInt(process.env.DB_CONNECT_RETRIES ?? '5', 10)
 const DB_CONNECT_RETRY_MS = parseInt(process.env.DB_CONNECT_RETRY_MS ?? '2000', 10)
 
@@ -56,9 +60,10 @@ export async function runMigrationsIfNeeded() {
     const files = await getOrderedMigrationFiles(migrationsDir)
 
     for (const file of files) {
+      const candidateFilenames = [file, ...(MIGRATION_ALIASES[file] ?? [])]
       const alreadyApplied = await pool.query(
-        'SELECT 1 FROM schema_migrations WHERE filename = $1',
-        [file],
+        'SELECT 1 FROM schema_migrations WHERE filename = ANY($1)',
+        [candidateFilenames],
       )
 
       if (alreadyApplied.rowCount) continue
