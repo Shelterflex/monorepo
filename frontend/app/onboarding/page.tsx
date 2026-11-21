@@ -130,7 +130,7 @@ export default function OnboardingPage() {
   // Resume from last incomplete step on mount
   useEffect(() => {
     apiFetch<{ completedSteps: string[]; currentStep: string; submitted: boolean }>(
-      "/api/onboarding/status"
+      "/api/v1/onboarding/status"
     )
       .then((status) => {
         if (status.submitted) {
@@ -186,7 +186,7 @@ export default function OnboardingPage() {
             };
 
           if (Object.keys(payload).length > 0) {
-            await apiPost("/api/onboarding/draft", payload);
+            await apiPost("/api/v1/onboarding/draft", payload);
           }
         } catch {
           // Silent fail for auto-save
@@ -233,7 +233,7 @@ export default function OnboardingPage() {
   async function handleSubmit() {
     setIsSubmitting(true);
     try {
-      await apiPost("/api/onboarding/submit", {});
+      await apiPost("/api/v1/onboarding/submit", {});
       setSubmitSuccess(true);
     } catch (err: unknown) {
       setErrors([err instanceof Error ? err.message : "Submission failed"]);

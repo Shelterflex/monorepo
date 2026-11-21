@@ -141,7 +141,7 @@ describe("getWalletBalance", () => {
     });
 
     const result = await getWalletBalance();
-    expect(apiGet).toHaveBeenCalledWith("/api/tenant/payments/wallet");
+    expect(apiGet).toHaveBeenCalledWith("/api/v1/tenant/payments/wallet");
     expect(result.data.balance).toBe(500_000);
   });
 });
@@ -159,7 +159,7 @@ describe("initiateQuickPay", () => {
       paymentMethod: "wallet",
     });
 
-    expect(apiPost).toHaveBeenCalledWith("/api/tenant/payments/quick-pay", {
+    expect(apiPost).toHaveBeenCalledWith("/api/v1/tenant/payments/quick-pay", {
       dealId: "D-001",
       amount: 100_000,
       paymentMethod: "wallet",
@@ -180,7 +180,7 @@ describe("initiateWalletTopUp", () => {
       paymentMethod: "card",
     });
 
-    expect(apiPost).toHaveBeenCalledWith("/api/tenant/payments/wallet/topup", {
+    expect(apiPost).toHaveBeenCalledWith("/api/v1/tenant/payments/wallet/topup", {
       amount: 200_000,
       paymentMethod: "card",
     });
@@ -194,7 +194,7 @@ describe("getMyDisputes", () => {
   it("fetches disputes list", async () => {
     vi.mocked(apiGet).mockResolvedValue({ success: true, data: { disputes: [] } });
     const result = await getMyDisputes();
-    expect(apiGet).toHaveBeenCalledWith("/api/tenant/payments/disputes");
+    expect(apiGet).toHaveBeenCalledWith("/api/v1/tenant/payments/disputes");
     expect(result.data.disputes).toEqual([]);
   });
 });
@@ -224,7 +224,7 @@ describe("createDispute", () => {
       description: "Charged wrong amount",
     });
 
-    expect(apiPost).toHaveBeenCalledWith("/api/tenant/payments/disputes", {
+    expect(apiPost).toHaveBeenCalledWith("/api/v1/tenant/payments/disputes", {
       paymentId: "P-001",
       dealId: "D-001",
       reason: "amount_discrepancy",

@@ -69,7 +69,7 @@ export default function KycSubmissionDetailPage() {
     const fetchData = async () => {
       try {
         const result = await apiGet<{ success: boolean; data: KycRecord }>(
-          `/api/kyc/admin/${submissionId}`
+          `/api/v1/kyc/admin/${submissionId}`
         )
         setRecord(result.data)
       } catch (err) {
@@ -88,7 +88,7 @@ export default function KycSubmissionDetailPage() {
       setAllowlistLoading(true)
       try {
         const result = await apiGet<{ success: boolean; data: AllowlistStatus }>(
-          `/api/kyc/admin/${submissionId}/allowlist-status`
+          `/api/v1/kyc/admin/${submissionId}/allowlist-status`
         )
         setAllowlistStatus(result.data)
       } catch (err) {
@@ -104,7 +104,7 @@ export default function KycSubmissionDetailPage() {
     if (!record) return
     setActionLoading(true)
     try {
-      await apiPost(`/api/kyc/admin/${submissionId}/approve`, {
+      await apiPost(`/api/v1/kyc/admin/${submissionId}/approve`, {
         reason: reason || undefined,
       })
       setRecord({ ...record, status: "approved" })
@@ -121,7 +121,7 @@ export default function KycSubmissionDetailPage() {
     if (!record) return
     setActionLoading(true)
     try {
-      await apiPost(`/api/kyc/admin/${submissionId}/reject`, {
+      await apiPost(`/api/v1/kyc/admin/${submissionId}/reject`, {
         reason: reason || "Rejected by admin",
       })
       setRecord({ ...record, status: "rejected", rejectionReason: reason })
