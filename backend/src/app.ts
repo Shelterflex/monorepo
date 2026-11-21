@@ -1009,7 +1009,6 @@ export function createApp() {
   app.use("/api", createInspectionJobsRouter());
   app.use("/api/admin", createAdminInspectionJobsRouter());
   app.use("/api/governance", createGovernanceRouter());
-  }
 
   // Account and data retention routes
   app.use("/api/v1", createAccountRouter());

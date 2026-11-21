@@ -48,7 +48,7 @@ export const listInspectionJobsSchema = z.object({
   status: z.enum(['available', 'claimed', 'in_progress', 'submitted', 'approved', 'rejected']).optional(),
   area: z.string().optional(),
   page: z.number().int().positive().default(1),
-  limit: z.number().int().positive().default(20).max(100),
+  limit: z.number().int().positive().max(100).default(20),
 })
 
 export type ListInspectionJobsRequest = z.infer<typeof listInspectionJobsSchema>
