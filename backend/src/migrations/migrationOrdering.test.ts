@@ -71,6 +71,8 @@ describe('migration ordering manifest', () => {
           legacyMigrations: [{ position: 1, filename: '001_init.sql' }],
         },
       ),
-    ).toThrow('Duplicate migration timestamp prefix 20260727120000 detected.')
+    ).toThrow(
+      'Duplicate migration timestamp prefix 20260727120000 detected (20260727120000_add_table.sql, 20260727120000_add_index.sql).',
+    )
   })
 })
