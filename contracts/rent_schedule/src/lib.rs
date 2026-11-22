@@ -433,6 +433,9 @@ impl Pausable for RentSchedule {
 mod formal_properties;
 
 #[cfg(test)]
+mod proptest_invariants;
+
+#[cfg(test)]
 mod test {
     extern crate std;
     use super::*;
