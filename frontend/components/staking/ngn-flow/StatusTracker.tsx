@@ -81,6 +81,14 @@ function StakingQueuedStatus() {
   );
 }
 
+const STAKING_DATE_FORMAT_OPTIONS = {
+  locale: "en-US",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+} as const;
+
 // Sub-component: ConfirmedStatus
 interface ConfirmedStatusProps {
   position: StakingPosition;
@@ -110,7 +118,9 @@ function ConfirmedStatus({ position }: ConfirmedStatusProps) {
 
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">Start Date</span>
-            <span className="font-medium">{formatDate(position.startDate)}</span>
+            <span className="font-medium">
+              {formatDate(position.startDate, STAKING_DATE_FORMAT_OPTIONS)}
+            </span>
           </div>
 
           <div className="flex justify-between">
@@ -123,7 +133,9 @@ function ConfirmedStatus({ position }: ConfirmedStatusProps) {
           {position.maturityDate && (
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Maturity Date</span>
-              <span className="font-medium">{formatDate(position.maturityDate)}</span>
+              <span className="font-medium">
+                {formatDate(position.maturityDate, STAKING_DATE_FORMAT_OPTIONS)}
+              </span>
             </div>
           )}
         </div>

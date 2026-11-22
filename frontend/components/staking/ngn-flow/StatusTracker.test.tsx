@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { formatDate } from "@/lib/date";
 import { StatusTracker, type StakingPosition } from "./StatusTracker";
+
+const DATE_FORMAT_OPTIONS = {
+  locale: "en-US",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+} as const;
 
 describe("StatusTracker", () => {
   const mockTransactionId = "txn_123456";
@@ -134,7 +143,9 @@ describe("StatusTracker", () => {
       );
 
       expect(screen.getByText("Start Date")).toBeInTheDocument();
-      expect(screen.getByText("January 15, 2024")).toBeInTheDocument();
+      expect(
+        screen.getByText(formatDate(mockPosition.startDate, DATE_FORMAT_OPTIONS))
+      ).toBeInTheDocument();
     });
 
     it("should display expected yield", () => {
@@ -165,7 +176,11 @@ describe("StatusTracker", () => {
       );
 
       expect(screen.getByText("Maturity Date")).toBeInTheDocument();
-      expect(screen.getByText("January 15, 2025")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          formatDate(positionWithMaturity.maturityDate, DATE_FORMAT_OPTIONS)
+        )
+      ).toBeInTheDocument();
     });
 
     it("should not display maturity date when not provided", () => {
