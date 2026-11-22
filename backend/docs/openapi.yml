@@ -6221,6 +6221,170 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       description: Trigger job execution immediately
+  /api/support/messages:
+    post:
+      summary: Submit a contact-form message
+      description: 'Public contact-form submission, with no authentication. Each IP may submit five messages per hour, and the sixth returns 429. Fields are plain text, and HTML tags are rejected.'
+      operationId: submitSupportMessage
+      tags:
+      - Support
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              - email
+              - subject
+              - message
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                phone:
+                  type: string
+                  nullable: true
+                  maxLength: 20
+                subject:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 5000
+      responses:
+        '201':
+          description: Message stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - messageId
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  messageId:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/support/messages:
+    get:
+      summary: List support messages
+      description: Paginated, newest first, with an optional status filter. Requires the support:view permission.
+      operationId: listSupportMessages
+      tags:
+      - Support
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - new
+          - in_progress
+          - resolved
+      responses:
+        '200':
+          description: One page of support messages
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - pagination
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        messageId:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        email:
+                          type: string
+                        phone:
+                          type: string
+                          nullable: true
+                        subject:
+                          type: string
+                        message:
+                          type: string
+                        status:
+                          type: string
+                          enum:
+                          - new
+                          - in_progress
+                          - resolved
+                        ip:
+                          type: string
+                          nullable: true
+                        userAgent:
+                          type: string
+                          nullable: true
+                        createdAt:
+                          type: string
+                          format: date-time
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      total:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
   /api/tenant/saved-properties:
     get:
       summary: List the caller's saved listings
