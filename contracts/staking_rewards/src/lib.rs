@@ -1,5 +1,4 @@
 #![no_std]
-use soroban_access_control::extend_storage_ttl;
 use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, IntoVal, Symbol,
@@ -56,12 +55,44 @@ const PENDING_DUST: &str = "DUST";
 const TOTAL_FUNDED: &str = "FUNDED";
 const SCALE: i128 = 1_000_000_000;
 
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+//
+// Soroban archives an entry once its TTL runs out. Every entrypoint that touches storage
+// extends the instance entry, and every persistent key it reads or writes. An entry is
+// extended only when its remaining lifetime is below `TTL_THRESHOLD_LEDGERS`, and then it is
+// set to `TTL_EXTEND_TO_LEDGERS` ledgers from the current ledger. At about 10 seconds per
+// ledger, 500,000 ledgers is roughly 58 days, the same policy as
+// `soroban_access_control::extend_storage_ttl`.
+//
+// This contract cannot bump entries nobody touches. A user's stake and reward entries stay
+// alive as long as that user calls `stake`, `unstake`, `claim` or a getter for them within
+// each window. Otherwise they need a restore transaction before they can be read again.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the instance storage, which also keeps the contract's code alive.
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of one persistent entry. A key that was never written is skipped, because
+/// the host rejects TTL extensions for missing entries.
+fn extend_persistent_ttl<K: IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
+    let persistent = env.storage().persistent();
+    if persistent.has(key) {
+        persistent.extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+    }
+}
+
 #[contract]
 pub struct StakingRewards;
 
 #[contractimpl]
 impl StakingRewards {
     pub fn init(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&StorageKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
@@ -85,6 +116,7 @@ impl StakingRewards {
     }
 
     pub fn contract_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, u32>(&StorageKey::ContractVersion)
@@ -92,10 +124,12 @@ impl StakingRewards {
     }
 
     pub fn version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         Self::contract_version(env)
     }
 
     pub fn admin(env: Env) -> Address {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, Address>(&StorageKey::Admin)
@@ -103,6 +137,7 @@ impl StakingRewards {
     }
 
     pub fn set_admin(env: Env, new_admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         Self::require_admin(&env)?;
         let old_admin: Address = env
             .storage()
@@ -121,6 +156,7 @@ impl StakingRewards {
     }
 
     pub fn add_operator(env: Env, operator: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         Self::require_admin(&env)?;
         env.storage()
             .instance()
@@ -138,6 +174,7 @@ impl StakingRewards {
     }
 
     pub fn remove_operator(env: Env) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         Self::require_admin(&env)?;
         let operator = env
             .storage()
@@ -159,6 +196,7 @@ impl StakingRewards {
     }
 
     pub fn is_operator(env: Env, address: Address) -> bool {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, Address>(&StorageKey::Operator)
@@ -208,6 +246,8 @@ impl StakingRewards {
     }
 
     pub fn stake(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &REWARD_INDEX);
         Self::require_not_paused(&env)?;
         user.require_auth();
 
@@ -225,13 +265,13 @@ impl StakingRewards {
         user_stake.user_index = reward_index;
 
         env.storage().persistent().set(&user, &user_stake);
-        extend_storage_ttl(&env, &user.into_val(&env));
+        extend_persistent_ttl(&env, &user);
 
         let total = Self::get_total_staked(&env);
         env.storage()
             .persistent()
             .set(&TOTAL_STAKED, &(total + amount));
-        extend_storage_ttl(&env, &TOTAL_STAKED.into_val(&env));
+        extend_persistent_ttl(&env, &TOTAL_STAKED);
 
         env.events().publish(
             (
@@ -245,6 +285,8 @@ impl StakingRewards {
     }
 
     pub fn unstake(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &REWARD_INDEX);
         Self::require_not_paused(&env)?;
         user.require_auth();
 
@@ -266,13 +308,13 @@ impl StakingRewards {
         user_stake.amount -= amount;
 
         env.storage().persistent().set(&user, &user_stake);
-        extend_storage_ttl(&env, &user.into_val(&env));
+        extend_persistent_ttl(&env, &user);
 
         let total = Self::get_total_staked(&env);
         env.storage()
             .persistent()
             .set(&TOTAL_STAKED, &(total - amount));
-        extend_storage_ttl(&env, &TOTAL_STAKED.into_val(&env));
+        extend_persistent_ttl(&env, &TOTAL_STAKED);
 
         env.events().publish(
             (
@@ -286,6 +328,8 @@ impl StakingRewards {
     }
 
     pub fn fund_rewards(env: Env, amount: i128) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &TOTAL_STAKED);
         Self::require_not_paused(&env)?;
         Self::require_operator(&env)?;
 
@@ -298,6 +342,7 @@ impl StakingRewards {
         env.storage()
             .persistent()
             .set(&TOTAL_FUNDED, &(total_funded + amount));
+        extend_persistent_ttl(&env, &TOTAL_FUNDED);
 
         let total = Self::get_total_staked(&env);
         if total == 0 {
@@ -315,9 +360,9 @@ impl StakingRewards {
         env.storage()
             .persistent()
             .set(&REWARD_INDEX, &(reward_index + index_increment));
-        extend_storage_ttl(&env, &REWARD_INDEX.into_val(&env));
+        extend_persistent_ttl(&env, &REWARD_INDEX);
         env.storage().persistent().set(&PENDING_DUST, &new_dust);
-        extend_storage_ttl(&env, &PENDING_DUST.into_val(&env));
+        extend_persistent_ttl(&env, &PENDING_DUST);
 
         env.events().publish(
             (
@@ -331,6 +376,8 @@ impl StakingRewards {
     }
 
     pub fn distribute_rewards(env: Env, amount: i128) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &TOTAL_STAKED);
         Self::require_not_paused(&env)?;
         Self::require_admin(&env)?;
 
@@ -343,6 +390,7 @@ impl StakingRewards {
         env.storage()
             .persistent()
             .set(&TOTAL_FUNDED, &(total_funded + amount));
+        extend_persistent_ttl(&env, &TOTAL_FUNDED);
 
         let total = Self::get_total_staked(&env);
         if total == 0 {
@@ -358,9 +406,9 @@ impl StakingRewards {
         env.storage()
             .persistent()
             .set(&REWARD_INDEX, &(reward_index + index_increment));
-        extend_storage_ttl(&env, &REWARD_INDEX.into_val(&env));
+        extend_persistent_ttl(&env, &REWARD_INDEX);
         env.storage().persistent().set(&PENDING_DUST, &new_dust);
-        extend_storage_ttl(&env, &PENDING_DUST.into_val(&env));
+        extend_persistent_ttl(&env, &PENDING_DUST);
 
         env.events().publish(
             (
@@ -374,6 +422,8 @@ impl StakingRewards {
     }
 
     pub fn claim(env: Env, user: Address) -> Result<i128, ContractError> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &REWARD_INDEX);
         Self::require_not_paused(&env)?;
         user.require_auth();
 
@@ -385,7 +435,7 @@ impl StakingRewards {
         user_stake.pending_amount = 0;
 
         env.storage().persistent().set(&user, &user_stake);
-        extend_storage_ttl(&env, &user.into_val(&env));
+        extend_persistent_ttl(&env, &user);
 
         env.events().publish(
             (
@@ -399,16 +449,23 @@ impl StakingRewards {
     }
 
     pub fn get_claimable(env: Env, user: Address) -> i128 {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &user);
+        extend_persistent_ttl(&env, &REWARD_INDEX);
         let user_stake = Self::get_user_stake(&env, &user);
         let reward_index = Self::get_reward_index(&env);
         Self::calc_pending(&user_stake, reward_index) + user_stake.pending_amount
     }
 
     pub fn get_total_funded(env: Env) -> i128 {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &TOTAL_FUNDED);
         Self::get_total_funded_inner(&env)
     }
 
     pub fn get_pending_dust(env: Env) -> i128 {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &PENDING_DUST);
         Self::get_pending_dust_inner(&env)
     }
 
@@ -443,6 +500,7 @@ impl StakingRewards {
     // ── Upgrade governance (#392) ──────────────────────────────────────────────
 
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -466,6 +524,7 @@ impl StakingRewards {
     }
 
     pub fn set_upgrade_delay(env: Env, admin: Address, delay: u64) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -493,6 +552,7 @@ impl StakingRewards {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -532,6 +592,7 @@ impl StakingRewards {
     }
 
     pub fn execute_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -576,6 +637,7 @@ impl StakingRewards {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -609,6 +671,7 @@ impl StakingRewards {
     }
 
     pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -645,6 +708,7 @@ impl StakingRewards {
 #[contractimpl]
 impl Pausable for StakingRewards {
     fn pause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if StakingRewards::require_admin(&env).is_err() {
             return Err(PausableError::NotAuthorized);
         }
@@ -657,6 +721,7 @@ impl Pausable for StakingRewards {
     }
 
     fn unpause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if StakingRewards::require_admin(&env).is_err() {
             return Err(PausableError::NotAuthorized);
         }
@@ -669,6 +734,7 @@ impl Pausable for StakingRewards {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, bool>(&StorageKey::Paused)
