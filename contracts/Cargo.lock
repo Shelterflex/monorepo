@@ -1221,6 +1221,7 @@ dependencies = [
 name = "rent_wallet"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-pausable",
  "soroban-sdk",
  "soroban_access_control",
