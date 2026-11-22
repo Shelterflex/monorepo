@@ -138,6 +138,8 @@ export type AuditEventType =
   | 'AGREEMENT_FULLY_EXECUTED'
   // Landlord verification
   | 'LANDLORD_VERIFICATION_UPDATED'
+  // Landlord payout schedule and destination (#2055)
+  | 'LANDLORD_PAYOUT_PREFERENCE_UPDATED'
   // State-changing operations (auto-generated)
   | 'STATE_CHANGED'
   | 'STATE_DELETED'

@@ -6221,8 +6221,628 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       description: Trigger job execution immediately
+  /api/landlord/analytics:
+    get:
+      summary: Landlord analytics for occupancy, revenue, payments and vacancy
+      description: 'Occupancy, expected and collected revenue, on-time, late and missed instalments, and vacancy metrics for the calling landlord''s own properties. Dates are YYYY-MM-DD in UTC, and both ends are inclusive. The window defaults to the last 12 months and may span at most 24. An empty portfolio returns zeroed arrays. A propertyId that is not one of the caller''s properties returns 404.'
+      operationId: getLandlordAnalytics
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: startDate
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+          example: '2026-01-01'
+      - name: endDate
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+          example: '2026-12-31'
+      - name: propertyId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Analytics for the window. The body is the bare object, not wrapped in an envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordAnalytics'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/landlord/payout-schedule:
+    get:
+      summary: Upcoming payouts, grouped by property and period
+      description: 'Payouts that have not been paid yet (scheduled, processing, delayed or on hold), grouped by property and then by period, with a summary. Net is always gross minus fees. Landlords see only their own payouts.'
+      operationId: getLandlordPayoutSchedule
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: propertyId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: grouping
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - weekly
+          - monthly
+          default: monthly
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: Upcoming payouts grouped by property and period
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      grouping:
+                        type: string
+                        enum:
+                        - weekly
+                        - monthly
+                      properties:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            propertyId:
+                              type: string
+                            propertyName:
+                              type: string
+                            periods:
+                              type: array
+                              items:
+                                $ref: '#/components/schemas/LandlordPayoutPeriod'
+                      summary:
+                        $ref: '#/components/schemas/LandlordPayoutSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/landlord/payout-schedule/payouts:
+    get:
+      summary: Payout history
+      description: Paginated payouts for the landlord, soonest scheduled first. Each payout shows its status, gross, fees and net.
+      operationId: listLandlordPayouts
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: propertyId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/LandlordPayoutStatus'
+      - name: channel
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - bank_transfer
+          - mobile_money
+          - crypto_wallet
+          - check
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: One page of payouts
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - pagination
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LandlordPayout'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/landlord/payout-schedule/preference:
+    get:
+      summary: Get payout frequency and destination
+      operationId: getLandlordPayoutPreference
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Current payout frequency and destination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordPayoutPreferenceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      summary: Update payout frequency and destination
+      description: 'Send schedulePreference, destination, or both. The destination is validated as a 10-digit account number, and the change is audited. Responses show only the last four digits of the account number.'
+      operationId: updateLandlordPayoutPreference
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schedulePreference:
+                  type: string
+                  enum:
+                  - activation
+                  - weekly
+                  - monthly
+                destination:
+                  type: object
+                  required:
+                  - bankName
+                  - accountNumber
+                  - accountName
+                  properties:
+                    bankName:
+                      type: string
+                      minLength: 2
+                      maxLength: 100
+                    accountNumber:
+                      type: string
+                      pattern: '^\d{10}$'
+                    accountName:
+                      type: string
+                      minLength: 2
+                      maxLength: 100
+      responses:
+        '200':
+          description: Updated preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordPayoutPreferenceResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/landlord/payout-schedule/{payoutId}:
+    get:
+      summary: Get one payout
+      description: Returns 404 for a payout that belongs to another landlord, the same as for one that does not exist.
+      operationId: getLandlordPayout
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: payoutId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: The payout
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/LandlordPayout'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/support/messages:
+    post:
+      summary: Submit a contact-form message
+      description: 'Public contact-form submission, with no authentication. Each IP may submit five messages per hour, and the sixth returns 429. Fields are plain text, and HTML tags are rejected.'
+      operationId: submitSupportMessage
+      tags:
+      - Support
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              - email
+              - subject
+              - message
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                phone:
+                  type: string
+                  nullable: true
+                  maxLength: 20
+                subject:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 5000
+      responses:
+        '201':
+          description: Message stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - messageId
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  messageId:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/support/messages:
+    get:
+      summary: List support messages
+      description: Paginated, newest first, with an optional status filter. Requires the support:view permission.
+      operationId: listSupportMessages
+      tags:
+      - Support
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - new
+          - in_progress
+          - resolved
+      responses:
+        '200':
+          description: One page of support messages
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - pagination
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        messageId:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        email:
+                          type: string
+                        phone:
+                          type: string
+                          nullable: true
+                        subject:
+                          type: string
+                        message:
+                          type: string
+                        status:
+                          type: string
+                          enum:
+                          - new
+                          - in_progress
+                          - resolved
+                        ip:
+                          type: string
+                          nullable: true
+                        userAgent:
+                          type: string
+                          nullable: true
+                        createdAt:
+                          type: string
+                          format: date-time
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      total:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/tenant/saved-properties:
+    get:
+      summary: List the caller's saved listings
+      description: Saved listing ids for the authenticated tenant, most recently saved first. Paginated. A tenant only ever sees their own list.
+      operationId: listSavedProperties
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      responses:
+        '200':
+          description: One page of saved listing ids
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - pagination
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      total:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/tenant/saved-properties/{listingId}:
+    put:
+      summary: Save a listing
+      description: 'Saves an approved (publicly visible) listing for the caller. Saving a listing twice keeps one entry and returns 200 both times. Unknown or non-public listings return 404.'
+      operationId: saveProperty
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/SavedPropertyListingId'
+      responses:
+        '200':
+          description: Listing saved (or already saved)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPropertyToggleResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Remove a saved listing
+      description: Removes a listing from the caller's saved list. Idempotent, and it works even if the listing has since been rejected or rented.
+      operationId: unsaveProperty
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/SavedPropertyListingId'
+      responses:
+        '200':
+          description: Listing removed (or was not saved)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPropertyToggleResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
 components:
   parameters:
+    SavedPropertyListingId:
+      name: listingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     UserId:
       name: userId
       in: path
@@ -6255,6 +6875,233 @@ components:
         minimum: 1
       description: Governance proposal id (1-based, contracts/governance/src/lib.rs:188)
   schemas:
+    LandlordAnalytics:
+      type: object
+      required:
+      - occupancyTrend
+      - revenueBreakdown
+      - paymentTrends
+      - vacancyMetrics
+      properties:
+        occupancyTrend:
+          type: array
+          description: One point per calendar month in the window.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                description: YYYY-MM
+                example: '2026-03'
+              rate:
+                type: integer
+                minimum: 0
+                maximum: 100
+                description: Share of the landlord's properties occupied at some point in the month, as a percentage.
+        revenueBreakdown:
+          type: array
+          description: One point per calendar month in the window.
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+                description: YYYY-MM
+              expected:
+                type: number
+                description: Instalments due in the month.
+              collected:
+                type: number
+                description: Instalments paid in the month. Paid items with no timestamp count in their due month.
+        paymentTrends:
+          type: array
+          description: One point per due day that has an outcome. Unpaid instalments that are not yet due are left out.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                description: YYYY-MM-DD (the due day)
+              onTime:
+                type: integer
+              late:
+                type: integer
+              missed:
+                type: integer
+        vacancyMetrics:
+          type: object
+          properties:
+            averageTimeToFill:
+              type: integer
+              description: Mean days from a property becoming available to its deal starting, over filled vacancies. 0 when none have been filled.
+            currentVacancyCount:
+              type: integer
+              description: Properties with no occupancy now.
+    LandlordPayoutStatus:
+      type: string
+      enum:
+      - scheduled
+      - processing
+      - completed
+      - delayed
+      - failed
+      - on_hold
+    LandlordPayout:
+      type: object
+      required:
+      - id
+      - propertyId
+      - propertyName
+      - scheduledDate
+      - grossAmount
+      - deductions
+      - netAmount
+      - status
+      properties:
+        id:
+          type: string
+        propertyId:
+          type: string
+        propertyName:
+          type: string
+        scheduledDate:
+          type: string
+          format: date-time
+        completedDate:
+          type: string
+          format: date-time
+          nullable: true
+        grossAmount:
+          type: number
+        deductions:
+          type: array
+          items:
+            type: object
+            required:
+            - type
+            - label
+            - amount
+            properties:
+              type:
+                type: string
+              label:
+                type: string
+              amount:
+                type: number
+        netAmount:
+          type: number
+          description: Gross minus the sum of deductions.
+        currency:
+          type: string
+        status:
+          $ref: '#/components/schemas/LandlordPayoutStatus'
+        channel:
+          type: string
+        delayReasons:
+          type: array
+          items:
+            type: string
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+    LandlordPayoutPeriod:
+      type: object
+      properties:
+        periodLabel:
+          type: string
+          description: 'YYYY-MM for monthly grouping, or YYYY-Www (ISO week) for weekly.'
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        grossTotal:
+          type: number
+        deductionsTotal:
+          type: number
+        netTotal:
+          type: number
+        payoutCount:
+          type: integer
+        delayedCount:
+          type: integer
+        payouts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandlordPayout'
+    LandlordPayoutSummary:
+      type: object
+      properties:
+        totalGross:
+          type: number
+        totalDeductions:
+          type: number
+        totalNet:
+          type: number
+        totalPayouts:
+          type: integer
+        delayedPayouts:
+          type: integer
+        onHoldPayouts:
+          type: integer
+        currency:
+          type: string
+    LandlordPayoutPreferenceResponse:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+          - schedulePreference
+          - destination
+          properties:
+            schedulePreference:
+              type: string
+              enum:
+              - activation
+              - weekly
+              - monthly
+            destination:
+              type: object
+              nullable: true
+              description: Null until a bank account has been saved.
+              properties:
+                bankName:
+                  type: string
+                accountName:
+                  type: string
+                accountNumberLast4:
+                  type: string
+    SavedPropertyToggleResponse:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+          - listingId
+          - saved
+          properties:
+            listingId:
+              type: string
+              format: uuid
+            saved:
+              type: boolean
     TenantReputationScore:
       type: object
       description: 'Cached reputation record for one tenant, computed from landlord
@@ -9864,6 +10711,8 @@ tags:
   description: Landlord rent guarantee insurance - quotes, policy binding and claims
 - name: Governance
   description: Stake-weighted parameter governance proposals and voting (contracts/governance)
+- name: Tenant
+  description: Tenant account features, such as the saved-property shortlist
 - name: Tenant Rating
   description: Landlord ratings of tenants after a deal, and the tenant's portable
     rating card with expiring public share links (#1905)

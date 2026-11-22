@@ -351,12 +351,55 @@ export class PostgresLandlordPayoutScheduleStore implements LandlordPayoutSchedu
   }
 }
 
-// Singleton instance
-let landlordPayoutScheduleStore: LandlordPayoutScheduleStore =
-  new InMemoryLandlordPayoutScheduleStore()
+/**
+ * Picks PostgreSQL when DATABASE_URL is set and the in-memory store otherwise.
+ * Nothing calls an init function, so the default has to choose the backend
+ * itself. Otherwise production would quietly read an empty in-memory store.
+ */
+class HybridLandlordPayoutScheduleStore implements LandlordPayoutScheduleStore {
+  private memory = new InMemoryLandlordPayoutScheduleStore()
+  private postgres = new PostgresLandlordPayoutScheduleStore()
 
-export function initLandlordPayoutScheduleStore(store: LandlordPayoutScheduleStore): void {
-  landlordPayoutScheduleStore = store
+  private async adapter(): Promise<LandlordPayoutScheduleStore> {
+    return (await getPool()) ? this.postgres : this.memory
+  }
+
+  async listForLandlord(landlordId: string, filters?: LandlordPayoutFilters): Promise<LandlordPayout[]> {
+    return (await this.adapter()).listForLandlord(landlordId, filters)
+  }
+
+  async listPageForLandlord(
+    landlordId: string,
+    filters: LandlordPayoutFilters,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: LandlordPayout[]; total: number }> {
+    return (await this.adapter()).listPageForLandlord(landlordId, filters, page, pageSize)
+  }
+
+  async findForLandlord(landlordId: string, payoutId: string): Promise<LandlordPayout | null> {
+    return (await this.adapter()).findForLandlord(landlordId, payoutId)
+  }
+
+  async getPreference(landlordId: string): Promise<PayoutSchedulePreference> {
+    return (await this.adapter()).getPreference(landlordId)
+  }
+
+  async setPreference(
+    landlordId: string,
+    preference: PayoutSchedulePreference,
+  ): Promise<PayoutSchedulePreference> {
+    return (await this.adapter()).setPreference(landlordId, preference)
+  }
+
+  async insertIfAbsent(payout: LandlordPayout): Promise<boolean> {
+    return (await this.adapter()).insertIfAbsent(payout)
+  }
+
+  async sumGrossSince(landlordId: string, since: Date): Promise<number> {
+    return (await this.adapter()).sumGrossSince(landlordId, since)
+  }
 }
 
-export { landlordPayoutScheduleStore }
+export const landlordPayoutScheduleStore: LandlordPayoutScheduleStore =
+  new HybridLandlordPayoutScheduleStore()
