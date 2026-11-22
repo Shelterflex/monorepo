@@ -6221,8 +6221,126 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       description: Trigger job execution immediately
+  /api/tenant/saved-properties:
+    get:
+      summary: List the caller's saved listings
+      description: Saved listing ids for the authenticated tenant, most recently saved first. Paginated. A tenant only ever sees their own list.
+      operationId: listSavedProperties
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      responses:
+        '200':
+          description: One page of saved listing ids
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - pagination
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      total:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/tenant/saved-properties/{listingId}:
+    put:
+      summary: Save a listing
+      description: 'Saves an approved (publicly visible) listing for the caller. Saving a listing twice keeps one entry and returns 200 both times. Unknown or non-public listings return 404.'
+      operationId: saveProperty
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/SavedPropertyListingId'
+      responses:
+        '200':
+          description: Listing saved (or already saved)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPropertyToggleResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Remove a saved listing
+      description: Removes a listing from the caller's saved list. Idempotent, and it works even if the listing has since been rejected or rented.
+      operationId: unsaveProperty
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/SavedPropertyListingId'
+      responses:
+        '200':
+          description: Listing removed (or was not saved)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPropertyToggleResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
 components:
   parameters:
+    SavedPropertyListingId:
+      name: listingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     UserId:
       name: userId
       in: path
@@ -6255,6 +6373,26 @@ components:
         minimum: 1
       description: Governance proposal id (1-based, contracts/governance/src/lib.rs:188)
   schemas:
+    SavedPropertyToggleResponse:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+          - listingId
+          - saved
+          properties:
+            listingId:
+              type: string
+              format: uuid
+            saved:
+              type: boolean
     TenantReputationScore:
       type: object
       description: 'Cached reputation record for one tenant, computed from landlord
@@ -9864,6 +10002,8 @@ tags:
   description: Landlord rent guarantee insurance - quotes, policy binding and claims
 - name: Governance
   description: Stake-weighted parameter governance proposals and voting (contracts/governance)
+- name: Tenant
+  description: Tenant account features, such as the saved-property shortlist
 - name: Tenant Rating
   description: Landlord ratings of tenants after a deal, and the tenant's portable
     rating card with expiring public share links (#1905)
