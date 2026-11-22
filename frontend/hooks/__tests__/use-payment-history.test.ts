@@ -48,9 +48,22 @@ function pageResponse(payments: PaymentHistoryItem[], overrides: Partial<{ page:
   };
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe("usePaymentHistory", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("fetches page 1 on mount", async () => {
@@ -221,5 +234,57 @@ describe("usePaymentHistory", () => {
 
     expect(mockApiGet).toHaveBeenCalled();
     // It still calls with dealId=undefined in the query string
+  });
+
+  it("does not apply a pending response after unmount", async () => {
+    const pending = deferred<ReturnType<typeof pageResponse>>();
+    mockApiGet.mockReturnValue(pending.promise);
+
+    const { result, unmount } = renderHook(() =>
+      usePaymentHistory({ dealId: "deal-1" }),
+    );
+    expect(result.current.isLoading).toBe(true);
+
+    unmount();
+    await act(async () => {
+      pending.resolve(pageResponse([makePayment({ id: "late" })]));
+      await pending.promise;
+    });
+
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
+    expect(result.current.payments).toEqual([]);
+    expect(result.current.isLoading).toBe(true);
+  });
+
+  it("keeps the latest deal response when the older request settles after unmount", async () => {
+    const older = deferred<ReturnType<typeof pageResponse>>();
+    const newer = deferred<ReturnType<typeof pageResponse>>();
+    mockApiGet
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+
+    const { result, rerender, unmount } = renderHook(
+      ({ dealId }: { dealId: string }) => usePaymentHistory({ dealId }),
+      { initialProps: { dealId: "deal-1" } },
+    );
+
+    act(() => {
+      rerender({ dealId: "deal-2" });
+    });
+    expect(result.current.isLoading).toBe(true);
+
+    await act(async () => {
+      newer.resolve(pageResponse([makePayment({ id: "newer", dealId: "deal-2" })]));
+      await newer.promise;
+    });
+    expect(result.current.payments[0].id).toBe("newer");
+
+    unmount();
+    await act(async () => {
+      older.resolve(pageResponse([makePayment({ id: "older", dealId: "deal-1" })]));
+      await older.promise;
+    });
+
+    expect(result.current.payments[0].id).toBe("newer");
   });
 });
