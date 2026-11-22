@@ -194,6 +194,7 @@ import { createAdminInspectionJobsRouter } from "./routes/adminInspectionJobs.js
 import { createGovernanceRouter } from "./routes/governance.js";
 import { createTenantSavedPropertiesRouter } from "./routes/tenantSavedProperties.js";
 import { createSupportRouter, createAdminSupportRouter } from "./routes/support.js";
+import { createLandlordPayoutScheduleRouter } from "./routes/landlordPayoutSchedule.js";
 
 import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
 import { createAdminFraudRouter } from "./routes/adminFraud.js";
@@ -765,6 +766,7 @@ export function createApp() {
   app.use("/api/v1/tenant/saved-properties", createTenantSavedPropertiesRouter());
   app.use("/api/v1/support", createSupportRouter());
   app.use("/api/v1/admin/support", createAdminSupportRouter());
+  app.use("/api/v1/landlord/payout-schedule", createLandlordPayoutScheduleRouter());
   app.use("/health", createHealthRouter(sorobanAdapter));
 
   // Global API Rate Limiting
@@ -919,6 +921,7 @@ export function createApp() {
     app.use("/api/tenant/saved-properties", createTenantSavedPropertiesRouter());
     app.use("/api/support", createSupportRouter());
     app.use("/api/admin/support", createAdminSupportRouter());
+    app.use("/api/landlord/payout-schedule", createLandlordPayoutScheduleRouter());
   }
 
   app.use("/api/v1/wallet", createWalletRouter(walletService));
