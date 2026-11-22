@@ -6221,6 +6221,52 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       description: Trigger job execution immediately
+  /api/landlord/analytics:
+    get:
+      summary: Landlord analytics for occupancy, revenue, payments and vacancy
+      description: 'Occupancy, expected and collected revenue, on-time, late and missed instalments, and vacancy metrics for the calling landlord''s own properties. Dates are YYYY-MM-DD in UTC, and both ends are inclusive. The window defaults to the last 12 months and may span at most 24. An empty portfolio returns zeroed arrays. A propertyId that is not one of the caller''s properties returns 404.'
+      operationId: getLandlordAnalytics
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: startDate
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+          example: '2026-01-01'
+      - name: endDate
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+          example: '2026-12-31'
+      - name: propertyId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Analytics for the window. The body is the bare object, not wrapped in an envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordAnalytics'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
   /api/landlord/payout-schedule:
     get:
       summary: Upcoming payouts, grouped by property and period
@@ -6829,6 +6875,68 @@ components:
         minimum: 1
       description: Governance proposal id (1-based, contracts/governance/src/lib.rs:188)
   schemas:
+    LandlordAnalytics:
+      type: object
+      required:
+      - occupancyTrend
+      - revenueBreakdown
+      - paymentTrends
+      - vacancyMetrics
+      properties:
+        occupancyTrend:
+          type: array
+          description: One point per calendar month in the window.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                description: YYYY-MM
+                example: '2026-03'
+              rate:
+                type: integer
+                minimum: 0
+                maximum: 100
+                description: Share of the landlord's properties occupied at some point in the month, as a percentage.
+        revenueBreakdown:
+          type: array
+          description: One point per calendar month in the window.
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+                description: YYYY-MM
+              expected:
+                type: number
+                description: Instalments due in the month.
+              collected:
+                type: number
+                description: Instalments paid in the month. Paid items with no timestamp count in their due month.
+        paymentTrends:
+          type: array
+          description: One point per due day that has an outcome. Unpaid instalments that are not yet due are left out.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                description: YYYY-MM-DD (the due day)
+              onTime:
+                type: integer
+              late:
+                type: integer
+              missed:
+                type: integer
+        vacancyMetrics:
+          type: object
+          properties:
+            averageTimeToFill:
+              type: integer
+              description: Mean days from a property becoming available to its deal starting, over filled vacancies. 0 when none have been filled.
+            currentVacancyCount:
+              type: integer
+              description: Properties with no occupancy now.
     LandlordPayoutStatus:
       type: string
       enum:
