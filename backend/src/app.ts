@@ -905,6 +905,10 @@ export function createApp() {
     );
     app.use("/api/tenant/payments", createTenantPaymentsRouter());
     app.use("/api/notifications", createNotificationsRouter());
+    app.use("/api/kyc", createKycRouter());
+    app.use("/api/tenant/onboarding", createTenantOnboardingRouter());
+    app.use("/api/listings", createListingsRouter());
+    app.use("/api/onboarding", createOnboardingRouter());
     app.use("/api/admin", createSettlementAdminRouter());
     app.use("/api/admin", createAdminRolesRouter());
   }
@@ -994,17 +998,18 @@ export function createApp() {
     "/api/v1/whistleblower/applications",
     createWhistleblowerApplicationsRouter(),
   );
-  app.use("/api/tenant/payments", createTenantPaymentsRouter());
-  app.use("/api/notifications", createNotificationsRouter());
+  app.use("/api/v1/tenant/payments", createTenantPaymentsRouter());
+  app.use("/api/v1/notifications", createNotificationsRouter());
   app.use("/api/admin", createSettlementAdminRouter());
   app.use("/api/admin", createAdminRolesRouter());
   app.use("/api/admin/disputes", createDisputeAdminRouter());
-  app.use("/api/kyc", createKycRouter());
-  app.use("/api/tenant/onboarding", createTenantOnboardingRouter());
-  app.use("/api/listings", createListingsRouter());
+  app.use("/api/v1/kyc", createKycRouter());
+  app.use("/api/v1/tenant/onboarding", createTenantOnboardingRouter());
+  app.use("/api/v1/listings", createListingsRouter());
   app.use("/api/v1", createListingApplicationsRouter());
+  app.use("/api/v1/webhooks/kyc", createKycWebhookRouter());
   app.use("/api/webhooks/kyc", createKycWebhookRouter());
-  app.use("/api/onboarding", createOnboardingRouter());
+  app.use("/api/v1/onboarding", createOnboardingRouter());
   app.use("/api", createTenantRatingCardRouter());
   app.use("/api", createInspectionJobsRouter());
   app.use("/api/admin", createAdminInspectionJobsRouter());

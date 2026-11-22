@@ -208,14 +208,14 @@ export interface CreateDisputeResponse {
 }
 
 export async function getMyDisputes(): Promise<GetMyDisputesResponse> {
-  return apiGet<GetMyDisputesResponse>("/api/tenant/payments/disputes");
+  return apiGet<GetMyDisputesResponse>("/api/v1/tenant/payments/disputes");
 }
 
 export async function createDispute(
   data: CreateDisputeRequest,
 ): Promise<CreateDisputeResponse> {
   return apiPost<CreateDisputeResponse>(
-    "/api/tenant/payments/disputes",
+    "/api/v1/tenant/payments/disputes",
     data,
   );
 }
@@ -271,20 +271,20 @@ export async function getPaymentHistory(params?: {
 }
 
 export async function getWalletBalance(): Promise<WalletBalanceResponse> {
-  return apiGet<WalletBalanceResponse>("/api/tenant/payments/wallet");
+  return apiGet<WalletBalanceResponse>("/api/v1/tenant/payments/wallet");
 }
 
 export async function initiateQuickPay(
   data: QuickPayRequest,
 ): Promise<QuickPayResponse> {
-  return apiPost<QuickPayResponse>("/api/tenant/payments/quick-pay", data);
+  return apiPost<QuickPayResponse>("/api/v1/tenant/payments/quick-pay", data);
 }
 
 export async function initiateWalletTopUp(
   data: WalletTopUpRequest,
 ): Promise<WalletTopUpResponse> {
   return apiPost<WalletTopUpResponse>(
-    "/api/tenant/payments/wallet/topup",
+    "/api/v1/tenant/payments/wallet/topup",
     data,
   );
 }

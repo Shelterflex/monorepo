@@ -272,7 +272,7 @@ export async function listPropertyApplications(
   listingId: string,
 ): Promise<LandlordApplicationsListResponse> {
   return apiGet<LandlordApplicationsListResponse>(
-    `/api/listings/${listingId}/applications`,
+    `/api/v1/listings/${listingId}/applications`,
   );
 }
 

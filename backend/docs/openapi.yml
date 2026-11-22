@@ -2134,12 +2134,12 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
-  /api/tenant/payments/disputes:
+  /api/v1/tenant/payments/disputes:
     post:
       summary: File a payment dispute
       description: |
         Files a payment dispute against a deal. Asynchronously (via the
-        outbox/worker pattern — never synchronously in this request) enqueues
+        outbox/worker pattern - never synchronously in this request) enqueues
         an on-chain `challenge_rent_release` call against deal_escrow for the
         given `dealId`, halting any pending rent release within its challenge
         window. If deal_escrow has no pending release for this deal (or the
