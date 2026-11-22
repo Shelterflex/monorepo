@@ -20,6 +20,7 @@ members = [
   "allowlist_registry",
   "bond_collateral",
   "governance",
+  "schema_registry",
 ]
 
 [profile.release]
