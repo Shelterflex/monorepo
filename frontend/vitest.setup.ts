@@ -11,4 +11,21 @@ afterEach(() => {
     localStorage.clear();
   }
   vi.restoreAllMocks();
+  vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+
+  return {
+    ...actual,
+    usePathname: vi.fn(() => "/"),
+    useSearchParams: vi.fn(() => new URLSearchParams()),
+    useRouter: vi.fn(() => ({
+      back: vi.fn(),
+      forward: vi.fn(),
+      refresh: vi.fn(),
+      push: vi.fn(),
+      replace: vi.fn(),
+      prefetch: vi.fn(),
+    })),
+  };
+});
 });
