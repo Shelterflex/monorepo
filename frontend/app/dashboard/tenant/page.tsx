@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Heart,
   Receipt,
+  FileText,
 } from "lucide-react";
 import { PropertyCard } from "@/components/property-card";
 import useAuthStore from "@/store/useAuthStore";
@@ -446,6 +447,14 @@ export default function TenantDashboard() {
                         Your Landlord
                       </p>
                     </div>
+                  </div>
+                  <div className="mt-4 pt-2">
+                    <Button asChild variant="outline" className="w-full border-3 border-foreground font-bold shadow-[2px_2px_0px_0px_rgba(26,26,26,1)]">
+                      <Link href="/dashboard/tenant/lease">
+                        <FileText className="mr-2 h-4 w-4" />
+                        View Lease Details
+                      </Link>
+                    </Button>
                   </div>
                 </Card>
               ) : (

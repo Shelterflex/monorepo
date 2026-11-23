@@ -29,6 +29,13 @@ import { Switch } from "@/components/ui/switch";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { LandlordSidebar } from "@/components/landlord/LandlordSidebar";
 import { apiFetch } from "@/lib/api";
+import {
+  listPayouts,
+  type LandlordPayout,
+  formatCurrency,
+  formatPayoutDate,
+  PAYOUT_STATUS_LABELS,
+} from "@/lib/landlordPayoutApi";
 
 export default function LandlordSettingsPage() {
   const [activeTab, setActiveTab] = useState<
@@ -37,6 +44,11 @@ export default function LandlordSettingsPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [payouts, setPayouts] = useState<LandlordPayout[]>([]);
+  const [payoutsLoading, setPayoutsLoading] = useState(true);
+  const [payoutsError, setPayoutsError] = useState<string | null>(null);
+  const [payoutPage, setPayoutPage] = useState(1);
+  const [payoutTotalPages, setPayoutTotalPages] = useState(1);
   const [settings, setSettings] = useState({
     profile: {
       fullName: "",
@@ -72,6 +84,23 @@ export default function LandlordSettingsPage() {
     };
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    const fetchPayouts = async () => {
+      setPayoutsLoading(true);
+      setPayoutsError(null);
+      try {
+        const result = await listPayouts({ page: payoutPage, pageSize: 10 });
+        setPayouts(result.data);
+        setPayoutTotalPages(result.pagination.totalPages);
+      } catch (err: any) {
+        setPayoutsError(err?.message || "Failed to load payment history");
+      } finally {
+        setPayoutsLoading(false);
+      }
+    };
+    fetchPayouts();
+  }, [payoutPage]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -392,6 +421,74 @@ export default function LandlordSettingsPage() {
                       {saving ? "Saving..." : "Update Bank Details"}
                     </Button>
                   </div>
+                </div>
+
+                <div className="border-t-2 border-foreground pt-6">
+                  <h3 className="font-bold mb-4">Payment History</h3>
+                  {payoutsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : payoutsError ? (
+                    <p className="text-sm text-destructive py-4">{payoutsError}</p>
+                  ) : payouts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4">No payment history yet.</p>
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        {payouts.map((payout) => (
+                          <div
+                            key={payout.id}
+                            className="flex items-center justify-between border-b border-foreground/10 pb-3"
+                          >
+                            <div>
+                              <span className="text-muted-foreground">
+                                {formatPayoutDate(payout.periodStart)} - {formatPayoutDate(payout.periodEnd)}
+                              </span>
+                              <p className="text-xs text-muted-foreground">{payout.propertyName}</p>
+                            </div>
+                            <span className="font-bold">{formatCurrency(payout.netAmount, payout.currency)}</span>
+                            <span className={`border-2 border-foreground px-2 py-0.5 text-sm font-bold ${
+                              payout.status === "completed"
+                                ? "bg-secondary"
+                                : payout.status === "failed"
+                                  ? "bg-destructive/20 text-destructive"
+                                  : payout.status === "delayed"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-muted"
+                            }`}>
+                              {PAYOUT_STATUS_LABELS[payout.status] || payout.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {payoutTotalPages > 1 && (
+                        <div className="mt-4 flex items-center justify-between">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={payoutPage <= 1}
+                            onClick={() => setPayoutPage((p) => p - 1)}
+                            className="border-2 border-foreground"
+                          >
+                            Previous
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            Page {payoutPage} of {payoutTotalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={payoutPage >= payoutTotalPages}
+                            onClick={() => setPayoutPage((p) => p + 1)}
+                            className="border-2 border-foreground"
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </Card>
