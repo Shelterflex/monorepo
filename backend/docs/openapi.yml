@@ -7151,6 +7151,1441 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         default:
           $ref: '#/components/responses/Error'
+  /api/admin/quota/usage/{userId}:
+    get:
+      summary: Get quota usage for a user
+      description: Returns current minute and day counters, effective limits, reset timestamps and the near-limit flag. The endpoint query selects a single endpoint key; `all` is used when it is omitted.
+      operationId: getAdminQuotaUsage
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User id whose quota is inspected
+        schema:
+          type: string
+          minLength: 1
+      - name: endpoint
+        in: query
+        description: Endpoint key, or omitted for the aggregate `all` bucket
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current quota usage
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - userId
+                - endpoint
+                - minuteUsage
+                - dayUsage
+                - minuteLimit
+                - dayLimit
+                - minuteReset
+                - dayReset
+                - nearLimit
+                properties:
+                  userId:
+                    type: string
+                  endpoint:
+                    type: string
+                    description: Echoes the requested endpoint, or `all` when none was supplied
+                  minuteUsage:
+                    type: integer
+                    minimum: 0
+                  dayUsage:
+                    type: integer
+                    minimum: 0
+                  minuteLimit:
+                    type: integer
+                    minimum: 0
+                    description: Effective per-minute limit after any override
+                  dayLimit:
+                    type: integer
+                    minimum: 0
+                  minuteReset:
+                    type: integer
+                    format: int64
+                    description: Unix epoch milliseconds at which the minute window resets
+                  dayReset:
+                    type: integer
+                    format: int64
+                    description: Unix epoch milliseconds at which the day window resets
+                  nearLimit:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/quota/overrides/{userId}:
+    get:
+      summary: List active quota overrides for a user
+      description: Returns every unexpired override stored for the user across endpoint keys.
+      operationId: getAdminQuotaOverrides
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User id whose overrides are listed
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Active quota overrides
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - overrides
+                properties:
+                  overrides:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QuotaOverride'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/quota/override:
+    post:
+      summary: Create a quota override
+      description: Creates an elevated per-minute limit for a user and endpoint. The handler passes an `override` field to `res.json`, but `setOverride` returns void, so the serialized success body contains only `success`.
+      operationId: createAdminQuotaOverride
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - userId
+              - elevatedLimit
+              - reason
+              properties:
+                userId:
+                  type: string
+                  minLength: 1
+                endpoint:
+                  type: string
+                  description: Endpoint key; omitted means all endpoints
+                elevatedLimit:
+                  type: integer
+                  minimum: 1
+                  maximum: 10000
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                expiresAt:
+                  type: integer
+                  format: int64
+                  description: Optional Unix epoch milliseconds at which the override expires
+      responses:
+        '201':
+          description: Override created. `override` is omitted from the actual response body.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Remove a quota override
+      description: Removes the override for the given user and endpoint key; omitting `endpoint` removes the aggregate `all` override.
+      operationId: removeAdminQuotaOverride
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - userId
+              properties:
+                userId:
+                  type: string
+                  minLength: 1
+                endpoint:
+                  type: string
+                  description: Endpoint key; omitted means all endpoints
+      responses:
+        '200':
+          description: Override removed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/quota/stats:
+    get:
+      summary: Get aggregate quota statistics
+      description: Returns the total and active override counts plus the near-limit user count. `nearLimitUsers` is currently always zero.
+      operationId: getAdminQuotaStats
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Aggregate quota statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - totalOverrides
+                - activeOverrides
+                - nearLimitUsers
+                properties:
+                  totalOverrides:
+                    type: integer
+                    minimum: 0
+                  activeOverrides:
+                    type: integer
+                    minimum: 0
+                  nearLimitUsers:
+                    type: integer
+                    minimum: 0
+                    description: Simplified counter that is currently always zero
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/quota/reset:
+    post:
+      summary: Reset a user's quota counter
+      description: Resets the burst rate-limit key for a user and optional endpoint.
+      operationId: resetAdminQuota
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - userId
+              properties:
+                userId:
+                  type: string
+                  minLength: 1
+                endpoint:
+                  type: string
+                  description: Endpoint key; omitted resets the aggregate user key
+      responses:
+        '200':
+          description: Quota counter reset
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/underwriting/config:
+    get:
+      summary: Get underwriting rule configuration
+      description: Returns the rule engine configuration currently held by the underwriting service singleton.
+      operationId: getAdminUnderwritingConfig
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Current rule configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    $ref: '#/components/schemas/UnderwritingRuleConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      summary: Update underwriting rule configuration
+      description: Applies a partial config update and audit-logs the configuration before and after the change. Unknown fields are rejected.
+      operationId: updateAdminUnderwritingConfig
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnderwritingRuleConfigUpdate'
+      responses:
+        '200':
+          description: Updated rule configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    $ref: '#/components/schemas/UnderwritingRuleConfig'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/underwriting/decisions:
+    get:
+      summary: List underwriting decision traces
+      description: Lists decision traces newest first with optional decision filtering and offset pagination. The response echoes the parsed `limit` and `offset` values rather than the page-based `Pagination` component.
+      operationId: listAdminUnderwritingDecisions
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: decision
+        in: query
+        description: Decision filter; values outside the enum are ignored
+        schema:
+          type: string
+          enum:
+          - APPROVE
+          - REVIEW
+          - REJECT
+      - name: limit
+        in: query
+        description: Page size parsed with parseInt; defaults to 50
+        schema:
+          type: integer
+          minimum: 0
+          default: 50
+      - name: offset
+        in: query
+        description: Offset parsed with parseInt; defaults to 0
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      responses:
+        '200':
+          description: A page of underwriting decision traces
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - total
+                - limit
+                - offset
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UnderwritingDecisionTrace'
+                  total:
+                    type: integer
+                    minimum: 0
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/underwriting/decisions/{traceId}:
+    get:
+      summary: Get an underwriting decision trace
+      description: Returns one decision trace by its trace id.
+      operationId: getAdminUnderwritingDecision
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: traceId
+        in: path
+        required: true
+        description: Underwriting decision trace id
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Decision trace
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    $ref: '#/components/schemas/UnderwritingDecisionTrace'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/underwriting/decisions/application/{applicationId}:
+    get:
+      summary: List decision traces for an application
+      description: Returns all traces recorded for an application, newest first, or an empty array when none exist.
+      operationId: listAdminUnderwritingDecisionsByApplication
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        description: Tenant application id
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Decision traces for the application
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UnderwritingDecisionTrace'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/underwriting/decisions/user/{userId}:
+    get:
+      summary: List decision traces for a user
+      description: Returns all traces recorded for a user, newest first, or an empty array when none exist.
+      operationId: listAdminUnderwritingDecisionsByUser
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User id
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Decision traces for the user
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UnderwritingDecisionTrace'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/underwriting/evaluate/{applicationId}:
+    post:
+      summary: Re-run underwriting evaluation for an application
+      description: Runs the underwriting pipeline again, records a new decision trace and returns the evaluation result. A missing application currently surfaces as an unhandled 500 rather than a 404.
+      operationId: evaluateAdminUnderwritingApplication
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        description: Tenant application id to evaluate
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Strict object; unknown fields are rejected
+              properties:
+                paymentHistory:
+                  type: object
+                  required:
+                  - onTimePaymentRate
+                  - missedPayments
+                  - totalPayments
+                  properties:
+                    onTimePaymentRate:
+                      type: number
+                      minimum: 0
+                      maximum: 1
+                      description: Rate between 0 and 1
+                    missedPayments:
+                      type: integer
+                      minimum: 0
+                    totalPayments:
+                      type: integer
+                      minimum: 0
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  data:
+                    type: object
+                    required:
+                    - applicationId
+                    - userId
+                    - decision
+                    - result
+                    - evaluatedAt
+                    properties:
+                      applicationId:
+                        type: string
+                      userId:
+                        type: string
+                      decision:
+                        $ref: '#/components/schemas/UnderwritingDecision'
+                      result:
+                        $ref: '#/components/schemas/UnderwritingResult'
+                      creditScore:
+                        type: object
+                        description: Present when onboarding verification data is available
+                        required:
+                        - id
+                        - tenantId
+                        - score
+                        - band
+                        - incomeScore
+                        - employmentScore
+                        - bankStatementScore
+                        - alternativeDataScore
+                        - computedAt
+                        - version
+                        - dataVersion
+                        properties:
+                          id:
+                            type: string
+                          tenantId:
+                            type: string
+                          score:
+                            type: integer
+                            minimum: 0
+                            maximum: 1000
+                          band:
+                            type: string
+                            enum:
+                            - A
+                            - B
+                            - C
+                            - D
+                            - F
+                          incomeScore:
+                            type: number
+                          employmentScore:
+                            type: number
+                          bankStatementScore:
+                            type: number
+                          alternativeDataScore:
+                            type: number
+                            nullable: true
+                          computedAt:
+                            type: string
+                            format: date-time
+                          version:
+                            type: string
+                          dataVersion:
+                            type: string
+                      creditBandDecision:
+                        type: string
+                        enum:
+                        - approve
+                        - manual_review
+                        - reject
+                      externalCreditScore:
+                        type: number
+                        description: Declared by the service output type but not populated by the current evaluator
+                      aiRiskScore:
+                        $ref: '#/components/schemas/AiRiskScoreResult'
+                      evaluatedAt:
+                        type: string
+                        format: date-time
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/contract-access/permission:
+    get:
+      summary: Check a contract-access permission
+      description: Checks whether an address holds a numeric permission in the contract_access contract. The current query schema validates the raw string with `z.number()`, so a numeric query value is rejected with 400 and no value can currently pass validation.
+      operationId: getAdminContractAccessPermission
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: address
+        in: query
+        required: true
+        description: Stellar address to check
+        schema:
+          type: string
+      - name: permission
+        in: query
+        required: true
+        description: Permission number; currently impossible to supply in a way that passes the uncoerced query validation
+        schema:
+          type: integer
+          minimum: 0
+      responses:
+        '200':
+          description: Permission check result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - address
+                - permission
+                - hasPermission
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  address:
+                    type: string
+                  permission:
+                    type: integer
+                    minimum: 0
+                  hasPermission:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/contract-access/role:
+    get:
+      summary: Get a contract-access role
+      description: Returns the numeric role assigned to an address, or null when the adapter reports no role.
+      operationId: getAdminContractAccessRole
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: address
+        in: query
+        required: true
+        description: Stellar address whose role is read
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Role lookup result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - address
+                - role
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  address:
+                    type: string
+                  role:
+                    type: integer
+                    minimum: 0
+                    maximum: 3
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/contract-access/roles:
+    get:
+      summary: List assigned contract-access roles
+      description: Returns all addresses with a role in the contract_access contract.
+      operationId: listAdminContractAccessRoles
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Assigned roles
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - roles
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  roles:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - address
+                      - role
+                      properties:
+                        address:
+                          type: string
+                        role:
+                          type: integer
+                          minimum: 0
+                          maximum: 3
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/contract-access/confirm-assign-role:
+    post:
+      summary: Confirm a pending role assignment
+      description: Confirms a previously proposed role assignment. This operation is not multisig-gated and executes directly.
+      operationId: confirmAdminContractAccessRoleAssignment
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - subject
+              properties:
+                subject:
+                  type: string
+      responses:
+        '200':
+          description: Role assignment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/contract-access/delegate-permission:
+    post:
+      summary: Delegate a contract-access permission
+      description: Delegates a numeric permission to another address. This operation is not multisig-gated and executes directly.
+      operationId: delegateAdminContractPermission
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - delegatee
+              - permission
+              properties:
+                delegatee:
+                  type: string
+                permission:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Permission delegated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/contract-access/propose-assign-role:
+    post:
+      summary: Propose assigning a contract-access role
+      description: With a multisig configured, files a proposal for the multisig to call `propose_assign_role` and returns 202. Otherwise the admin-signed call is made directly and returns 200. Requires a recently created session when authenticated by bearer token.
+      operationId: proposeAdminContractAccessRoleAssignment
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - subject
+              - role
+              properties:
+                subject:
+                  type: string
+                role:
+                  type: integer
+                  minimum: 0
+                  maximum: 3
+      responses:
+        '200':
+          description: Role assignment proposed directly without a multisig
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '202':
+          description: Role assignment proposal filed with the multisig and not yet executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMultisigProposalResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/circuit-breaker/status:
+    get:
+      summary: Get deal-escrow circuit-breaker status
+      description: Returns the `isFrozen()` value together with the adapter state. The state object also contains its own `frozen` field, so the value is currently returned twice.
+      operationId: getAdminCircuitBreakerStatus
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Current circuit-breaker status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - frozen
+                - state
+                properties:
+                  frozen:
+                    type: boolean
+                    description: Result of `isFrozen()`
+                  state:
+                    type: object
+                    required:
+                    - frozen
+                    - drainProposed
+                    - recoveryDelay
+                    properties:
+                      frozen:
+                        type: boolean
+                        description: Duplicate of the top-level `frozen` value
+                      drainProposed:
+                        type: boolean
+                      drainDestination:
+                        type: string
+                      recoveryDelay:
+                        type: integer
+                        minimum: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/circuit-breaker/freeze:
+    post:
+      summary: Freeze the deal-escrow contract
+      description: Emergency stop for the deal-escrow contract. This operation is deliberately not multisig-gated and executes immediately.
+      operationId: freezeAdminCircuitBreaker
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Deal escrow frozen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/circuit-breaker/propose-drain:
+    post:
+      summary: Propose a deal-escrow drain
+      description: With a multisig configured, files a proposal for the multisig to call `propose_drain` and returns 202; `drainHash` is then required. Otherwise `proposeDrain(destination)` is called directly and returns 200. Requires a recently created session when authenticated by bearer token.
+      operationId: proposeAdminCircuitBreakerDrain
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - destination
+              properties:
+                destination:
+                  type: string
+                  description: Destination address for the drained funds
+                drainHash:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{64}$'
+                  description: BytesN<32> hash as 64 hex characters; required when a multisig is configured
+      responses:
+        '200':
+          description: Drain proposed directly without a multisig
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '202':
+          description: Drain proposal filed with the multisig and not yet executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMultisigProposalResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/circuit-breaker/execute-drain:
+    post:
+      summary: Execute a proposed deal-escrow drain
+      description: With a multisig configured, files a proposal for the multisig to call `execute_drain` and returns 202; `drainHash` is then required. Otherwise `executeDrain()` is called directly and returns 200. Requires a recently created session when authenticated by bearer token.
+      operationId: executeAdminCircuitBreakerDrain
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                drainHash:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{64}$'
+                  description: BytesN<32> hash as 64 hex characters; required when a multisig is configured
+      responses:
+        '200':
+          description: Drain executed directly without a multisig
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '202':
+          description: Drain execution proposal filed with the multisig and not yet executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMultisigProposalResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/circuit-breaker/set-recovery-delay:
+    post:
+      summary: Set the circuit-breaker recovery delay
+      description: Sets the deal-escrow recovery delay in seconds. This operation is not multisig-gated and executes directly.
+      operationId: setAdminCircuitBreakerRecoveryDelay
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - delaySeconds
+              properties:
+                delaySeconds:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Recovery delay set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTransactionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/timelock/transactions:
+    get:
+      summary: List tracked timelock transactions
+      description: Returns every governance transaction tracked by the timelock indexer, newest first.
+      operationId: listAdminTimelockTransactions
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Tracked timelock transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - transactions
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - txHash
+                      - target
+                      - functionName
+                      - args
+                      - eta
+                      - status
+                      - ledger
+                      - createdAt
+                      - updatedAt
+                      properties:
+                        txHash:
+                          type: string
+                        target:
+                          type: string
+                        functionName:
+                          type: string
+                        args:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: true
+                        eta:
+                          type: integer
+                          description: Unix epoch seconds at which the transaction becomes executable
+                        status:
+                          type: string
+                          enum:
+                          - queued
+                          - executed
+                          - cancelled
+                        ledger:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+                        updatedAt:
+                          type: string
+                          format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/timelock/cancel:
+    post:
+      summary: Cancel a queued timelock transaction
+      description: Cancels a timelock transaction by its indexed hash. The route does not check the index before calling the adapter.
+      operationId: cancelAdminTimelockTransaction
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - txHash
+              properties:
+                txHash:
+                  type: string
+                  minLength: 1
+                  description: Hash of the queued timelock transaction
+      responses:
+        '200':
+          description: Transaction cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - stellarTxHash
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  stellarTxHash:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/admin/timelock/execute:
+    post:
+      summary: Execute a queued timelock transaction
+      description: Looks up the transaction by hash, requires it to be `queued`, executes it through the Soroban adapter and returns the resulting Stellar transaction hash. Requires a recently created session when authenticated by bearer token.
+      operationId: executeAdminTimelockTransaction
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - txHash
+              properties:
+                txHash:
+                  type: string
+                  minLength: 1
+                  description: Hash of the queued timelock transaction
+      responses:
+        '200':
+          description: Transaction executed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - stellarTxHash
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+                  stellarTxHash:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /api/v1/tenant/lease/current:
+    get:
+      summary: Get tenant's current active lease
+      description: Returns the tenant's current active lease summary including property details, payment progress, and next payment date. Returns null if no active lease exists.
+      operationId: getTenantCurrentLease
+      tags:
+        - Tenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current lease summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TenantCurrentLease'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/tenant/deals/{dealId}/lease:
+    get:
+      summary: Get detailed lease information for a specific deal
+      description: 'Returns full lease details for a specific deal including property details, lease terms, landlord information, and payment progress. Tenant-scoped: returns 404 if the deal doesn''t belong to the tenant.'
+      operationId: getTenantLeaseDetails
+      tags:
+        - Tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The deal ID to fetch lease details for
+      responses:
+        '200':
+          description: Lease details
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TenantLeaseDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/admin/secrets/status:
     get:
       summary: Get the status of all managed secrets
@@ -7194,6 +8629,7 @@ paths:
                   message: Internal server error
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/secrets/history:
     get:
       summary: Get the secret rotation history
@@ -7242,6 +8678,7 @@ paths:
                   message: Internal server error
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/secrets/rotate:
     post:
       summary: Rotate a managed secret
@@ -7306,6 +8743,7 @@ paths:
                   message: 'Failed to rotate secret: webhook_secret'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/secrets/reload:
     post:
       summary: Reload secrets from the environment
@@ -7344,6 +8782,7 @@ paths:
                   message: Internal server error
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/webhook-replay/preview:
     post:
       summary: Preview a webhook replay
@@ -7377,6 +8816,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/webhook-replay/execute:
     post:
       summary: Execute a webhook replay
@@ -7410,6 +8850,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/webhook-replay/history:
     get:
       summary: List webhook replay attempts
@@ -7449,6 +8890,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/webhook-replay/events/{id}:
     get:
       summary: Get a stored webhook event
@@ -7484,6 +8926,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/indexer/metrics:
     get:
       summary: Get receipt indexer metrics
@@ -7513,6 +8956,7 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/indexer/pause:
     post:
       summary: Pause the receipt indexer
@@ -7549,6 +8993,7 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/indexer/resume:
     post:
       summary: Resume the receipt indexer
@@ -7585,6 +9030,7 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/risk/frozen-users:
     get:
       summary: List frozen user accounts
@@ -7607,6 +9053,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/risk/{userId}:
     get:
       summary: Get a user's risk state and balances
@@ -7636,6 +9083,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/risk/{userId}/freeze:
     post:
       summary: Freeze a user account
@@ -7681,6 +9129,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/risk/{userId}/unfreeze:
     post:
       summary: Unfreeze a user account
@@ -7726,6 +9175,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/whistleblower-applications:
     get:
       summary: List whistleblower applications
@@ -7788,6 +9238,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/whistleblower-applications/{applicationId}:
     get:
       summary: Get a whistleblower application
@@ -7830,6 +9281,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/whistleblower-applications/{applicationId}/approve:
     post:
       summary: Approve a whistleblower application
@@ -7891,6 +9343,7 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/whistleblower-applications/{applicationId}/reject:
     post:
       summary: Reject a whistleblower application
@@ -7957,6 +9410,7 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/analytics/overview:
     get:
       summary: Get platform KPI overview
@@ -8022,6 +9476,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/analytics/deal-funnel:
     get:
       summary: Get deal funnel counts
@@ -8075,6 +9530,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/analytics/revenue:
     get:
       summary: Get platform revenue time series
@@ -8143,6 +9599,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/analytics/listing-quality:
     get:
       summary: Get listing quality metrics
@@ -8192,6 +9649,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/audit:
     get:
       summary: Search the audit log
@@ -8280,6 +9738,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/audit-logs:
     get:
       summary: View audit log entries
@@ -8379,6 +9838,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/audit/verify:
     get:
       summary: Verify audit log hash-chain integrity
@@ -8419,6 +9879,7 @@ paths:
                 $ref: '#/components/schemas/AuditChainVerification'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/users/{userId}/sessions:
     get:
       summary: List a user's active sessions
@@ -8509,6 +9970,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/users/{userId}/sessions/{sessionId}:
     delete:
       summary: Revoke one of a user's sessions
@@ -8564,6 +10026,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/roles:
     get:
       summary: List roles and their permissions
@@ -8596,6 +10059,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/users/{userId}/roles:
     post:
       summary: Grant a role to a user
@@ -8648,6 +10112,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/users/{userId}/roles/{roleId}:
     delete:
       summary: Revoke a role from a user
@@ -8693,700 +10158,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
-  /api/admin/quota/override:
-    post:
-      summary: Create a quota override
-      description: Raises a user's rate limit, globally or for one endpoint, until an optional expiry. Writes an audit entry (`ADMIN_QUOTA_OVERRIDE_CREATED`).
-      operationId: createAdminQuotaOverride
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - userId
-              - elevatedLimit
-              - reason
-              properties:
-                userId:
-                  type: string
-                  minLength: 1
-                endpoint:
-                  type: string
-                  description: Limit only this endpoint. Omit to apply to all endpoints.
-                elevatedLimit:
-                  type: integer
-                  minimum: 1
-                  maximum: 10000
-                reason:
-                  type: string
-                  minLength: 1
-                  maxLength: 500
-                expiresAt:
-                  type: integer
-                  description: Expiry as epoch milliseconds. Omit for no expiry.
-      responses:
-        '201':
-          description: Override created
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - override
-                properties:
-                  success:
-                    type: boolean
-                  override:
-                    $ref: '#/components/schemas/QuotaOverride'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-    delete:
-      summary: Remove a quota override
-      description: Removes the override for a user, or for one endpoint when `endpoint` is given. Writes an audit entry (`ADMIN_QUOTA_OVERRIDE_REMOVED`).
-      operationId: removeAdminQuotaOverride
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - userId
-              properties:
-                userId:
-                  type: string
-                  minLength: 1
-                endpoint:
-                  type: string
-      responses:
-        '200':
-          description: Override removed
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/quota/overrides/{userId}:
-    get:
-      summary: List a user's quota overrides
-      description: Returns every quota override currently stored for a user.
-      operationId: listAdminUserQuotaOverrides
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: userId
-        in: path
-        required: true
-        description: User ID
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Overrides
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - overrides
-                properties:
-                  overrides:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/QuotaOverride'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/quota/stats:
-    get:
-      summary: Get quota statistics
-      description: Returns how many overrides exist and are active, and how many users are near their limit. Returns zeros if the store cannot be read.
-      operationId: getAdminQuotaStats
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      responses:
-        '200':
-          description: Quota statistics
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuotaStats'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/quota/usage/{userId}:
-    get:
-      summary: Get a user's quota usage
-      description: Returns the current minute and day usage against limits for a user, for one endpoint or for all endpoints.
-      operationId: getAdminUserQuotaUsage
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: userId
-        in: path
-        required: true
-        description: User ID
-        schema:
-          type: string
-      - name: endpoint
-        in: query
-        required: false
-        description: Restrict to one endpoint. Defaults to `all`.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Quota usage
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuotaUsage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/quota/reset:
-    post:
-      summary: Reset a user's rate-limit counter
-      description: Clears the burst rate-limit counter for a user, optionally for one endpoint. Writes an audit entry (`ADMIN_QUOTA_RESET`).
-      operationId: resetAdminUserQuota
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - userId
-              properties:
-                userId:
-                  type: string
-                  minLength: 1
-                endpoint:
-                  type: string
-      responses:
-        '200':
-          description: Counter reset
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/circuit-breaker/status:
-    get:
-      summary: Get circuit breaker state
-      description: Returns whether the deal escrow contract is frozen, and the breaker's on-chain state.
-      operationId: getAdminCircuitBreakerStatus
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      responses:
-        '200':
-          description: Circuit breaker state
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - frozen
-                - state
-                properties:
-                  frozen:
-                    type: boolean
-                  state:
-                    type: object
-                    additionalProperties: true
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/circuit-breaker/freeze:
-    post:
-      summary: Freeze the deal escrow contract
-      description: Emergency control that freezes the deal escrow contract. Takes no body. Writes an audit entry (`ADMIN_CIRCUIT_BREAKER_FREEZE`).
-      operationId: freezeAdminCircuitBreaker
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      responses:
-        '200':
-          description: Contract frozen
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/circuit-breaker/propose-drain:
-    post:
-      summary: Propose draining funds
-      description: 'Proposes draining the deal escrow to `destination`. Requires a fresh sign-in (within 5 minutes). When a multisig is configured the proposal is filed with it and the response is 202; `drainHash` is then required.'
-      operationId: proposeAdminCircuitBreakerDrain
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - destination
-              properties:
-                destination:
-                  type: string
-                  description: Stellar address that receives the funds
-                drainHash:
-                  type: string
-                  pattern: ^[0-9a-fA-F]{64}$
-                  description: 32-byte hash as 64 hex characters. Required when a multisig is configured.
-      responses:
-        '200':
-          description: Drain proposed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '202':
-          description: Drain proposal filed with the multisig; not executed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/circuit-breaker/execute-drain:
-    post:
-      summary: Execute the proposed drain
-      description: 'Executes a previously proposed drain. Requires a fresh sign-in (within 5 minutes). With a multisig configured the execution is filed as a proposal and the response is 202; `drainHash` is then required.'
-      operationId: executeAdminCircuitBreakerDrain
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                drainHash:
-                  type: string
-                  pattern: ^[0-9a-fA-F]{64}$
-                  description: 32-byte hash as 64 hex characters. Required when a multisig is configured.
-      responses:
-        '200':
-          description: Drain executed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '202':
-          description: Execution filed as a multisig proposal; not executed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/circuit-breaker/set-recovery-delay:
-    post:
-      summary: Set the circuit breaker recovery delay
-      description: Sets how long the breaker waits before recovery. Writes an audit entry (`ADMIN_CIRCUIT_BREAKER_SET_RECOVERY_DELAY`).
-      operationId: setAdminCircuitBreakerRecoveryDelay
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - delaySeconds
-              properties:
-                delaySeconds:
-                  type: integer
-                  minimum: 0
-      responses:
-        '200':
-          description: Recovery delay set
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/contract-access/propose-assign-role:
-    post:
-      summary: Propose a contract role assignment
-      description: 'Proposes giving `subject` a role on the contract access controller. Requires a fresh sign-in (within 5 minutes). With a multisig configured the proposal is filed and the response is 202.'
-      operationId: proposeAdminContractRoleAssignment
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - subject
-              - role
-              properties:
-                subject:
-                  type: string
-                  description: Stellar address to receive the role
-                role:
-                  type: integer
-                  minimum: 0
-                  maximum: 3
-      responses:
-        '200':
-          description: Role assignment proposed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '202':
-          description: Proposal filed with the multisig; not executed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/contract-access/confirm-assign-role:
-    post:
-      summary: Confirm a pending role assignment
-      description: Confirms a role assignment previously proposed for `subject`. Requires a fresh sign-in (within 5 minutes).
-      operationId: confirmAdminContractRoleAssignment
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - subject
-              properties:
-                subject:
-                  type: string
-      responses:
-        '200':
-          description: Role assignment confirmed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/contract-access/delegate-permission:
-    post:
-      summary: Delegate a permission
-      description: Delegates one numbered permission on the contract access controller to another address.
-      operationId: delegateAdminContractPermission
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - delegatee
-              - permission
-              properties:
-                delegatee:
-                  type: string
-                  description: Stellar address receiving the permission
-                permission:
-                  type: integer
-                  minimum: 0
-      responses:
-        '200':
-          description: Permission delegated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminTxResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/contract-access/role:
-    get:
-      summary: Get the contract role of an address
-      description: Returns the role number stored for an address, or `null` when none is assigned.
-      operationId: getAdminContractAccessRole
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: address
-        in: query
-        required: true
-        description: Stellar address
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Role of the address
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - address
-                - role
-                properties:
-                  success:
-                    type: boolean
-                  address:
-                    type: string
-                  role:
-                    type: integer
-                    nullable: true
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/contract-access/permission:
-    get:
-      summary: Check a contract permission
-      description: Reports whether an address holds a numbered permission on the contract access controller.
-      operationId: checkAdminContractAccessPermission
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: address
-        in: query
-        required: true
-        schema:
-          type: string
-      - name: permission
-        in: query
-        required: true
-        description: Permission number
-        schema:
-          type: integer
-          minimum: 0
-      responses:
-        '200':
-          description: Permission check result
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - address
-                - permission
-                - hasPermission
-                properties:
-                  success:
-                    type: boolean
-                  address:
-                    type: string
-                  permission:
-                    type: integer
-                  hasPermission:
-                    type: boolean
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/contract-access/roles:
-    get:
-      summary: List contract role assignments
-      description: Lists every address that holds a role on the contract access controller.
-      operationId: listAdminContractAccessRoles
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      responses:
-        '200':
-          description: Role assignments
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - roles
-                properties:
-                  success:
-                    type: boolean
-                  roles:
-                    type: array
-                    items:
-                      type: object
-                      required:
-                      - address
-                      - role
-                      properties:
-                        address:
-                          type: string
-                        role:
-                          type: integer
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
+
   /api/admin/contract-events:
     get:
       summary: List indexed contract events
@@ -9483,6 +10255,7 @@ paths:
                   message: Database not available
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/data-retention/pending-purge:
     get:
       summary: Count records pending purge
@@ -9520,6 +10293,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/data-retention/purge:
     post:
       summary: Purge expired records
@@ -9563,6 +10337,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/flags:
     get:
       summary: Get operational feature flags
@@ -9603,6 +10378,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/ledger-reconciliation/mismatches:
     get:
       summary: List reconciliation mismatches
@@ -9673,6 +10449,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/ledger-reconciliation/aging:
     get:
       summary: Get the mismatch aging report
@@ -9718,6 +10495,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/ledger-reconciliation/mismatches/{id}/close:
     post:
       summary: Close a reconciliation mismatch
@@ -9753,6 +10531,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/ledger-reconciliation/run:
     post:
       summary: Run reconciliation now
@@ -9785,6 +10564,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/ledger-reconciliation/ledger-events:
     post:
       summary: Ingest an internal ledger event
@@ -9822,6 +10602,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/ledger-reconciliation/provider-events:
     post:
       summary: Ingest a provider settlement event
@@ -9859,6 +10640,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/reconciliation/deposits:
     get:
       summary: List deposits for reconciliation
@@ -9920,6 +10702,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/reconciliation/wallets:
     get:
       summary: List wallet balances for reconciliation
@@ -9976,6 +10759,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/reconciliation/conversions:
     get:
       summary: List conversions for reconciliation
@@ -10035,6 +10819,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/reconciliation/outbox:
     get:
       summary: List outbox items for reconciliation
@@ -10095,6 +10880,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/settlement-dlq:
     get:
       summary: List settlement dead-letter entries
@@ -10134,6 +10920,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/settlement-dlq/{id}/replay:
     post:
       summary: Replay a settlement dead-letter entry
@@ -10175,123 +10962,7 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         default:
           $ref: '#/components/responses/Error'
-  /api/admin/timelock/transactions:
-    get:
-      summary: List timelocked governance transactions
-      description: Returns every governance transaction the timelock indexer tracks, with its status and earliest execution time.
-      operationId: listAdminTimelockTransactions
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      responses:
-        '200':
-          description: Tracked transactions
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - transactions
-                properties:
-                  transactions:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TimelockTransaction'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/timelock/execute:
-    post:
-      summary: Execute a queued timelock transaction
-      description: Executes a queued transaction whose execution time has passed. Requires a fresh sign-in (within 5 minutes).
-      operationId: executeAdminTimelockTransaction
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - txHash
-              properties:
-                txHash:
-                  type: string
-      responses:
-        '200':
-          description: Transaction executed
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - stellarTxHash
-                properties:
-                  success:
-                    type: boolean
-                  stellarTxHash:
-                    type: string
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/timelock/cancel:
-    post:
-      summary: Cancel a queued timelock transaction
-      description: Cancels a queued governance transaction.
-      operationId: cancelAdminTimelockTransaction
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - txHash
-              properties:
-                txHash:
-                  type: string
-      responses:
-        '200':
-          description: Transaction cancelled
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - stellarTxHash
-                properties:
-                  success:
-                    type: boolean
-                  stellarTxHash:
-                    type: string
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
+
   /api/admin/transaction-ledger:
     get:
       summary: List the transaction ledger
@@ -10418,6 +11089,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/transaction-ledger/export:
     get:
       summary: Export the transaction ledger as CSV
@@ -10492,361 +11164,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
-  /api/admin/underwriting/decisions:
-    get:
-      summary: List underwriting decision traces
-      description: Lists stored underwriting decision traces, newest first, optionally filtered by decision.
-      operationId: listAdminUnderwritingDecisions
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: decision
-        in: query
-        required: false
-        description: Ignored when not one of the listed values
-        schema:
-          type: string
-          enum:
-          - APPROVE
-          - REVIEW
-          - REJECT
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 50
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 0
-      responses:
-        '200':
-          description: Decision traces
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                - total
-                - limit
-                - offset
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/UnderwritingDecisionTrace'
-                  total:
-                    type: integer
-                  limit:
-                    type: integer
-                  offset:
-                    type: integer
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/underwriting/decisions/{traceId}:
-    get:
-      summary: Get an underwriting decision trace
-      description: Returns one decision trace, including every triggered rule.
-      operationId: getAdminUnderwritingDecision
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: traceId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Decision trace
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    $ref: '#/components/schemas/UnderwritingDecisionTrace'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/underwriting/decisions/application/{applicationId}:
-    get:
-      summary: List decision traces for an application
-      description: Returns every decision trace recorded for one tenant application, newest first.
-      operationId: listAdminUnderwritingDecisionsByApplication
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: applicationId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Decision traces
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/UnderwritingDecisionTrace'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/underwriting/decisions/user/{userId}:
-    get:
-      summary: List decision traces for a user
-      description: Returns every decision trace recorded for one user, newest first.
-      operationId: listAdminUnderwritingDecisionsByUser
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: userId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Decision traces
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/UnderwritingDecisionTrace'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/underwriting/evaluate/{applicationId}:
-    post:
-      summary: Re-run underwriting for an application
-      description: Evaluates a tenant application with the current rule configuration, optionally with supplied payment history and metadata, and records a decision trace.
-      operationId: evaluateAdminUnderwritingApplication
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      parameters:
-      - name: applicationId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              properties:
-                paymentHistory:
-                  type: object
-                  required:
-                  - onTimePaymentRate
-                  - missedPayments
-                  - totalPayments
-                  properties:
-                    onTimePaymentRate:
-                      type: number
-                      minimum: 0
-                      maximum: 1
-                      description: Rate between 0 and 1
-                    missedPayments:
-                      type: integer
-                      minimum: 0
-                    totalPayments:
-                      type: integer
-                      minimum: 0
-                metadata:
-                  type: object
-                  additionalProperties: true
-      responses:
-        '200':
-          description: Evaluation result
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    $ref: '#/components/schemas/UnderwritingEvaluation'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/admin/underwriting/config:
-    get:
-      summary: Get the underwriting rule configuration
-      description: Returns the active scoring thresholds and rule set.
-      operationId: getAdminUnderwritingConfig
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      responses:
-        '200':
-          description: Rule configuration
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    $ref: '#/components/schemas/UnderwritingRuleConfig'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-    put:
-      summary: Update the underwriting rule configuration
-      description: Replaces the supplied thresholds and rules in the scoring engine. Only the fields sent are changed. Writes an audit entry (`ADMIN_UNDERWRITING_CONFIG_UPDATED`) with the before and after state.
-      operationId: updateAdminUnderwritingConfig
-      tags:
-      - Admin
-      security:
-      - bearerAdminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              properties:
-                version:
-                  type: string
-                approveThreshold:
-                  type: number
-                  minimum: 0
-                  maximum: 100
-                reviewThreshold:
-                  type: number
-                  minimum: 0
-                  maximum: 100
-                rules:
-                  type: array
-                  items:
-                    type: object
-                    required:
-                    - ruleId
-                    - ruleName
-                    - weight
-                    - enabled
-                    - severity
-                    additionalProperties: false
-                    properties:
-                      ruleId:
-                        type: string
-                        minLength: 1
-                      ruleName:
-                        type: string
-                        minLength: 1
-                      weight:
-                        type: integer
-                        minimum: 0
-                      enabled:
-                        type: boolean
-                      threshold:
-                        type: number
-                      severity:
-                        type: string
-                        enum:
-                        - critical
-                        - warning
-                        - info
-      responses:
-        '200':
-          description: Updated configuration
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - success
-                - data
-                properties:
-                  success:
-                    type: boolean
-                  data:
-                    $ref: '#/components/schemas/UnderwritingRuleConfig'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
+
   /api/admin/kyc/bulk:
     post:
       summary: Bulk approve or reject KYC submissions
@@ -10895,6 +11213,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/disputes/bulk:
     post:
       summary: Bulk resolve or reject payment disputes
@@ -10943,6 +11262,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/listings/bulk:
     post:
       summary: Bulk activate, deactivate or delete listings
@@ -10989,6 +11309,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/landlords/{id}/verify:
     post:
       summary: Set a landlord's verification level
@@ -11046,6 +11367,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+
   /api/admin/wallets/rewrap:
     post:
       summary: Re-wrap custodial wallet keys
@@ -11125,78 +11447,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '501':
           $ref: '#/components/responses/NotImplemented'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/v1/tenant/lease/current:
-    get:
-      summary: Get tenant's current active lease
-      description: Returns the tenant's current active lease summary including property details, payment progress, and next payment date. Returns null if no active lease exists.
-      operationId: getTenantCurrentLease
-      tags:
-        - Tenant
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Current lease summary
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - success
-                  - data
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    $ref: '#/components/schemas/TenantCurrentLease'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
-  /api/v1/tenant/deals/{dealId}/lease:
-    get:
-      summary: Get detailed lease information for a specific deal
-      description: 'Returns full lease details for a specific deal including property details, lease terms, landlord information, and payment progress. Tenant-scoped: returns 404 if the deal doesn''t belong to the tenant.'
-      operationId: getTenantLeaseDetails
-      tags:
-        - Tenant
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: dealId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: The deal ID to fetch lease details for
-      responses:
-        '200':
-          description: Lease details
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - success
-                  - data
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    $ref: '#/components/schemas/TenantLeaseDetails'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
 
@@ -11282,6 +11532,7 @@ components:
         updatedAt:
           type: string
           format: date-time
+
     UserRiskDetail:
       type: object
       required:
@@ -11305,6 +11556,7 @@ components:
               type: number
             totalNgn:
               type: number
+
     FrozenUsersResponse:
       type: object
       required:
@@ -11316,6 +11568,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserRiskState'
+
     FreezeUserRequest:
       type: object
       required:
@@ -11330,12 +11583,14 @@ components:
         notes:
           type: string
           description: Free-text operator note stored on the risk state.
+
     UnfreezeUserRequest:
       type: object
       properties:
         notes:
           type: string
           description: Free-text operator note stored on the risk state.
+
     WebhookEvent:
       type: object
       required:
@@ -11380,6 +11635,7 @@ components:
           - failed
         processingError:
           type: string
+
     WebhookReplayRequest:
       type: object
       required:
@@ -11406,6 +11662,7 @@ components:
           type: string
           minLength: 1
           description: Why the replay is needed. Required and recorded in the replay history.
+
     WebhookReplayPreview:
       type: object
       required:
@@ -11418,6 +11675,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WebhookEvent'
+
     WebhookReplayAttempt:
       type: object
       required:
@@ -11465,6 +11723,7 @@ components:
         completedAt:
           type: string
           format: date-time
+
     IndexerMetrics:
       type: object
       required:
@@ -11495,6 +11754,7 @@ components:
           type: boolean
         isPaused:
           type: boolean
+
     SecretStatus:
       type: object
       description: Status of one managed secret, keyed by secret name.
@@ -11511,6 +11771,7 @@ components:
         lastRotation:
           type: string
           format: date-time
+
     SecretRotationEvent:
       type: object
       required:
@@ -11539,6 +11800,7 @@ components:
           type: string
         transitionWindowMs:
           type: integer
+
     WhistleblowerApplicationAdmin:
       type: object
       required:
@@ -11605,6 +11867,7 @@ components:
           type: array
           items:
             type: string
+
     AuditTrailEntry:
       type: object
       description: Entry returned by `GET /api/admin/audit`.
@@ -11639,6 +11902,7 @@ components:
         createdAt:
           type: string
           format: date-time
+
     AuditLogEntry:
       type: object
       description: Entry returned by `GET /api/admin/audit-logs`.
@@ -11669,6 +11933,7 @@ components:
         createdAt:
           type: string
           format: date-time
+
     AuditChainVerification:
       type: object
       required:
@@ -11685,6 +11950,7 @@ components:
         error:
           type: string
           nullable: true
+
     AdminRole:
       type: object
       required:
@@ -11704,6 +11970,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminRolePermission'
+
     AdminRolePermission:
       type: object
       required:
@@ -11719,6 +11986,7 @@ components:
         action:
           type: string
           example: trigger
+
     AdminTxResponse:
       type: object
       required:
@@ -11746,6 +12014,7 @@ components:
               example: pending
             note:
               type: string
+
     IndexedContractEvent:
       type: object
       required:
@@ -11780,55 +12049,7 @@ components:
         createdAt:
           type: string
           format: date-time
-    UnderwritingDecisionTrace:
-      type: object
-      required:
-      - id
-      - applicationId
-      - userId
-      - decision
-      - totalScore
-      - maxScore
-      - triggeredRules
-      - decisionReason
-      - ruleConfigVersion
-      - evaluatedAt
-      - createdAt
-      properties:
-        id:
-          type: string
-        applicationId:
-          type: string
-        userId:
-          type: string
-        decision:
-          type: string
-          enum:
-          - APPROVE
-          - REVIEW
-          - REJECT
-        totalScore:
-          type: number
-        maxScore:
-          type: number
-        triggeredRules:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        decisionReason:
-          type: string
-        ruleConfigVersion:
-          type: string
-        aiRiskScore:
-          type: object
-          additionalProperties: true
-        evaluatedAt:
-          type: string
-          format: date-time
-        createdAt:
-          type: string
-          format: date-time
+
     UnderwritingEvaluation:
       type: object
       required:
@@ -11864,47 +12085,7 @@ components:
         evaluatedAt:
           type: string
           format: date-time
-    UnderwritingRuleConfig:
-      type: object
-      properties:
-        version:
-          type: string
-        approveThreshold:
-          type: number
-          minimum: 0
-          maximum: 100
-        reviewThreshold:
-          type: number
-          minimum: 0
-          maximum: 100
-        rules:
-          type: array
-          items:
-            type: object
-            required:
-            - ruleId
-            - ruleName
-            - weight
-            - enabled
-            - severity
-            properties:
-              ruleId:
-                type: string
-              ruleName:
-                type: string
-              weight:
-                type: integer
-                minimum: 0
-              enabled:
-                type: boolean
-              threshold:
-                type: number
-              severity:
-                type: string
-                enum:
-                - critical
-                - warning
-                - info
+
     ReconciliationDepositItem:
       type: object
       required:
@@ -11947,6 +12128,7 @@ components:
           enum:
           - ngn_wallet
           - staking
+
     ReconciliationConversionItem:
       type: object
       required:
@@ -11998,6 +12180,7 @@ components:
         failureReason:
           type: string
           nullable: true
+
     ReconciliationWalletItem:
       type: object
       required:
@@ -12016,6 +12199,7 @@ components:
           type: number
         isFrozen:
           type: boolean
+
     ReconciliationOutboxItem:
       type: object
       required:
@@ -12048,6 +12232,7 @@ components:
         updatedAt:
           type: string
           format: date-time
+
     LedgerMismatch:
       type: object
       required:
@@ -12114,6 +12299,7 @@ components:
         updatedAt:
           type: string
           format: date-time
+
     LedgerEventIngestRequest:
       type: object
       required:
@@ -12146,6 +12332,7 @@ components:
         occurredAt:
           type: string
           format: date-time
+
     ProviderEventIngestRequest:
       type: object
       required:
@@ -12182,6 +12369,7 @@ components:
         occurredAt:
           type: string
           format: date-time
+
     TransactionLedgerEntry:
       type: object
       required:
@@ -12225,34 +12413,7 @@ components:
         updated_at:
           type: string
           format: date-time
-    QuotaOverride:
-      type: object
-      required:
-      - userId
-      - elevatedLimit
-      - reason
-      - createdBy
-      - createdAt
-      properties:
-        userId:
-          type: string
-        endpoint:
-          type: string
-          description: Omitted when the override applies to every endpoint.
-        elevatedLimit:
-          type: integer
-          minimum: 1
-          maximum: 10000
-        reason:
-          type: string
-        createdBy:
-          type: string
-        createdAt:
-          type: integer
-          description: Epoch milliseconds.
-        expiresAt:
-          type: integer
-          description: Epoch milliseconds. Omitted for overrides that never expire.
+
     QuotaUsage:
       type: object
       required:
@@ -12284,6 +12445,7 @@ components:
           type: integer
         nearLimit:
           type: boolean
+
     QuotaStats:
       type: object
       required:
@@ -12297,6 +12459,7 @@ components:
           type: integer
         nearLimitUsers:
           type: integer
+
     TimelockTransaction:
       type: object
       required:
@@ -12336,6 +12499,7 @@ components:
         updatedAt:
           type: string
           format: date-time
+
     BulkActionResult:
       type: object
       required:
@@ -12370,6 +12534,7 @@ components:
               reason:
                 type: string
                 example: Record not found
+
     SettlementDlqItem:
       type: object
       required:
@@ -12400,9 +12565,9 @@ components:
           type: string
           format: date-time
           nullable: true
+
     LandlordAnalytics:
       type: object
-      description: Landlord analytics (#1958) — returned bare, not wrapped.
       required:
       - occupancyTrend
       - revenueBreakdown
@@ -12411,46 +12576,43 @@ components:
       properties:
         occupancyTrend:
           type: array
+          description: One point per calendar month in the window.
           items:
             type: object
-            required:
-            - date
-            - rate
             properties:
               date:
                 type: string
-                description: Month key, e.g. 2026-01.
+                description: YYYY-MM
+                example: '2026-03'
               rate:
                 type: integer
-                description: Occupancy rate as a whole percentage (0-100).
+                minimum: 0
+                maximum: 100
+                description: Share of the landlord's properties occupied at some point in the month, as a percentage.
         revenueBreakdown:
           type: array
+          description: One point per calendar month in the window.
           items:
             type: object
-            required:
-            - month
-            - expected
-            - collected
             properties:
               month:
                 type: string
+                description: YYYY-MM
               expected:
-                type: integer
+                type: number
+                description: Instalments due in the month.
               collected:
-                type: integer
+                type: number
+                description: Instalments paid in the month. Paid items with no timestamp count in their due month.
         paymentTrends:
           type: array
+          description: One point per due day that has an outcome. Unpaid instalments that are not yet due are left out.
           items:
             type: object
-            required:
-            - date
-            - onTime
-            - late
-            - missed
             properties:
               date:
                 type: string
-                format: date
+                description: YYYY-MM-DD (the due day)
               onTime:
                 type: integer
               late:
@@ -12459,16 +12621,13 @@ components:
                 type: integer
         vacancyMetrics:
           type: object
-          required:
-          - averageTimeToFill
-          - currentVacancyCount
           properties:
             averageTimeToFill:
               type: integer
-              description: Mean days between a property becoming available and being
-                filled.
+              description: Mean days from a property becoming available to its deal starting, over filled vacancies. 0 when none have been filled.
             currentVacancyCount:
               type: integer
+              description: Properties with no occupancy now.
     LandlordPayoutStatus:
       type: string
       enum:
@@ -14815,6 +14974,7 @@ components:
               - LISTING_ALREADY_RENTED
               - SOROBAN_ERROR
               - INTERNAL_ERROR
+              - SERVICE_UNAVAILABLE
               - REAUTH_REQUIRED
               - NOT_IMPLEMENTED
               example: NOT_FOUND
@@ -15967,7 +16127,291 @@ components:
           type: string
           description: Total staked snapshotted at proposal creation, used for quorum
           example: '1000000'
+    QuotaOverride:
+      type: object
+      required:
+      - userId
+      - elevatedLimit
+      - reason
+      - createdBy
+      - createdAt
+      properties:
+        userId:
+          type: string
+          minLength: 1
+        endpoint:
+          type: string
+          description: Omitted when the override applies to all endpoints
+        elevatedLimit:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        createdBy:
+          type: string
+        createdAt:
+          type: integer
+          format: int64
+          description: Unix epoch milliseconds when the override was created
+        expiresAt:
+          type: integer
+          format: int64
+          description: Optional Unix epoch milliseconds when the override expires
+    AdminTransactionResult:
+      type: object
+      required:
+      - success
+      - txHash
+      - message
+      properties:
+        success:
+          type: boolean
+          enum:
+          - true
+        txHash:
+          type: string
+          description: Stellar transaction hash from the direct call or multisig proposal
+        message:
+          type: string
+    AdminMultisigProposalResult:
+      allOf:
+      - $ref: '#/components/schemas/AdminTransactionResult'
+      - type: object
+        required:
+        - multisig
+        properties:
+          multisig:
+            $ref: '#/components/schemas/MultisigGateResult'
+    MultisigGateResult:
+      type: object
+      required:
+      - proposalId
+      - contractId
+      - status
+      - note
+      properties:
+        proposalId:
+          type: integer
+          nullable: true
+          description: Proposal id, or null when the adapter did not return one
+        contractId:
+          type: string
+          description: Id of the multisig contract that holds the proposal
+        status:
+          type: string
+          enum:
+          - pending
+        note:
+          type: string
+          description: Signers must approve and one must execute the proposal before it takes effect
+    AiRiskScoreResult:
+      type: object
+      required:
+      - score
+      - confidence
+      - riskBand
+      - contributingFactors
+      - modelVersion
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        riskBand:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - very_high
+        contributingFactors:
+          type: array
+          items:
+            type: string
+        modelVersion:
+          type: string
+    UnderwritingDecision:
+      type: string
+      enum:
+      - APPROVE
+      - REVIEW
+      - REJECT
+    UnderwritingRuleEvaluation:
+      type: object
+      required:
+      - ruleId
+      - ruleName
+      - passed
+      - score
+      - weight
+      - reason
+      properties:
+        ruleId:
+          type: string
+        ruleName:
+          type: string
+        passed:
+          type: boolean
+        score:
+          type: number
+        weight:
+          type: number
+        reason:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    UnderwritingResult:
+      type: object
+      required:
+      - decision
+      - totalScore
+      - maxScore
+      - triggeredRules
+      - decisionReason
+      - evaluatedAt
+      properties:
+        decision:
+          $ref: '#/components/schemas/UnderwritingDecision'
+        totalScore:
+          type: number
+        maxScore:
+          type: number
+        triggeredRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnderwritingRuleEvaluation'
+        decisionReason:
+          type: string
+        evaluatedAt:
+          type: string
+          format: date-time
+    UnderwritingRule:
+      type: object
+      required:
+      - ruleId
+      - ruleName
+      - weight
+      - enabled
+      - severity
+      properties:
+        ruleId:
+          type: string
+          minLength: 1
+        ruleName:
+          type: string
+          minLength: 1
+        weight:
+          type: integer
+          minimum: 0
+        enabled:
+          type: boolean
+        threshold:
+          type: number
+        severity:
+          type: string
+          enum:
+          - critical
+          - warning
+          - info
+    UnderwritingRuleConfig:
+      type: object
+      required:
+      - version
+      - rules
+      - approveThreshold
+      - reviewThreshold
+      properties:
+        version:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnderwritingRule'
+        approveThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+        reviewThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+    UnderwritingRuleConfigUpdate:
+      type: object
+      description: Strict object. Unknown fields are rejected with 400.
+      properties:
+        version:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnderwritingRule'
+        approveThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+        reviewThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+    UnderwritingDecisionTrace:
+      type: object
+      required:
+      - id
+      - applicationId
+      - userId
+      - decision
+      - totalScore
+      - maxScore
+      - triggeredRules
+      - decisionReason
+      - ruleConfigVersion
+      - evaluatedAt
+      - createdAt
+      properties:
+        id:
+          type: string
+          description: Trace id, prefixed with `TRACE-` in the in-memory store
+        applicationId:
+          type: string
+        userId:
+          type: string
+        decision:
+          $ref: '#/components/schemas/UnderwritingDecision'
+        totalScore:
+          type: number
+        maxScore:
+          type: number
+        triggeredRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnderwritingRuleEvaluation'
+        decisionReason:
+          type: string
+        ruleConfigVersion:
+          type: string
+        aiRiskScore:
+          $ref: '#/components/schemas/AiRiskScoreResult'
+        evaluatedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
   responses:
+    NotImplemented:
+      description: Operation unavailable in the current adapter or multisig configuration. Contract-access routes return NOT_IMPLEMENTED; circuit-breaker routes currently return INTERNAL_ERROR with HTTP 501.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Forbidden:
       description: Caller lacks the required permission
       content:
@@ -16073,16 +16517,6 @@ components:
             error:
               code: UNAUTHORIZED
               message: Authentication required
-    NotImplemented:
-      description: Operation is not available on this deployment or adapter
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              code: NOT_IMPLEMENTED
-              message: Not available on this deployment
   securitySchemes:
     bearerAuth:
       type: http

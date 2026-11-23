@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { validate } from '../middleware/validate.js'
-import { idempotency } from '../middleware/idempotency.js'
+import { durableApiIdempotency } from '../middleware/durableApiIdempotency.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/rbac.js'
 import { confirmDepositSchema, type ConfirmDepositRequest } from '../schemas/deposit.js'
@@ -27,7 +27,7 @@ export function createDepositsRouter(conversionService: ConversionService) {
     '/confirm',
     authenticateToken,
     requirePermission('deposits', 'confirm'),
-    idempotency(),
+    durableApiIdempotency(),
     validate(confirmDepositSchema),
     async (req: Request, res: Response, next: NextFunction) => {
       try {

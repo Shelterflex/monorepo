@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import request from 'supertest'
 import express from 'express'
-import { randomUUID } from 'node:crypto'
 import { createTenantRatingCardRouter } from './tenantRatingCard.js'
 import { errorHandler } from '../middleware/errorHandler.js'
 import { DealStatus } from '../models/deal.js'
@@ -34,7 +33,7 @@ vi.mock('../models/dealStore.js', () => ({
 }))
 
 function addDeal(status: DealStatus): FakeDeal {
-  const deal: FakeDeal = { dealId: randomUUID(), tenantId: randomUUID(), landlordId: randomUUID(), status }
+  const deal: FakeDeal = { dealId: globalThis.crypto.randomUUID(), tenantId: globalThis.crypto.randomUUID(), landlordId: globalThis.crypto.randomUUID(), status }
   dealsById.set(deal.dealId, deal)
   return deal
 }
@@ -72,14 +71,14 @@ describe('tenant rating card (#2051)', () => {
 
     const stranger = await request(app)
       .post(`/api/v1/deals/${deal.dealId}/tenant-rating`)
-      .set('x-test-user', randomUUID())
+      .set('x-test-user', globalThis.crypto.randomUUID())
       .send(ratingBody(deal.dealId))
     expect(stranger.status).toBe(403)
 
     const landlord = await request(app)
       .post(`/api/v1/deals/${deal.dealId}/tenant-rating`)
       .set('x-test-user', deal.landlordId)
-      .send({ ...ratingBody(deal.dealId), tenantId: randomUUID() })
+      .send({ ...ratingBody(deal.dealId), tenantId: globalThis.crypto.randomUUID() })
     expect(landlord.status).toBe(201)
 
     const card = await request(app).get('/api/v1/tenant/rating-card').set('x-test-user', deal.tenantId)
@@ -145,7 +144,7 @@ describe('tenant rating card (#2051)', () => {
 
     const otherTenant = await request(app)
       .delete(`/api/v1/tenant/rating-card/share/${share.body.data.id}`)
-      .set('x-test-user', randomUUID())
+      .set('x-test-user', globalThis.crypto.randomUUID())
     expect(otherTenant.status).toBe(404)
 
     const owner = await request(app)
@@ -180,7 +179,7 @@ describe('tenant rating card (#2051)', () => {
   it('rejects a share lifetime outside 1 to 30 days', async () => {
     const res = await request(app)
       .post('/api/v1/tenant/rating-card/share')
-      .set('x-test-user', randomUUID())
+      .set('x-test-user', globalThis.crypto.randomUUID())
       .send({ ttlDays: 31 })
     expect(res.status).toBe(400)
   })

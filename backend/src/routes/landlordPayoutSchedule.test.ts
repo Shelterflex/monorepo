@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
-import { randomUUID } from "node:crypto";
 import { createLandlordPayoutScheduleRouter } from "./landlordPayoutSchedule.js";
 import { landlordPayoutScheduleStore } from "../models/landlordPayoutScheduleStore.js";
 import { errorHandler } from "../middleware/errorHandler.js";
@@ -42,7 +41,7 @@ vi.mock("../middleware/auth.js", () => ({
 
 function payout(landlordId: string, overrides: Partial<LandlordPayout> = {}): LandlordPayout {
   return {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     landlordId,
     propertyId: "property-1",
     propertyName: "Lekki Flat",
@@ -84,7 +83,7 @@ describe("landlord payout schedule (#2055)", () => {
 
   beforeEach(() => {
     app = buildApp();
-    landlord = randomUUID();
+    landlord = globalThis.crypto.randomUUID();
     profiles.clear();
   });
 
@@ -106,11 +105,11 @@ describe("landlord payout schedule (#2055)", () => {
   describe("schedule", () => {
     it("groups upcoming payouts by property, leaves out completed ones, and summarises", async () => {
       await landlordPayoutScheduleStore.insertIfAbsent(
-        payout(landlord, { id: randomUUID(), propertyId: "p-lekki", propertyName: "Lekki Flat" }),
+        payout(landlord, { id: globalThis.crypto.randomUUID(), propertyId: "p-lekki", propertyName: "Lekki Flat" }),
       );
       await landlordPayoutScheduleStore.insertIfAbsent(
         payout(landlord, {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           propertyId: "p-yaba",
           propertyName: "Yaba Studio",
           grossAmount: 50000,
@@ -120,7 +119,7 @@ describe("landlord payout schedule (#2055)", () => {
         }),
       );
       await landlordPayoutScheduleStore.insertIfAbsent(
-        payout(landlord, { id: randomUUID(), propertyId: "p-lekki", propertyName: "Lekki Flat", status: "completed" }),
+        payout(landlord, { id: globalThis.crypto.randomUUID(), propertyId: "p-lekki", propertyName: "Lekki Flat", status: "completed" }),
       );
 
       const res = await request(app)
@@ -143,7 +142,7 @@ describe("landlord payout schedule (#2055)", () => {
     });
 
     it("shows a landlord nothing that belongs to another landlord", async () => {
-      await landlordPayoutScheduleStore.insertIfAbsent(payout(randomUUID()));
+      await landlordPayoutScheduleStore.insertIfAbsent(payout(globalThis.crypto.randomUUID()));
 
       const res = await request(app)
         .get("/api/landlord/payout-schedule")
@@ -160,7 +159,7 @@ describe("landlord payout schedule (#2055)", () => {
       for (let i = 0; i < 3; i += 1) {
         await landlordPayoutScheduleStore.insertIfAbsent(
           payout(landlord, {
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             scheduledDate: `2026-03-0${i + 1}T09:00:00.000Z`,
             netAmount: 1, // a wrong stored value that must not leak into the response
           }),
@@ -180,7 +179,7 @@ describe("landlord payout schedule (#2055)", () => {
     });
 
     it("returns one payout to its landlord, with net computed", async () => {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       await landlordPayoutScheduleStore.insertIfAbsent(payout(landlord, { id }));
 
       const res = await request(app)
@@ -192,15 +191,15 @@ describe("landlord payout schedule (#2055)", () => {
     });
 
     it("returns 404 for another landlord's payout, the same as for a missing one", async () => {
-      const id = randomUUID();
-      await landlordPayoutScheduleStore.insertIfAbsent(payout(randomUUID(), { id }));
+      const id = globalThis.crypto.randomUUID();
+      await landlordPayoutScheduleStore.insertIfAbsent(payout(globalThis.crypto.randomUUID(), { id }));
 
       const foreign = await request(app)
         .get(`/api/landlord/payout-schedule/${id}`)
         .set("x-test-user", landlord)
         .expect(404);
       const missing = await request(app)
-        .get(`/api/landlord/payout-schedule/${randomUUID()}`)
+        .get(`/api/landlord/payout-schedule/${globalThis.crypto.randomUUID()}`)
         .set("x-test-user", landlord)
         .expect(404);
 

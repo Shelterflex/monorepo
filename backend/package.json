@@ -15,7 +15,7 @@
     "openapi:validate": "redocly lint docs/openapi.yml",
     "openapi:preview": "redocly preview-docs docs/openapi.yml",
     "test": "vitest run",
-    "test:ci": "vitest run --exclude 'src/soroban/**/*.test.ts' --exclude 'src/routes/webhooks.test.ts' --exclude 'src/routes/wallet.test.ts' --exclude 'src/routes/stakingPositionReal.test.ts' --exclude 'src/routes/stakingQuote.test.ts' --exclude 'src/routes/session.test.ts' --exclude 'src/routes/ngnWallet.test.ts'",
+    "test:ci": "vitest run --exclude 'src/soroban/**/*.test.ts' --exclude 'src/routes/webhooks.test.ts' --exclude 'src/routes/wallet.test.ts' --exclude 'src/routes/stakingPositionReal.test.ts' --exclude 'src/routes/stakingQuote.test.ts' --exclude 'src/routes/ngnWallet.test.ts'",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run src/routes/criticalFlows.e2e.test.ts",

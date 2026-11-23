@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../app.js'
 import { outboxStore } from '../outbox/store.js'
+import { _resetDurableIdempotencyMemory } from '../services/durableIdempotencyService.js'
 
 // Mock authenticateToken to bypass authentication for functional tests
 vi.mock('../middleware/auth.js', () => ({
@@ -32,6 +33,7 @@ describe('POST /api/payments/confirm', () => {
   const app = createApp()
 
   beforeEach(async () => {
+    _resetDurableIdempotencyMemory()
     await outboxStore.clear()
   })
 
@@ -151,5 +153,81 @@ describe('POST /api/payments/confirm', () => {
       expect(response.status).toBeGreaterThanOrEqual(200)
       expect(response.status).toBeLessThan(300)
     }
+  })
+
+  describe('durable idempotency for payments confirm', () => {
+    it('replays a confirm response with the same key without creating a second outbox item', async () => {
+      const payload = {
+        ...basePayload,
+        externalRef: 'pi_durable_replay_001',
+      }
+
+      const res1 = await request(app)
+        .post('/api/payments/confirm')
+        .set('x-idempotency-key', 'pay-key-001')
+        .send(payload)
+
+      expect(res1.status).toBeGreaterThanOrEqual(200)
+      expect(res1.status).toBeLessThan(300)
+      const countAfterFirst = (await outboxStore.listPending()).length
+
+      const res2 = await request(app)
+        .post('/api/payments/confirm')
+        .set('x-idempotency-key', 'pay-key-001')
+        .send(payload)
+
+      expect(res2.status).toBe(res1.status)
+      expect(res2.headers['x-idempotent-replay']).toBe('true')
+      expect(res2.body.outboxId).toBe(res1.body.outboxId)
+      expect(res2.body.txId).toBe(res1.body.txId)
+      const countAfterSecond = (await outboxStore.listPending()).length
+      expect(countAfterSecond).toBe(countAfterFirst)
+    })
+
+    it('rejects the same key with a different body (409 CONFLICT)', async () => {
+      const payload = {
+        ...basePayload,
+        externalRef: 'pi_durable_conflict_001',
+      }
+
+      await request(app)
+        .post('/api/payments/confirm')
+        .set('x-idempotency-key', 'pay-key-conflict-001')
+        .send(payload)
+
+      const conflictRes = await request(app)
+        .post('/api/payments/confirm')
+        .set('x-idempotency-key', 'pay-key-conflict-001')
+        .send({ ...payload, amountUsdc: '500.00' })
+        .expect(409)
+
+      expect(conflictRes.body.error.code).toBe('CONFLICT')
+      expect(conflictRes.body.error.message).toMatch(/different request payload/)
+    })
+
+    it('handles concurrent duplicate requests rejecting one with 409 REQUEST_IN_FLIGHT', async () => {
+      const payload = {
+        ...basePayload,
+        externalRef: 'pi_durable_concurrent_001',
+      }
+
+      const [resA, resB] = await Promise.all([
+        request(app)
+          .post('/api/payments/confirm')
+          .set('x-idempotency-key', 'pay-key-concurrent-001')
+          .send(payload),
+        request(app)
+          .post('/api/payments/confirm')
+          .set('x-idempotency-key', 'pay-key-concurrent-001')
+          .send(payload),
+      ])
+
+      const statuses = [resA.status, resB.status].sort()
+      expect(statuses[0]).toBeGreaterThanOrEqual(200)
+      expect(statuses[0]).toBeLessThan(300)
+      expect(statuses[1]).toBe(409)
+      const rejected = resA.status === 409 ? resA : resB
+      expect(rejected.body.error.code).toBe('REQUEST_IN_FLIGHT')
+    })
   })
 })

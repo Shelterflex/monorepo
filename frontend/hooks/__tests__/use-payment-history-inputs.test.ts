@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePaymentHistory } from "../usePaymentHistory";
 import type { PaymentHistoryItem } from "@/lib/tenantApi";
 
@@ -54,9 +54,22 @@ function response(
   };
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe("usePaymentHistory input and callback behavior", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("progresses from loading to success and refetches when dealId changes", async () => {
@@ -129,6 +142,40 @@ describe("usePaymentHistory input and callback behavior", () => {
     expect(result.current.payments.map((payment) => payment.id)).toEqual([
       "p1",
       "p2",
+    ]);
+  });
+
+  it("does not append a loadMore response that settles after unmount", async () => {
+    const first = deferred<ReturnType<typeof response>>();
+    const second = deferred<ReturnType<typeof response>>();
+    mockApiGet
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const { result, unmount } = renderHook(() =>
+      usePaymentHistory({ dealId: "deal-1" }),
+    );
+    await act(async () => {
+      first.resolve(response([makePayment("p1", "deal-1")], 1, 2));
+      await first.promise;
+    });
+
+    expect(result.current.hasMore).toBe(true);
+
+    act(() => {
+      void result.current.loadMore();
+    });
+    unmount();
+
+    await act(async () => {
+      second.resolve(response([makePayment("p2", "deal-1")], 2));
+      await second.promise;
+      await Promise.resolve();
+    });
+
+    expect(mockApiGet).toHaveBeenCalledTimes(2);
+    expect(result.current.payments.map((payment) => payment.id)).toEqual([
+      "p1",
     ]);
   });
 });
