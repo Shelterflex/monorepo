@@ -76,6 +76,9 @@ export function createStakingRouter(
         if (amountNgn > env.QUOTE_MAX_AMOUNT_NGN) {
           throw new AppError(ErrorCode.VALIDATION_ERROR, 400, 'Quote amount exceeds maximum')
         }
+        const expiryMs = process.env.QUOTE_EXPIRY_MS !== undefined
+          ? Number(process.env.QUOTE_EXPIRY_MS)
+          : env.QUOTE_EXPIRY_MS
         const quote = await quoteStore.create({
           userId,
           amountNgn,
@@ -83,7 +86,7 @@ export function createStakingRouter(
           fxRateNgnPerUsdc: env.FX_RATE_NGN_PER_USDC,
           feePercent: env.QUOTE_FEE_PERCENT,
           slippagePercent: env.QUOTE_SLIPPAGE_PERCENT,
-          expiryMs: env.QUOTE_EXPIRY_MS,
+          expiryMs,
         })
         res.status(201).json({
           quoteId: quote.quoteId,
@@ -123,7 +126,7 @@ export function createStakingRouter(
         if (quote.status !== 'active') {
           throw new AppError(ErrorCode.CONFLICT, 409, 'Quote is already used or expired')
         }
-        if (quote.expiresAt.getTime() <= Date.now()) {
+        if (Date.now() >= quote.expiresAt.getTime()) {
           await quoteStore.markExpired(quote.quoteId)
           throw new AppError(ErrorCode.CONFLICT, 409, 'Quote has expired')
         }

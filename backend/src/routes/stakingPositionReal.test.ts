@@ -89,4 +89,17 @@ describe('Staking Position (Real Adapter)', () => {
       claimable: '4.560000',
     })
   })
+
+  it('should return 503 when MVP staking contract is unavailable', async () => {
+    vi.spyOn(RealSorobanAdapter.prototype, 'mvpStakedBalance').mockImplementation(undefined as any)
+
+    const response = await request(app)
+      .get('/api/staking/mvp-position')
+      .set('Authorization', `Bearer ${authToken}`)
+      .set('x-wallet-address', walletAddress)
+      .expect(503)
+
+    expect(response.body.error).toBeDefined()
+    expect(response.body.error.code).toBe('SERVICE_UNAVAILABLE')
+  })
 })
