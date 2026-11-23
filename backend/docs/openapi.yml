@@ -8512,6 +8512,2944 @@ paths:
           $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
+  /api/v1/tenant/lease/current:
+    get:
+      summary: Get tenant's current active lease
+      description: Returns the tenant's current active lease summary including property details, payment progress, and next payment date. Returns null if no active lease exists.
+      operationId: getTenantCurrentLease
+      tags:
+        - Tenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current lease summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TenantCurrentLease'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/tenant/deals/{dealId}/lease:
+    get:
+      summary: Get detailed lease information for a specific deal
+      description: 'Returns full lease details for a specific deal including property details, lease terms, landlord information, and payment progress. Tenant-scoped: returns 404 if the deal doesn''t belong to the tenant.'
+      operationId: getTenantLeaseDetails
+      tags:
+        - Tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The deal ID to fetch lease details for
+      responses:
+        '200':
+          description: Lease details
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TenantLeaseDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/secrets/status:
+    get:
+      summary: Get the status of all managed secrets
+      description: 'Returns the active version and valid-version count of every secret registered with the secret rotation service. Values are never returned.
+
+
+        **Authentication:** the router mounts no authentication middleware, so this endpoint is reachable without a token (see the note on the secrets routes in the Admin tag).
+
+        '
+      operationId: getAdminSecretsStatus
+      tags:
+      - Admin
+      security: []
+      responses:
+        '200':
+          description: Status keyed by secret name
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/SecretStatus'
+        '500':
+          description: Secret service failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Internal server error
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/secrets/history:
+    get:
+      summary: Get the secret rotation history
+      description: 'Returns the most recent rotation events, oldest first. The router performs no authentication (see the secrets routes note in the Admin tag).
+
+        '
+      operationId: getAdminSecretsHistory
+      tags:
+      - Admin
+      security: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        description: Maximum number of events to return. Non-numeric or zero values fall back to 100.
+        schema:
+          type: integer
+          default: 100
+          minimum: 1
+      responses:
+        '200':
+          description: Rotation events
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SecretRotationEvent'
+        '500':
+          description: Secret service failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Internal server error
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/secrets/rotate:
+    post:
+      summary: Rotate a managed secret
+      description: 'Installs a new value for a registered secret. The previous version stays valid for `gracePeriodMs` (the secret''s configured grace period applies when omitted). The new value must pass the secret''s validator.
+
+
+        The router performs no authentication (see the secrets routes note in the Admin tag). The rotated value is accepted in the request body and is never echoed back.
+
+        '
+      operationId: rotateAdminSecret
+      tags:
+      - Admin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - secretName
+              - newValue
+              properties:
+                secretName:
+                  type: string
+                  description: Registered secret name, for example `webhook_secret`.
+                  example: webhook_secret
+                newValue:
+                  type: string
+                  description: New secret value. Must pass the validator registered for the secret.
+                gracePeriodMs:
+                  type: integer
+                  minimum: 0
+                  description: How long the previous version remains valid, in milliseconds.
+      responses:
+        '200':
+          description: Secret rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Secret webhook_secret rotated successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          description: Rotation failed, for example because the new value did not pass the validator
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: 'Failed to rotate secret: webhook_secret'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/secrets/reload:
+    post:
+      summary: Reload secrets from the environment
+      description: 'Forces the secret rotation service to re-read every registered secret from the environment. The router performs no authentication (see the secrets routes note in the Admin tag).
+
+        '
+      operationId: reloadAdminSecrets
+      tags:
+      - Admin
+      security: []
+      responses:
+        '200':
+          description: Secrets reloaded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Secrets reloaded from environment
+        '500':
+          description: Secret service failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Internal server error
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/webhook-replay/preview:
+    post:
+      summary: Preview a webhook replay
+      description: 'Lists the stored webhook events a replay request would match, without replaying anything. Requires a bearer token **and** the `x-admin-secret` header.
+
+        '
+      operationId: previewAdminWebhookReplay
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+        adminSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookReplayRequest'
+      responses:
+        '200':
+          description: Matching events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookReplayPreview'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/webhook-replay/execute:
+    post:
+      summary: Execute a webhook replay
+      description: 'Replays the matching stored webhook events and records an attempt in the replay history. With `dryRun: true` the attempt is recorded without re-processing the events. Requires a bearer token **and** the `x-admin-secret` header.
+
+        '
+      operationId: executeAdminWebhookReplay
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+        adminSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookReplayRequest'
+      responses:
+        '201':
+          description: Replay attempt recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookReplayAttempt'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/webhook-replay/history:
+    get:
+      summary: List webhook replay attempts
+      description: 'Returns replay attempts, optionally filtered by webhook event or by the admin who ran them. Requires a bearer token **and** the `x-admin-secret` header.
+
+        '
+      operationId: getAdminWebhookReplayHistory
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+        adminSecret: []
+      parameters:
+      - name: webhookEventId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: actorUserId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Replay attempts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookReplayAttempt'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/webhook-replay/events/{id}:
+    get:
+      summary: Get a stored webhook event
+      description: 'Returns one stored webhook event, including its payload. Requires a bearer token **and** the `x-admin-secret` header.
+
+        '
+      operationId: getAdminWebhookReplayEvent
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+        adminSecret: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Webhook event ID
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Webhook event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/indexer/metrics:
+    get:
+      summary: Get receipt indexer metrics
+      description: Returns the receipt indexer's checkpoint, poll and failure counters, and whether it is running or paused.
+      operationId: getAdminIndexerMetrics
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Indexer metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - metrics
+                properties:
+                  metrics:
+                    $ref: '#/components/schemas/IndexerMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/indexer/pause:
+    post:
+      summary: Pause the receipt indexer
+      description: Stops the receipt indexer from polling. Writes an audit entry (`INDEXER_PAUSE`).
+      operationId: pauseAdminIndexer
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Indexer paused
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - message
+                - metrics
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Indexer paused successfully
+                  metrics:
+                    $ref: '#/components/schemas/IndexerMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/indexer/resume:
+    post:
+      summary: Resume the receipt indexer
+      description: Resumes receipt indexer polling after a pause. Writes an audit entry (`INDEXER_RESUME`).
+      operationId: resumeAdminIndexer
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Indexer resumed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - message
+                - metrics
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Indexer resumed successfully
+                  metrics:
+                    $ref: '#/components/schemas/IndexerMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/risk/frozen-users:
+    get:
+      summary: List frozen user accounts
+      description: Returns every user account whose risk state is currently frozen.
+      operationId: listAdminFrozenUsers
+      tags:
+      - Risk
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Frozen accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrozenUsersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/risk/{userId}:
+    get:
+      summary: Get a user's risk state and balances
+      description: Returns the risk state for a user, with their current NGN balances. A user with no risk record is reported as unfrozen.
+      operationId: getAdminUserRisk
+      tags:
+      - Risk
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Risk state and balances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRiskDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/risk/{userId}/freeze:
+    post:
+      summary: Freeze a user account
+      description: Manually freezes a user account and records the reason and actor. Writes an audit entry (`ADMIN_RISK_FREEZE`).
+      operationId: freezeAdminUserRisk
+      tags:
+      - Risk
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreezeUserRequest'
+      responses:
+        '200':
+          description: Account frozen
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - riskState
+                properties:
+                  success:
+                    type: boolean
+                  riskState:
+                    $ref: '#/components/schemas/UserRiskState'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/risk/{userId}/unfreeze:
+    post:
+      summary: Unfreeze a user account
+      description: Lifts a manual freeze and records the actor. Writes an audit entry (`ADMIN_RISK_UNFREEZE`).
+      operationId: unfreezeAdminUserRisk
+      tags:
+      - Risk
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnfreezeUserRequest'
+      responses:
+        '200':
+          description: Account unfrozen
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - riskState
+                properties:
+                  success:
+                    type: boolean
+                  riskState:
+                    $ref: '#/components/schemas/UserRiskState'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/whistleblower-applications:
+    get:
+      summary: List whistleblower applications
+      description: Lists whistleblower applications for admin review, newest first, optionally filtered by status.
+      operationId: listAdminWhistleblowerApplications
+      tags:
+      - Whistleblower
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Applications page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - applications
+                - pagination
+                properties:
+                  success:
+                    type: boolean
+                  applications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WhistleblowerApplicationAdmin'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/whistleblower-applications/{applicationId}:
+    get:
+      summary: Get a whistleblower application
+      description: Returns the full details of one whistleblower application, including its social verification data.
+      operationId: getAdminWhistleblowerApplication
+      tags:
+      - Whistleblower
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        description: Application ID
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Application details
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    $ref: '#/components/schemas/WhistleblowerApplicationAdmin'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/whistleblower-applications/{applicationId}/approve:
+    post:
+      summary: Approve a whistleblower application
+      description: 'Transitions an application from `pending` to `approved`. Any other current status returns 409.'
+      operationId: approveAdminWhistleblowerApplication
+      tags:
+      - Whistleblower
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        description: Application ID
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - reviewedBy
+              properties:
+                reviewedBy:
+                  type: string
+                  minLength: 1
+                  description: Admin user ID or email who reviewed the application
+      responses:
+        '200':
+          description: Application approved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    $ref: '#/components/schemas/WhistleblowerApplicationAdmin'
+                  message:
+                    type: string
+                    example: Application approved successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/whistleblower-applications/{applicationId}/reject:
+    post:
+      summary: Reject a whistleblower application
+      description: 'Transitions an application from `pending` to `rejected`, recording the mandatory reason. Any other current status returns 409.'
+      operationId: rejectAdminWhistleblowerApplication
+      tags:
+      - Whistleblower
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        description: Application ID
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - reviewedBy
+              - reason
+              properties:
+                reviewedBy:
+                  type: string
+                  minLength: 1
+                  description: Admin user ID or email who reviewed the application
+                reason:
+                  type: string
+                  minLength: 10
+                  description: Reason for rejection
+      responses:
+        '200':
+          description: Application rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    $ref: '#/components/schemas/WhistleblowerApplicationAdmin'
+                  message:
+                    type: string
+                    example: Application rejected successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/analytics/overview:
+    get:
+      summary: Get platform KPI overview
+      description: 'Returns user counts by role, active deals, month-to-date platform revenue and the default rate. Results are cached for 60 seconds. `dataSource` is `mock` when no database is configured.'
+      operationId: getAdminAnalyticsOverview
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: KPI overview
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - usersByRole
+                    - activeDeals
+                    - revenueMtd
+                    - defaultRate
+                    - period
+                    - dataSource
+                    properties:
+                      usersByRole:
+                        type: object
+                        properties:
+                          tenant:
+                            type: integer
+                          landlord:
+                            type: integer
+                          agent:
+                            type: integer
+                          admin:
+                            type: integer
+                      activeDeals:
+                        type: integer
+                      revenueMtd:
+                        type: number
+                        description: Platform revenue for the current month, NGN.
+                      defaultRate:
+                        type: number
+                        description: Percentage of deals in `defaulted` status, to two decimals.
+                      period:
+                        type: string
+                        example: MTD
+                      dataSource:
+                        type: string
+                        enum:
+                        - live
+                        - mock
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/analytics/deal-funnel:
+    get:
+      summary: Get deal funnel counts
+      description: Returns the number of deals in each status, for the funnel visualiser. Cached for 60 seconds.
+      operationId: getAdminAnalyticsDealFunnel
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Counts per deal status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - draft
+                    - active
+                    - at_risk
+                    - completed
+                    - defaulted
+                    - dataSource
+                    properties:
+                      draft:
+                        type: integer
+                      active:
+                        type: integer
+                      at_risk:
+                        type: integer
+                      completed:
+                        type: integer
+                      defaulted:
+                        type: integer
+                      dataSource:
+                        type: string
+                        enum:
+                        - live
+                        - mock
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/analytics/revenue:
+    get:
+      summary: Get platform revenue time series
+      description: Returns daily platform fee totals for the chosen window. Cached for 60 seconds per range.
+      operationId: getAdminAnalyticsRevenue
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: range
+        in: query
+        required: false
+        description: Window length. Any value other than `7d` or `90d` is treated as `30d`.
+        schema:
+          type: string
+          enum:
+          - 7d
+          - 30d
+          - 90d
+          default: 30d
+      responses:
+        '200':
+          description: Revenue series
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - series
+                    - dataSource
+                    properties:
+                      series:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                          - date
+                          - feeType
+                          - amount
+                          properties:
+                            date:
+                              type: string
+                              format: date
+                            feeType:
+                              type: string
+                              example: platform_fee
+                            amount:
+                              type: number
+                      dataSource:
+                        type: string
+                        enum:
+                        - live
+                        - mock
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/analytics/listing-quality:
+    get:
+      summary: Get listing quality metrics
+      description: Returns the inspection pass rate, average listing grade score and whistleblower issue report rate. Cached for 60 seconds.
+      operationId: getAdminAnalyticsListingQuality
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Listing quality metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - inspectionPassRate
+                    - averageListingScore
+                    - whistleblowerReportRate
+                    - dataSource
+                    properties:
+                      inspectionPassRate:
+                        type: number
+                        description: Percentage of inspection jobs approved, to two decimals.
+                      averageListingScore:
+                        type: number
+                      whistleblowerReportRate:
+                        type: number
+                        description: Property issue reports per listing, as a percentage.
+                      dataSource:
+                        type: string
+                        enum:
+                        - live
+                        - mock
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/audit:
+    get:
+      summary: Search the audit log
+      description: 'Searches the audit trail with filters and pagination. Each search is itself recorded as `ADMIN_AUDIT_LOG_VIEWED`.'
+      operationId: searchAdminAuditLog
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: eventType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: actorType
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - user
+          - admin
+          - system
+      - name: userId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: requestId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: dateFrom
+        in: query
+        required: false
+        description: Inclusive lower bound on `createdAt`
+        schema:
+          type: string
+          format: date-time
+      - name: dateTo
+        in: query
+        required: false
+        description: Inclusive upper bound on `createdAt`
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      responses:
+        '200':
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - entries
+                - pagination
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditTrailEntry'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/audit-logs:
+    get:
+      summary: View audit log entries
+      description: 'Lists rows from the audit log table with filters and pagination. Each read is itself recorded as `ADMIN_AUDIT_LOG_VIEWED`.'
+      operationId: listAdminAuditLogs
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: actorId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: action
+        in: query
+        required: false
+        description: Event type, for example `USER_LOGIN`
+        schema:
+          type: string
+      - name: resourceType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: resourceId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: startDate
+        in: query
+        required: false
+        description: Inclusive lower bound on `createdAt`
+        schema:
+          type: string
+          format: date-time
+      - name: endDate
+        in: query
+        required: false
+        description: Inclusive upper bound on `createdAt`
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - entries
+                - pagination
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLogEntry'
+                  pagination:
+                    type: object
+                    required:
+                    - total
+                    - page
+                    - limit
+                    - totalPages
+                    properties:
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/audit/verify:
+    get:
+      summary: Verify audit log hash-chain integrity
+      description: 'Walks the most recent `limit` audit rows and checks the hash chain. Returns 200 when intact and 409 at the first broken link.'
+      operationId: verifyAdminAuditChain
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        description: Maximum number of rows to verify
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          default: 1000
+      responses:
+        '200':
+          description: Hash chain intact
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditChainVerification'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Hash chain broken; `firstBrokenId` identifies the first bad row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditChainVerification'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/users/{userId}/sessions:
+    get:
+      summary: List a user's active sessions
+      description: Lists the active sessions of a user. Admin and super admin only.
+      operationId: listAdminUserSessions
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - sessions
+                    properties:
+                      sessions:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ActiveSession'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Revoke all of a user's sessions
+      description: 'Forces a user to sign out everywhere by revoking all of their sessions. Admin and super admin only. An admin cannot revoke their own sessions through this endpoint. Writes an audit entry (`reason: admin_force_logout`).'
+      operationId: revokeAllAdminUserSessions
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/RevokedSessions'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/users/{userId}/sessions/{sessionId}:
+    delete:
+      summary: Revoke one of a user's sessions
+      description: 'Revokes a single session of a user. Admin and super admin only. An admin cannot revoke their own sessions through this endpoint. Writes an audit entry (`reason: admin_force_logout`).'
+      operationId: revokeAdminUserSession
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+          format: uuid
+      - name: sessionId
+        in: path
+        required: true
+        description: Session ID
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - revoked
+                    properties:
+                      revoked:
+                        type: boolean
+                        example: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/roles:
+    get:
+      summary: List roles and their permissions
+      description: Returns every admin role with its permission grants. Requires `roles:manage`.
+      operationId: listAdminRoles
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - roles
+                properties:
+                  success:
+                    type: boolean
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminRole'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/users/{userId}/roles:
+    post:
+      summary: Grant a role to a user
+      description: Assigns a role to a user. Granting a role the user already holds is a no-op. Writes an audit entry (`ADMIN_OPERATION`, `grant_role`).
+      operationId: grantAdminUserRole
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - roleId
+              properties:
+                roleId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Role granted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/users/{userId}/roles/{roleId}:
+    delete:
+      summary: Revoke a role from a user
+      description: Removes a role assignment. Writes an audit entry (`ADMIN_OPERATION`, `revoke_role`).
+      operationId: revokeAdminUserRole
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+          format: uuid
+      - name: roleId
+        in: path
+        required: true
+        description: Role ID
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Role revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/contract-events:
+    get:
+      summary: List indexed contract events
+      description: 'Paginates the indexed Soroban contract events, newest first. Authenticated with the `x-admin-secret` header only, not a bearer token.'
+      operationId: listAdminContractEvents
+      tags:
+      - Admin
+      security:
+      - adminSecret: []
+      parameters:
+      - name: contract
+        in: query
+        required: false
+        description: Contract ID
+        schema:
+          type: string
+      - name: eventType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: startDate
+        in: query
+        required: false
+        description: Inclusive lower bound on `indexedAt`
+        schema:
+          type: string
+          format: date-time
+      - name: endDate
+        in: query
+        required: false
+        description: Inclusive upper bound on `indexedAt`
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      responses:
+        '200':
+          description: Contract events page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - events
+                    - pagination
+                    properties:
+                      events:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/IndexedContractEvent'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '403':
+          description: Missing or invalid `x-admin-secret`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Invalid admin secret
+        '500':
+          description: Database not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Database not available
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/data-retention/pending-purge:
+    get:
+      summary: Count records pending purge
+      description: Counts records past the seven-year retention period, per table. Restricted to super admins.
+      operationId: getAdminDataRetentionPendingPurge
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Pending purge counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - totalPending
+                - tables
+                - retentionPeriodYears
+                properties:
+                  totalPending:
+                    type: integer
+                  tables:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                    description: Pending record count keyed by table name
+                  retentionPeriodYears:
+                    type: integer
+                    example: 7
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/data-retention/purge:
+    post:
+      summary: Purge expired records
+      description: Deletes records past the retention period that are not under legal hold. Restricted to super admins. The operation is idempotent.
+      operationId: purgeAdminDataRetention
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Purge completed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - totalDeleted
+                - tables
+                properties:
+                  success:
+                    type: boolean
+                  totalDeleted:
+                    type: integer
+                  tables:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - table
+                      - recordsDeleted
+                      properties:
+                        table:
+                          type: string
+                        recordsDeleted:
+                          type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/flags:
+    get:
+      summary: Get operational feature flags
+      description: Read-only view of the custodial, webhook-signature and adapter settings, for debugging.
+      operationId: getAdminFeatureFlags
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Feature flags
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - custodialModeEnabled
+                - custodialSigningPaused
+                - webhookSignatureEnabled
+                - databaseEnabled
+                - sorobanAdapterMode
+                properties:
+                  custodialModeEnabled:
+                    type: boolean
+                  custodialSigningPaused:
+                    type: boolean
+                  webhookSignatureEnabled:
+                    type: boolean
+                  databaseEnabled:
+                    type: boolean
+                  sorobanAdapterMode:
+                    type: string
+                    example: testnet
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/ledger-reconciliation/mismatches:
+    get:
+      summary: List reconciliation mismatches
+      description: Paginates ledger reconciliation mismatches, newest first.
+      operationId: listAdminLedgerMismatches
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - open
+          - auto_resolved
+          - escalated
+          - closed
+      - name: mismatch_class
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - missing_credit
+          - duplicate_debit
+          - amount_mismatch
+          - delayed_settlement
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        description: Return mismatches created before this time (keyset pagination)
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: Mismatches
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - count
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LedgerMismatch'
+                  count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/ledger-reconciliation/aging:
+    get:
+      summary: Get the mismatch aging report
+      description: Counts mismatches grouped by class and status, with the age of the oldest in each group.
+      operationId: getAdminLedgerMismatchAging
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Aging report
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - mismatchClass
+                      - status
+                      - count
+                      - oldestCreatedAt
+                      properties:
+                        mismatchClass:
+                          type: string
+                        status:
+                          type: string
+                        count:
+                          type: integer
+                        oldestCreatedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/ledger-reconciliation/mismatches/{id}/close:
+    post:
+      summary: Close a reconciliation mismatch
+      description: Manually closes a mismatch, recording a `manual_close` resolution.
+      operationId: closeAdminLedgerMismatch
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Mismatch ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Mismatch closed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - ok
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/ledger-reconciliation/run:
+    post:
+      summary: Run reconciliation now
+      description: Runs one reconciliation pass and one resolution pass immediately, and returns both results.
+      operationId: runAdminLedgerReconciliation
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Pass results
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - reconciliation
+                - resolution
+                properties:
+                  reconciliation:
+                    type: object
+                    additionalProperties: true
+                  resolution:
+                    type: object
+                    additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/ledger-reconciliation/ledger-events:
+    post:
+      summary: Ingest an internal ledger event
+      description: Records an internal ledger credit or debit for reconciliation.
+      operationId: ingestAdminLedgerEvent
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerEventIngestRequest'
+      responses:
+        '201':
+          description: Event recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: true
+                    description: The stored ledger event. `amountMinor` is returned as a string.
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/ledger-reconciliation/provider-events:
+    post:
+      summary: Ingest a provider settlement event
+      description: Records a settlement event reported by a payment provider for reconciliation.
+      operationId: ingestAdminProviderEvent
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderEventIngestRequest'
+      responses:
+        '201':
+          description: Event recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: true
+                    description: The stored provider event. `amountMinor` is returned as a string.
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/reconciliation/deposits:
+    get:
+      summary: List deposits for reconciliation
+      description: Merges NGN wallet deposits and staking deposit initiations, newest first, with cursor pagination.
+      operationId: listAdminReconciliationDeposits
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - failed
+          - reversed
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        description: Return items created before this timestamp, from the previous `nextCursor`
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Deposits page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReconciliationDepositItem'
+                  nextCursor:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/reconciliation/wallets:
+    get:
+      summary: List wallet balances for reconciliation
+      description: Lists NGN wallet balances, by default only negative ones, with the freeze flag for each user.
+      operationId: listAdminReconciliationWallets
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: negative
+        in: query
+        required: false
+        description: When true (the default), only negative balances are returned
+        schema:
+          type: boolean
+          default: true
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Wallets page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReconciliationWalletItem'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/reconciliation/conversions:
+    get:
+      summary: List conversions for reconciliation
+      description: Lists NGN to USDC conversions, newest first, with cursor pagination.
+      operationId: listAdminReconciliationConversions
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - completed
+          - failed
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Conversions page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReconciliationConversionItem'
+                  nextCursor:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/reconciliation/outbox:
+    get:
+      summary: List outbox items for reconciliation
+      description: Lists chain transaction outbox items, newest first, with cursor pagination.
+      operationId: listAdminReconciliationOutbox
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - sent
+          - failed
+          - dead
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Outbox page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - nextCursor
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReconciliationOutboxItem'
+                  nextCursor:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/settlement-dlq:
+    get:
+      summary: List settlement dead-letter entries
+      description: 'Lists the 100 most recent settlement outbox dead-letter rows. Without a database the response is `{ "items": [] }`.'
+      operationId: listAdminSettlementDlq
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      responses:
+        '200':
+          description: Dead-letter items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - items
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SettlementDlqItem'
+                  items:
+                    type: array
+                    description: Present only when no database is configured
+                    items:
+                      type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/settlement-dlq/{id}/replay:
+    post:
+      summary: Replay a settlement dead-letter entry
+      description: Requeues a dead-letter row into the settlement outbox as `pending`, resetting it if the same idempotency key is already queued. Requires a database.
+      operationId: replayAdminSettlementDlq
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Dead-letter entry ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Entry requeued
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - newOutboxId
+                properties:
+                  success:
+                    type: boolean
+                  newOutboxId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/transaction-ledger:
+    get:
+      summary: List the transaction ledger
+      description: Paginates the platform transaction ledger, with filters and sorting. Results are keyset-paginated on `created_at`.
+      operationId: listAdminTransactionLedger
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: Return rows created before this ISO timestamp (from `nextCursor`)
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: type
+        in: query
+        required: false
+        description: Transaction type, for example `deposit`, `withdrawal`, `conversion`
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          example: NGN
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: actor
+        in: query
+        required: false
+        description: Partial match on user ID or email
+        schema:
+          type: string
+      - name: amountMin
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^-?\d+$
+          description: Minimum amount in minor units
+      - name: amountMax
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^-?\d+$
+          description: Maximum amount in minor units
+      - name: sortBy
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - date
+          - amount
+          - status
+          default: date
+      - name: sortDir
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+          default: desc
+      responses:
+        '200':
+          description: Ledger page
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - count
+                - hasNextPage
+                - nextCursor
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TransactionLedgerEntry'
+                  count:
+                    type: integer
+                  hasNextPage:
+                    type: boolean
+                  nextCursor:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/transaction-ledger/export:
+    get:
+      summary: Export the transaction ledger as CSV
+      description: Exports up to 100,000 rows matching the filters as a CSV attachment, newest first. Takes the same filters as the list endpoint, except `cursor`, `limit` and sorting.
+      operationId: exportAdminTransactionLedger
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: actor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: amountMin
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^-?\d+$
+      - name: amountMax
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^-?\d+$
+      responses:
+        '200':
+          description: CSV file
+          headers:
+            Content-Disposition:
+              description: Attachment named `transaction-ledger-YYYY-MM-DD.csv`
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/kyc/bulk:
+    post:
+      summary: Bulk approve or reject KYC submissions
+      description: 'Approves or rejects up to 50 KYC submissions in parallel. Each ID is reported as succeeded or failed; a failure does not stop the others.'
+      operationId: bulkAdminKycSubmissions
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - action
+              - ids
+              properties:
+                action:
+                  type: string
+                  enum:
+                  - approve
+                  - reject
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: string
+                reason:
+                  type: string
+                  description: Recorded on each KYC submission
+      responses:
+        '200':
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkActionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/disputes/bulk:
+    post:
+      summary: Bulk resolve or reject payment disputes
+      description: 'Resolves or rejects up to 50 payment disputes in parallel. Only disputes in `pending` or `under_review` can be processed; others are reported as failed.'
+      operationId: bulkAdminPaymentDisputes
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - action
+              - ids
+              properties:
+                action:
+                  type: string
+                  enum:
+                  - resolve
+                  - reject
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: string
+                resolution:
+                  type: string
+                  description: Resolution note recorded on each dispute
+      responses:
+        '200':
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkActionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/listings/bulk:
+    post:
+      summary: Bulk activate, deactivate or delete listings
+      description: 'Applies one action to up to 50 listings in parallel. Activation requires `pending_review` status. Each ID is reported as succeeded or failed.'
+      operationId: bulkAdminListings
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - action
+              - ids
+              properties:
+                action:
+                  type: string
+                  enum:
+                  - activate
+                  - deactivate
+                  - delete
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkActionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/landlords/{id}/verify:
+    post:
+      summary: Set a landlord's verification level
+      description: Records the verification level of a landlord. Requires an admin or super admin role.
+      operationId: setAdminLandlordVerification
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Landlord user ID
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationLevel
+              - note
+              properties:
+                verificationLevel:
+                  type: string
+                  enum:
+                  - unverified
+                  - id_verified
+                  - id_and_property_verified
+                  - premium
+                note:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Verification level set
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/wallets/rewrap:
+    post:
+      summary: Re-wrap custodial wallet keys
+      description: 'Re-encrypts stored custodial wallet keys under a newer key version. Batch mode is not implemented for this wallet store, so `userId` must be supplied. Writes an audit entry (`WALLET_REWRAP`).'
+      operationId: rewrapAdminWalletKeys
+      tags:
+      - Admin
+      security:
+      - bearerAdminAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fromKeyId:
+                  type: string
+                  description: Only re-wrap keys currently under this key ID
+                toKeyId:
+                  type: string
+                  description: Target key ID. Defaults to the current encryption key.
+                batchSize:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000
+                  default: 100
+                userId:
+                  type: string
+                  description: The user whose key to re-wrap
+      responses:
+        '200':
+          description: Re-wrap result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - fromKeyId
+                - toKeyId
+                - processed
+                - updated
+                - skipped
+                - failures
+                - hasMore
+                properties:
+                  fromKeyId:
+                    type: string
+                    example: any
+                  toKeyId:
+                    type: string
+                  processed:
+                    type: integer
+                  updated:
+                    type: integer
+                  skipped:
+                    type: integer
+                  failures:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - userId
+                      - reason
+                      properties:
+                        userId:
+                          type: string
+                        reason:
+                          type: string
+                  hasMore:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   parameters:
     SavedPropertyListingId:
@@ -8553,6 +11491,1081 @@ components:
         minimum: 1
       description: Governance proposal id (1-based, contracts/governance/src/lib.rs:188)
   schemas:
+    UserRiskState:
+      type: object
+      required:
+      - userId
+      - isFrozen
+      - freezeReason
+      - frozenAt
+      - unfrozenAt
+      - notes
+      - createdAt
+      - updatedAt
+      properties:
+        userId:
+          type: string
+        isFrozen:
+          type: boolean
+        freezeReason:
+          type: string
+          nullable: true
+          enum:
+          - NEGATIVE_BALANCE
+          - MANUAL
+          - COMPLIANCE
+          - null
+        frozenAt:
+          type: string
+          format: date-time
+          nullable: true
+        unfrozenAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserRiskDetail:
+      type: object
+      required:
+      - riskState
+      - balances
+      properties:
+        success:
+          type: boolean
+        riskState:
+          $ref: '#/components/schemas/UserRiskState'
+        balances:
+          type: object
+          required:
+          - availableNgn
+          - heldNgn
+          - totalNgn
+          properties:
+            availableNgn:
+              type: number
+            heldNgn:
+              type: number
+            totalNgn:
+              type: number
+
+    FrozenUsersResponse:
+      type: object
+      required:
+      - users
+      properties:
+        success:
+          type: boolean
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserRiskState'
+
+    FreezeUserRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          enum:
+          - NEGATIVE_BALANCE
+          - MANUAL
+          - COMPLIANCE
+        notes:
+          type: string
+          description: Free-text operator note stored on the risk state.
+
+    UnfreezeUserRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+          description: Free-text operator note stored on the risk state.
+
+    WebhookEvent:
+      type: object
+      required:
+      - id
+      - provider
+      - eventType
+      - externalId
+      - payload
+      - receivedAt
+      - processingStatus
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          example: paystack
+        eventType:
+          type: string
+          example: charge.success
+        externalId:
+          type: string
+          description: Provider-side identifier of the event.
+        payload:
+          type: object
+          additionalProperties: true
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        receivedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+        processingStatus:
+          type: string
+          enum:
+          - pending
+          - processed
+          - failed
+        processingError:
+          type: string
+
+    WebhookReplayRequest:
+      type: object
+      required:
+      - dryRun
+      - reason
+      properties:
+        provider:
+          type: string
+        eventType:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        webhookEventId:
+          type: string
+          format: uuid
+        dryRun:
+          type: boolean
+          description: When true the request is only previewed or recorded as a dry run.
+        reason:
+          type: string
+          minLength: 1
+          description: Why the replay is needed. Required and recorded in the replay history.
+
+    WebhookReplayPreview:
+      type: object
+      required:
+      - totalEvents
+      - events
+      properties:
+        totalEvents:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+
+    WebhookReplayAttempt:
+      type: object
+      required:
+      - id
+      - webhookEventId
+      - actorUserId
+      - actorType
+      - reason
+      - dryRun
+      - status
+      - startedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        webhookEventId:
+          type: string
+          format: uuid
+        actorUserId:
+          type: string
+        actorType:
+          type: string
+          enum:
+          - admin
+          - operator
+          - system
+        reason:
+          type: string
+        dryRun:
+          type: boolean
+        status:
+          type: string
+          enum:
+          - pending
+          - success
+          - failed
+        outcome:
+          type: object
+          additionalProperties: true
+        errorMessage:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    IndexerMetrics:
+      type: object
+      required:
+      - receiptsIndexed
+      - checkpointLedger
+      - lastPollDurationMs
+      - lastPollTimestamp
+      - consecutiveFailures
+      - totalFailures
+      - isRunning
+      - isPaused
+      properties:
+        receiptsIndexed:
+          type: integer
+        checkpointLedger:
+          type: integer
+          description: Last ledger the indexer has processed.
+        lastPollDurationMs:
+          type: number
+        lastPollTimestamp:
+          type: number
+          description: Epoch milliseconds of the last poll.
+        consecutiveFailures:
+          type: integer
+        totalFailures:
+          type: integer
+        isRunning:
+          type: boolean
+        isPaused:
+          type: boolean
+
+    SecretStatus:
+      type: object
+      description: Status of one managed secret, keyed by secret name.
+      required:
+      - activeVersion
+      - validVersionCount
+      properties:
+        activeVersion:
+          type: string
+          description: Version identifier, or `none` when the secret is not loaded.
+        validVersionCount:
+          type: integer
+          description: Versions still accepted, including ones inside their grace period.
+        lastRotation:
+          type: string
+          format: date-time
+
+    SecretRotationEvent:
+      type: object
+      required:
+      - secretName
+      - oldVersion
+      - newVersion
+      - timestamp
+      - success
+      properties:
+        secretName:
+          type: string
+        oldVersion:
+          type: string
+        newVersion:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        success:
+          type: boolean
+        error:
+          type: string
+        actor:
+          type: string
+        scope:
+          type: string
+        transitionWindowMs:
+          type: integer
+
+    WhistleblowerApplicationAdmin:
+      type: object
+      required:
+      - applicationId
+      - fullName
+      - email
+      - phone
+      - address
+      - linkedinProfile
+      - facebookProfile
+      - instagramProfile
+      - status
+      - createdAt
+      - updatedAt
+      - socialScore
+      - greenFlags
+      - redFlags
+      properties:
+        applicationId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        address:
+          type: string
+        linkedinProfile:
+          type: string
+        facebookProfile:
+          type: string
+        instagramProfile:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type: string
+        rejectionReason:
+          type: string
+        socialScore:
+          type: integer
+          description: Social verification score (defaults to 50).
+        greenFlags:
+          type: array
+          items:
+            type: string
+        redFlags:
+          type: array
+          items:
+            type: string
+
+    AuditTrailEntry:
+      type: object
+      description: Entry returned by `GET /api/admin/audit`.
+      required:
+      - id
+      - eventType
+      - createdAt
+      properties:
+        id:
+          type: string
+        eventType:
+          type: string
+        actorType:
+          type: string
+          enum:
+          - user
+          - admin
+          - system
+        userId:
+          type: string
+        requestId:
+          type: string
+        ipAddress:
+          type: string
+        httpMethod:
+          type: string
+        httpPath:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditLogEntry:
+      type: object
+      description: Entry returned by `GET /api/admin/audit-logs`.
+      required:
+      - id
+      - action
+      - createdAt
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        actorId:
+          type: string
+        actorType:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        ipAddress:
+          type: string
+        result:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditChainVerification:
+      type: object
+      required:
+      - valid
+      - checkedCount
+      properties:
+        valid:
+          type: boolean
+        checkedCount:
+          type: integer
+        firstBrokenId:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    AdminRole:
+      type: object
+      required:
+      - id
+      - name
+      - permissions
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: finance
+        description:
+          type: string
+          nullable: true
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRolePermission'
+
+    AdminRolePermission:
+      type: object
+      required:
+      - id
+      - resource
+      - action
+      properties:
+        id:
+          type: string
+        resource:
+          type: string
+          example: payouts
+        action:
+          type: string
+          example: trigger
+
+    AdminTxResponse:
+      type: object
+      required:
+      - success
+      - message
+      properties:
+        success:
+          type: boolean
+        txHash:
+          type: string
+          description: Stellar transaction hash.
+        message:
+          type: string
+        multisig:
+          type: object
+          description: Present only when the operation was filed as a multisig proposal instead of being executed (HTTP 202).
+          properties:
+            proposalId:
+              type: integer
+              nullable: true
+            contractId:
+              type: string
+            status:
+              type: string
+              example: pending
+            note:
+              type: string
+
+    IndexedContractEvent:
+      type: object
+      required:
+      - id
+      - contractId
+      - ledgerSequence
+      - transactionHash
+      - eventType
+      properties:
+        id:
+          type: string
+        contractId:
+          type: string
+        ledgerSequence:
+          type: integer
+        transactionHash:
+          type: string
+        eventType:
+          type: string
+        topic1:
+          type: string
+          nullable: true
+        topic2:
+          type: string
+          nullable: true
+        dataJson:
+          type: object
+          additionalProperties: true
+        indexedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    UnderwritingEvaluation:
+      type: object
+      required:
+      - applicationId
+      - userId
+      - decision
+      - result
+      - evaluatedAt
+      properties:
+        applicationId:
+          type: string
+        userId:
+          type: string
+        decision:
+          type: string
+          enum:
+          - APPROVE
+          - REVIEW
+          - REJECT
+        result:
+          type: object
+          additionalProperties: true
+        creditScore:
+          type: object
+          additionalProperties: true
+        creditBandDecision:
+          type: string
+        externalCreditScore:
+          type: number
+        aiRiskScore:
+          type: object
+          additionalProperties: true
+        evaluatedAt:
+          type: string
+          format: date-time
+
+    ReconciliationDepositItem:
+      type: object
+      required:
+      - depositId
+      - userId
+      - amountNgn
+      - rail
+      - status
+      - hasExternalRef
+      - createdAt
+      - updatedAt
+      - flow
+      properties:
+        depositId:
+          type: string
+        userId:
+          type: string
+        amountNgn:
+          type: number
+        rail:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - failed
+          - reversed
+        hasExternalRef:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        flow:
+          type: string
+          enum:
+          - ngn_wallet
+          - staking
+
+    ReconciliationConversionItem:
+      type: object
+      required:
+      - conversionId
+      - depositId
+      - userId
+      - amountNgn
+      - amountUsdc
+      - fxRateNgnPerUsdc
+      - provider
+      - status
+      - createdAt
+      - updatedAt
+      properties:
+        conversionId:
+          type: string
+        depositId:
+          type: string
+        userId:
+          type: string
+        amountNgn:
+          type: number
+        amountUsdc:
+          type: string
+        fxRateNgnPerUsdc:
+          type: number
+        provider:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - failed
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        failedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureReason:
+          type: string
+          nullable: true
+
+    ReconciliationWalletItem:
+      type: object
+      required:
+      - userId
+      - availableNgn
+      - heldNgn
+      - totalNgn
+      properties:
+        userId:
+          type: string
+        availableNgn:
+          type: number
+        heldNgn:
+          type: number
+        totalNgn:
+          type: number
+        isFrozen:
+          type: boolean
+
+    ReconciliationOutboxItem:
+      type: object
+      required:
+      - id
+      - txType
+      - txId
+      - externalRef
+      - status
+      - attempts
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        txType:
+          type: string
+        txId:
+          type: string
+        externalRef:
+          type: string
+        status:
+          type: string
+        attempts:
+          type: integer
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LedgerMismatch:
+      type: object
+      required:
+      - id
+      - mismatchClass
+      - toleranceMinor
+      - status
+      - resolutionAttempts
+      - traceContext
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        mismatchClass:
+          type: string
+          enum:
+          - missing_credit
+          - duplicate_debit
+          - amount_mismatch
+          - delayed_settlement
+        ledgerEventId:
+          type: string
+        providerEventId:
+          type: string
+        expectedAmountMinor:
+          type: integer
+          format: int64
+          description: Expected amount in minor units.
+        actualAmountMinor:
+          type: integer
+          format: int64
+          description: Actual amount in minor units.
+        toleranceMinor:
+          type: integer
+          format: int64
+          description: Allowed difference in minor units.
+        status:
+          type: string
+          enum:
+          - open
+          - auto_resolved
+          - escalated
+          - closed
+        resolutionWorkflow:
+          type: string
+        resolutionAttempts:
+          type: integer
+        lastResolutionAt:
+          type: string
+          format: date-time
+        escalatedAt:
+          type: string
+          format: date-time
+        slaDeadline:
+          type: string
+          format: date-time
+        traceContext:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LedgerEventIngestRequest:
+      type: object
+      required:
+      - eventType
+      - amountMinor
+      - internalRef
+      - rail
+      - occurredAt
+      properties:
+        eventType:
+          type: string
+          enum:
+          - credit
+          - debit
+        amountMinor:
+          type: integer
+          minimum: 1
+          description: Minor units (kobo for NGN).
+        currency:
+          type: string
+          default: NGN
+        internalRef:
+          type: string
+          minLength: 1
+        rail:
+          type: string
+          minLength: 1
+        userId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+
+    ProviderEventIngestRequest:
+      type: object
+      required:
+      - provider
+      - providerEventId
+      - eventType
+      - amountMinor
+      - rawStatus
+      - occurredAt
+      properties:
+        provider:
+          type: string
+          minLength: 1
+        providerEventId:
+          type: string
+          minLength: 1
+        eventType:
+          type: string
+          enum:
+          - credit
+          - debit
+        amountMinor:
+          type: integer
+          minimum: 1
+          description: Minor units (kobo for NGN).
+        currency:
+          type: string
+          default: NGN
+        internalRef:
+          type: string
+        rawStatus:
+          type: string
+          minLength: 1
+        occurredAt:
+          type: string
+          format: date-time
+
+    TransactionLedgerEntry:
+      type: object
+      required:
+      - id
+      - tx_type
+      - amount_minor
+      - currency
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+        tx_type:
+          type: string
+          example: deposit
+        internal_ref:
+          type: string
+          nullable: true
+        external_ref:
+          type: string
+          nullable: true
+        amount_minor:
+          type: string
+          description: Minor units, serialised as a decimal string.
+        currency:
+          type: string
+          example: NGN
+        status:
+          type: string
+          example: confirmed
+        user_id:
+          type: string
+          nullable: true
+        actor_email:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    QuotaUsage:
+      type: object
+      required:
+      - userId
+      - endpoint
+      - minuteUsage
+      - dayUsage
+      - minuteLimit
+      - dayLimit
+      - minuteReset
+      - dayReset
+      - nearLimit
+      properties:
+        userId:
+          type: string
+        endpoint:
+          type: string
+        minuteUsage:
+          type: integer
+        dayUsage:
+          type: integer
+        minuteLimit:
+          type: integer
+        dayLimit:
+          type: integer
+        minuteReset:
+          type: integer
+        dayReset:
+          type: integer
+        nearLimit:
+          type: boolean
+
+    QuotaStats:
+      type: object
+      required:
+      - totalOverrides
+      - activeOverrides
+      - nearLimitUsers
+      properties:
+        totalOverrides:
+          type: integer
+        activeOverrides:
+          type: integer
+        nearLimitUsers:
+          type: integer
+
+    TimelockTransaction:
+      type: object
+      required:
+      - txHash
+      - target
+      - functionName
+      - args
+      - eta
+      - status
+      - ledger
+      - createdAt
+      - updatedAt
+      properties:
+        txHash:
+          type: string
+        target:
+          type: string
+        functionName:
+          type: string
+        args:
+          type: array
+          items: {}
+        eta:
+          type: integer
+          description: Earliest execution time (ledger timestamp in seconds).
+        status:
+          type: string
+          enum:
+          - queued
+          - executed
+          - cancelled
+        ledger:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BulkActionResult:
+      type: object
+      required:
+      - success
+      - batchId
+      - action
+      - succeeded
+      - failed
+      properties:
+        success:
+          type: boolean
+        batchId:
+          type: string
+          format: uuid
+        action:
+          type: string
+        succeeded:
+          type: array
+          items:
+            type: string
+          description: IDs that were processed.
+        failed:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - reason
+            properties:
+              id:
+                type: string
+              reason:
+                type: string
+                example: Record not found
+
+    SettlementDlqItem:
+      type: object
+      required:
+      - id
+      - deal_id
+      - period
+      - event_type
+      - idempotency_key
+      - failed_at
+      properties:
+        id:
+          type: string
+        deal_id:
+          type: string
+        period:
+          type: integer
+        event_type:
+          type: string
+        idempotency_key:
+          type: string
+        last_error:
+          type: string
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+        replayed_at:
+          type: string
+          format: date-time
+          nullable: true
+
     LandlordAnalytics:
       type: object
       required:
@@ -8964,132 +12977,6 @@ components:
           type: string
           enum:
           - confirmed
-    TenantCurrentLease:
-      type: object
-      description: Summary of a tenant's active lease (#1959)
-      required:
-      - dealId
-      - property
-      - location
-      - monthlyPayment
-      - nextPaymentDate
-      - leaseEnd
-      - totalPaid
-      - totalOwed
-      - progress
-      - landlord
-      properties:
-        dealId:
-          type: string
-        property:
-          type: string
-        location:
-          type: string
-        monthlyPayment:
-          type: integer
-        nextPaymentDate:
-          type: string
-          format: date-time
-        leaseEnd:
-          type: string
-          format: date-time
-        totalPaid:
-          type: integer
-        totalOwed:
-          type: integer
-        progress:
-          type: integer
-          description: Payment progress as a whole percentage (0-100).
-        landlord:
-          type: object
-          required:
-          - name
-          properties:
-            name:
-              type: string
-    TenantLeaseDetails:
-      type: object
-      description: Full lease details for one deal (#1959)
-      required:
-      - dealId
-      - property
-      - lease
-      - landlord
-      - paymentProgress
-      properties:
-        dealId:
-          type: string
-        property:
-          type: object
-          required:
-          - title
-          - address
-          - beds
-          - baths
-          - sqm
-          properties:
-            title:
-              type: string
-            address:
-              type: string
-            beds:
-              type: integer
-            baths:
-              type: integer
-            sqm:
-              type: integer
-        lease:
-          type: object
-          required:
-          - startDate
-          - endDate
-          - duration
-          - monthlyPayment
-          - status
-          properties:
-            startDate:
-              type: string
-              format: date-time
-            endDate:
-              type: string
-              format: date-time
-            duration:
-              type: string
-            monthlyPayment:
-              type: integer
-            status:
-              type: string
-        landlord:
-          type: object
-          required:
-          - name
-          - phone
-          - email
-          properties:
-            name:
-              type: string
-            company:
-              type: string
-            phone:
-              type: string
-            email:
-              type: string
-        paymentProgress:
-          type: object
-          required:
-          - totalPaid
-          - totalOwed
-          - paymentsCompleted
-          - totalPayments
-          properties:
-            totalPaid:
-              type: integer
-            totalOwed:
-              type: integer
-            paymentsCompleted:
-              type: integer
-            totalPayments:
-              type: integer
     TenantLeaseDocument:
       type: object
       description: A lease document attached to a deal (#1959)
@@ -11996,20 +15883,38 @@ components:
         id:
           type: string
           format: uuid
-        policyId
+        jobId:
           type: string
-          format: uuid
-        amountNgn:
-          type: number
-        reason:
+        jobName:
+          type: string
+        handler:
+          type: string
+        workerId:
           type: string
         status:
           type: string
           enum:
-            - submitted
-            - approved
-            - rejected
-            - paid
+          - started
+          - completed
+          - failed
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        payload:
+          type: object
+        fencingToken:
+          type: integer
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -12152,42 +16057,7 @@ components:
             paymentsCompleted:
               type: integer
             totalPayments:
-              type: integer:
-        jobId:
-          type: string
-        jobName:
-          type: string
-        handler:
-          type: string
-        workerId:
-          type: string
-        status:
-          type: string
-          enum:
-          - started
-          - completed
-          - failed
-        startedAt:
-          type: string
-          format: date-time
-        completedAt:
-          type: string
-          format: date-time
-          nullable: true
-        durationMs:
-          type: integer
-          nullable: true
-        errorMessage:
-          type: string
-          nullable: true
-        payload:
-          type: object
-        fencingToken:
-          type: integer
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
+              type: integer
     GovernanceProposalStatus:
       type: string
       description: Mirrors ProposalStatus in contracts/governance/src/lib.rs.
@@ -12708,79 +16578,7 @@ components:
         '401':
           description: Authentication required
 
-  /api/v1/tenant/lease/current:
-    get:
-      summary: Get tenant's current active lease
-      description: Returns the tenant's current active lease summary including property details, payment progress, and next payment date. Returns null if no active lease exists.
-      operationId: getTenantCurrentLease
-      tags:
-        - Tenant
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Current lease summary
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - success
-                  - data
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    $ref: '#/components/schemas/TenantCurrentLease'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        default:
-          $ref: '#/components/responses/Error'
 
-  /api/v1/tenant/deals/{dealId}/lease:
-    get:
-      summary: Get detailed lease information for a specific deal
-      description: Returns full lease details for a specific deal including property details, lease terms, landlord information, and payment progress. Tenant-scoped: returns 404 if the deal doesn't belong to the tenant.
-      operationId: getTenantLeaseDetails
-      tags:
-        - Tenant
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: dealId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: The deal ID to fetch lease details for
-      responses:
-        '200':
-          description: Lease details
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - success
-                  - data
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    $ref: '#/components/schemas/TenantLeaseDetails'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
 
 tags:
   - name: Health
