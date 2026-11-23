@@ -14,6 +14,7 @@ members = [
   "contract_access",
   "timelock",
   "rent_schedule",
+  "vesting_schedule",
 
   "multisig_admin",
   "oracle_price_feeds",
