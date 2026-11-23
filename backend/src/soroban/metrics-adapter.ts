@@ -114,6 +114,27 @@ export class MetricsSorobanAdapter implements SorobanAdapter {
   // MetricsSorobanAdapter is the outermost wrapper the routes actually hold, so
   // optional methods have to be forwarded here or callers cannot see them.
 
+  // ── MVP Staking Pool (#1493) ──────────────────────────────────────────────
+  get mvpStakedBalance(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrapped.mvpStakedBalance) return undefined
+    return (account: string) => this.trackCall('mvpStakedBalance', () => this.wrapped.mvpStakedBalance!(account))
+  }
+
+  get usedStake(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrapped.usedStake) return undefined
+    return (account: string) => this.trackCall('usedStake', () => this.wrapped.usedStake!(account))
+  }
+
+  get unusedStake(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrapped.unusedStake) return undefined
+    return (account: string) => this.trackCall('unusedStake', () => this.wrapped.unusedStake!(account))
+  }
+
+  get claimable(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrapped.claimable) return undefined
+    return (account: string) => this.trackCall('claimable', () => this.wrapped.claimable!(account))
+  }
+
   async createRentPaymentReceipt?(
     dealId: string,
     amount: bigint,

@@ -7,6 +7,7 @@ import { TxType } from '../outbox/types.js'
 import { quoteStore } from '../models/quoteStore.js'
 import { webhookEventDedupeStore } from '../models/webhookEventDedupeStore.js'
 import { NgnWalletService } from '../services/ngnWalletService.js'
+import { sessionStore, userStore } from '../models/authStore.js'
 import {
   InMemoryWebhookReplayStore,
   initWebhookReplayStore,
@@ -18,10 +19,20 @@ describe('Payments webhook', () => {
   const app = createApp()
   const originalNodeEnv = process.env.NODE_ENV
 
+  async function createAuthenticatedUser(userEmailPrefix: string): Promise<{ userId: string; token: string }> {
+    const email = `${userEmailPrefix}@example.com`
+    const user = await userStore.getOrCreateByEmail(email)
+    const token = `token-${userEmailPrefix}`
+    await sessionStore.create(email, token)
+    return { userId: user.id, token }
+  }
+
   beforeEach(async () => {
     await depositStore.clear()
     await outboxStore.clear()
     await quoteStore.clear()
+    sessionStore.clear()
+    userStore.clear()
     webhookEventDedupeStore.clear()
     initWebhookReplayStore(new InMemoryWebhookReplayStore())
     process.env.NODE_ENV = originalNodeEnv
@@ -39,8 +50,9 @@ describe('Payments webhook', () => {
   })
 
   it('is idempotent on replay (rail, externalRef) and second delivery is provider-event deduped', async () => {
+    const { userId, token } = await createAuthenticatedUser('user-001')
     const quote = await quoteStore.create({
-      userId: 'user-001',
+      userId,
       amountNgn: 160000,
       paymentRail: 'paystack',
       fxRateNgnPerUsdc: 1600,
@@ -51,7 +63,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', 'user-001')
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
     const { depositId, externalRef } = init.body
@@ -84,8 +96,9 @@ describe('Payments webhook', () => {
     process.env.WEBHOOK_SIGNATURE_ENABLED = 'true'
     process.env.PAYSTACK_SECRET = 'paystack_secret_123'
 
+    const { userId, token } = await createAuthenticatedUser('user-002')
     const quote = await quoteStore.create({
-      userId: 'user-002',
+      userId,
       amountNgn: 320000,
       paymentRail: 'paystack',
       fxRateNgnPerUsdc: 1600,
@@ -96,7 +109,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', 'user-002')
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -121,8 +134,9 @@ describe('Payments webhook', () => {
     process.env.WEBHOOK_SIGNATURE_ENABLED = 'true'
     process.env.PAYSTACK_SECRET = secret
 
+    const { userId, token } = await createAuthenticatedUser('user-002-valid')
     const quote = await quoteStore.create({
-      userId: 'user-002-valid',
+      userId,
       amountNgn: 320000,
       paymentRail: 'paystack',
       fxRateNgnPerUsdc: 1600,
@@ -133,7 +147,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', 'user-002-valid')
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -164,8 +178,9 @@ describe('Payments webhook', () => {
     process.env.NODE_ENV = 'production'
     process.env.PAYSTACK_SECRET = 'prod_secret_paystack'
 
+    const { userId, token } = await createAuthenticatedUser('prod-user-signature')
     const quote = await quoteStore.create({
-      userId: 'prod-user-signature',
+      userId,
       amountNgn: 220000,
       paymentRail: 'paystack',
       fxRateNgnPerUsdc: 1600,
@@ -176,7 +191,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', 'prod-user-signature')
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -212,8 +227,9 @@ describe('Payments webhook', () => {
   })
 
   it('applies concurrent deliveries of one provider event exactly once', async () => {
+    const { userId, token } = await createAuthenticatedUser('user-concurrent')
     const quote = await quoteStore.create({
-      userId: 'user-concurrent',
+      userId,
       amountNgn: 64000,
       paymentRail: 'paystack',
       fxRateNgnPerUsdc: 1600,
@@ -223,7 +239,7 @@ describe('Payments webhook', () => {
     })
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', 'user-concurrent')
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -248,7 +264,7 @@ describe('Payments webhook', () => {
   })
 
   it('keeps reversal terminal when capture arrives afterward', async () => {
-    const userId = 'user-reversal-first'
+    const { userId, token } = await createAuthenticatedUser('user-reversal-first')
     const quote = await quoteStore.create({
       userId,
       amountNgn: 45000,
@@ -260,7 +276,7 @@ describe('Payments webhook', () => {
     })
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', userId)
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
     const walletService = new NgnWalletService()
@@ -295,7 +311,7 @@ describe('Payments webhook', () => {
   })
 
   it('credits NGN wallet on confirmation', async () => {
-    const userId = 'user-003'
+    const { userId, token } = await createAuthenticatedUser('user-003')
 
     const quote = await quoteStore.create({
       userId,
@@ -309,7 +325,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', userId)
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -330,7 +346,7 @@ describe('Payments webhook', () => {
   })
 
   it('does not double-credit on webhook replay', async () => {
-    const userId = 'user-004'
+    const { userId, token } = await createAuthenticatedUser('user-004')
 
     const quote = await quoteStore.create({
       userId,
@@ -344,7 +360,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', userId)
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -372,7 +388,7 @@ describe('Payments webhook', () => {
   })
 
   it('debits NGN wallet on reversal', async () => {
-    const userId = 'user-005'
+    const { userId, token } = await createAuthenticatedUser('user-005')
 
     const quote = await quoteStore.create({
       userId,
@@ -386,7 +402,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', userId)
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -422,7 +438,7 @@ describe('Payments webhook', () => {
   })
 
   it('handles reversal even if deposit was already confirmed', async () => {
-    const userId = 'user-006'
+    const { userId, token } = await createAuthenticatedUser('user-006')
 
     const quote = await quoteStore.create({
       userId,
@@ -436,7 +452,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', userId)
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 
@@ -472,7 +488,7 @@ describe('Payments webhook', () => {
   })
 
   it('maps provider status codes to internal status', async () => {
-    const userId = 'user-007'
+    const { userId, token } = await createAuthenticatedUser('user-007')
 
     const quote = await quoteStore.create({
       userId,
@@ -486,7 +502,7 @@ describe('Payments webhook', () => {
 
     const init = await request(app)
       .post('/api/staking/deposit/initiate')
-      .set('x-user-id', userId)
+      .set('Authorization', `Bearer ${token}`)
       .send({ quoteId: quote.quoteId, paymentRail: 'paystack' })
       .expect(201)
 

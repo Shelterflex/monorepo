@@ -250,6 +250,39 @@ export class CircuitBreakerAdapter implements SorobanAdapter {
   // circuit-breaker wrapper; without these the wrapper hides them and the
   // routes report the feature as unavailable.
 
+  // ── MVP Staking Pool (#1493) ──────────────────────────────────────────────
+  get mvpStakedBalance(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrappedAdapter.mvpStakedBalance) return undefined
+    return (account: string) =>
+      this.executeWithCircuitBreaker('mvpStakedBalance', () =>
+        this.wrappedAdapter.mvpStakedBalance!(account),
+      )
+  }
+
+  get usedStake(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrappedAdapter.usedStake) return undefined
+    return (account: string) =>
+      this.executeWithCircuitBreaker('usedStake', () =>
+        this.wrappedAdapter.usedStake!(account),
+      )
+  }
+
+  get unusedStake(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrappedAdapter.unusedStake) return undefined
+    return (account: string) =>
+      this.executeWithCircuitBreaker('unusedStake', () =>
+        this.wrappedAdapter.unusedStake!(account),
+      )
+  }
+
+  get claimable(): ((account: string) => Promise<bigint>) | undefined {
+    if (!this.wrappedAdapter.claimable) return undefined
+    return (account: string) =>
+      this.executeWithCircuitBreaker('claimable', () =>
+        this.wrappedAdapter.claimable!(account),
+      )
+  }
+
   async createRentPaymentReceipt?(
     dealId: string,
     amount: bigint,

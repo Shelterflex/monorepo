@@ -6,6 +6,7 @@ import express from 'express'
 import { sessionStore, userStore } from '../models/authStore.js'
 import { ngnDepositStore } from '../models/ngnDepositStore.js'
 import { ngnWalletStore } from '../models/ngnWalletStore.js'
+import { ngnWithdrawalStore } from '../models/ngnWithdrawalStore.js'
 import { seedNgnWalletFixture } from '../test-fixtures/ngnWalletFixtures.js'
 
 describe('NGN Wallet Routes', () => {
@@ -37,6 +38,7 @@ describe('NGN Wallet Routes', () => {
     app.use('/api/wallet/ngn', createNgnWalletRouter(ngnWalletService))
 
     await ngnWalletStore.clear()
+    await ngnWithdrawalStore.clear()
     await seedNgnWalletFixture(userId)
     return ngnDepositStore.clear()
   })
@@ -74,6 +76,7 @@ describe('NGN Wallet Routes', () => {
       const response = await request(app)
         .post('/api/wallet/ngn/withdraw/initiate')
         .set('Authorization', `Bearer ${token}`)
+        .set('x-idempotency-key', 'wd-key-initiate-1')
         .send(withdrawalRequest)
         .expect(201)
 
@@ -88,6 +91,9 @@ describe('NGN Wallet Routes', () => {
     })
 
     it('should reject withdrawal with insufficient balance', async () => {
+      const balanceBefore = await ngnWalletService.getBalance(userId)
+      const ledgerBefore = await ngnWalletService.getLedger(userId)
+
       const withdrawalRequest = {
         amountNgn: 100000, // More than available balance
         bankAccount: {
@@ -100,31 +106,97 @@ describe('NGN Wallet Routes', () => {
       const response = await request(app)
         .post('/api/wallet/ngn/withdraw/initiate')
         .set('Authorization', `Bearer ${token}`)
+        .set('x-idempotency-key', 'wd-key-insufficient-1')
         .send(withdrawalRequest)
         .expect(400)
 
       expect(response.body.error.code).toBe('VALIDATION_ERROR')
       expect(response.body.error.message).toContain('Insufficient balance')
+
+      // Assert balance and ledger are unchanged after rejected withdrawal
+      const balanceAfter = await ngnWalletService.getBalance(userId)
+      expect(balanceAfter).toEqual(balanceBefore)
+      const ledgerAfter = await ngnWalletService.getLedger(userId)
+      expect(ledgerAfter.entries.length).toBe(ledgerBefore.entries.length)
+      expect(ledgerAfter.entries.some((e) => e.referenceType === 'withdrawal')).toBe(false)
     })
   })
 
   describe('GET /api/wallet/ngn/withdraw/history', () => {
     it('should return withdrawal history', async () => {
+      // Seed two withdrawals for the current user
+      await ngnWalletService.initiateWithdrawal(userId, {
+        amountNgn: 1000,
+        bankAccount: {
+          accountNumber: '1234567890',
+          accountName: 'Test User',
+          bankName: 'Test Bank',
+        },
+      })
+      await ngnWalletService.initiateWithdrawal(userId, {
+        amountNgn: 2000,
+        bankAccount: {
+          accountNumber: '1234567890',
+          accountName: 'Test User',
+          bankName: 'Test Bank',
+        },
+      })
+
+      // Seed a withdrawal for a different user to verify history is scoped to caller
+      const otherUser = await userStore.getOrCreateByEmail('other-user@example.com')
+      await seedNgnWalletFixture(otherUser.id)
+      await ngnWalletService.initiateWithdrawal(otherUser.id, {
+        amountNgn: 500,
+        bankAccount: {
+          accountNumber: '9876543210',
+          accountName: 'Other User',
+          bankName: 'Other Bank',
+        },
+      })
+
+      // Fetch all history for caller
       const response = await request(app)
         .get('/api/wallet/ngn/withdraw/history')
         .set('Authorization', `Bearer ${token}`)
         .expect(200)
 
-      console.log('Response body:', JSON.stringify(response.body, null, 2))
-
       expect(response.body.success).toBe(true)
       expect(Array.isArray(response.body.entries)).toBe(true)
-      expect(response.body.entries.length).toBeGreaterThan(0)
+      expect(response.body.entries.length).toBe(2)
+      expect(response.body.entries.every((e: any) => e.amountNgn === 1000 || e.amountNgn === 2000)).toBe(true)
+
+      // Test pagination (limit=1)
+      const page1 = await request(app)
+        .get('/api/wallet/ngn/withdraw/history?limit=1')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+
+      expect(page1.body.entries.length).toBe(1)
+      expect(page1.body.nextCursor).toBeDefined()
+      expect(page1.body.nextCursor).not.toBeNull()
+
+      // Fetch page 2 using cursor
+      const page2 = await request(app)
+        .get(`/api/wallet/ngn/withdraw/history?limit=1&cursor=${encodeURIComponent(page1.body.nextCursor)}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+
+      expect(page2.body.entries.length).toBe(1)
+      expect(page2.body.entries[0].id).not.toBe(page1.body.entries[0].id)
     })
   })
 
   describe('GET /api/wallet/ngn/withdrawals', () => {
     it('should return withdrawals', async () => {
+      await ngnWalletService.initiateWithdrawal(userId, {
+        amountNgn: 1000,
+        bankAccount: {
+          accountNumber: '1234567890',
+          accountName: 'Test User',
+          bankName: 'Test Bank',
+        },
+      })
+
       const response = await request(app)
         .get('/api/wallet/ngn/withdrawals')
         .set('Authorization', `Bearer ${token}`)
@@ -132,6 +204,7 @@ describe('NGN Wallet Routes', () => {
 
       expect(response.body.success).toBe(true)
       expect(Array.isArray(response.body.entries)).toBe(true)
+      expect(response.body.entries.length).toBeGreaterThan(0)
     })
   })
 

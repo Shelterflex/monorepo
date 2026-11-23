@@ -5,7 +5,13 @@ class QuoteStore {
   private byId = new Map<string, QuoteRecord>()
 
   async getById(quoteId: string): Promise<QuoteRecord | null> {
-    return this.byId.get(quoteId) ?? null
+    const record = this.byId.get(quoteId)
+    if (!record) return null
+    if (record.status === 'active' && Date.now() >= record.expiresAt.getTime()) {
+      record.status = 'expired'
+      record.updatedAt = new Date()
+    }
+    return record
   }
 
   async create(input: {
@@ -22,6 +28,7 @@ class QuoteStore {
     const netNgn = input.amountNgn - feesNgn
     const effectiveRate = input.fxRateNgnPerUsdc * (1 + input.slippagePercent)
     const estimatedAmountUsdc = (netNgn / effectiveRate).toFixed(6)
+    const isExpired = input.expiryMs <= 0 || (now.getTime() + input.expiryMs <= now.getTime())
     const record: QuoteRecord = {
       quoteId: randomUUID(),
       userId: input.userId,
@@ -31,7 +38,7 @@ class QuoteStore {
       fxRateNgnPerUsdc: input.fxRateNgnPerUsdc,
       feesNgn,
       expiresAt: new Date(now.getTime() + input.expiryMs),
-      status: 'active',
+      status: isExpired ? 'expired' : 'active',
       createdAt: now,
       updatedAt: now,
     }
