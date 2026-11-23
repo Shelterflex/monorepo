@@ -15,6 +15,7 @@ members = [
   "timelock",
   "rent_schedule",
   "vesting_schedule",
+  "tenant_reputation",
 
   "multisig_admin",
   "oracle_price_feeds",
