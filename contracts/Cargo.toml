@@ -16,6 +16,7 @@ members = [
   "rent_schedule",
   "vesting_schedule",
   "tenant_reputation",
+  "slashing_module",
 
   "multisig_admin",
   "oracle_price_feeds",
