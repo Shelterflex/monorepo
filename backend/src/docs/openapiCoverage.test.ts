@@ -25,7 +25,7 @@ import { collectRoutes, mountPathOf, routeKey } from './routeCollector.js'
 import { loadOpenApiSpec } from './openApiRegistry.js'
 
 /** Lower this when you shrink the allow-list; the test fails if the list is ever longer. */
-const ALLOWLIST_CEILING = 172
+const ALLOWLIST_CEILING = 145
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const allowlist: string[] = JSON.parse(
