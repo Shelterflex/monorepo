@@ -13,6 +13,9 @@ import {
   type UserRole,
   type LandlordProfile
 } from '../repositories/AuthRepository.js'
+import { AppError } from '../errors/AppError.js'
+import { ErrorCode } from '../errors/errorCodes.js'
+import { logger } from '../utils/logger.js'
 
 export type { UserRole, User, OtpChallenge, Session, ActiveSession, WalletChallenge, LandlordProfile }
 
@@ -34,137 +37,172 @@ function hashRefreshToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
+// ─── Backend selection ────────────────────────────────────────────────────────
+//
+// Each store runs against exactly ONE backend, chosen explicitly, never by
+// catching a database error:
+//
+//   - AUTH_STORE=memory | postgres forces the choice (the test setup uses
+//     `memory`, see vitest.config.ts).
+//   - Otherwise Postgres is used when DATABASE_URL is set and the in-memory
+//     implementation when it is not, as the other stores do.
+//
+// In Postgres mode a database error surfaces as a 503 and is never papered over
+// with a process-local copy. That copy used to disagree with the database across
+// instances and restarts: a session revoked in Postgres could still be honoured,
+// a user created during an outage vanished afterwards, and OTP state was lost.
+
+export type AuthStoreMode = 'postgres' | 'memory'
+
+export function getAuthStoreMode(env: NodeJS.ProcessEnv = process.env): AuthStoreMode {
+  const explicit = env.AUTH_STORE?.trim().toLowerCase()
+  if (explicit === 'memory' || explicit === 'postgres') return explicit
+  return env.DATABASE_URL ? 'postgres' : 'memory'
+}
+
+function inMemory(): boolean {
+  return getAuthStoreMode() === 'memory'
+}
+
+/**
+ * Run a Postgres operation. A failure is logged (operation name and error code
+ * only: never emails, tokens or the raw database message, which can embed row
+ * values) and surfaced as a 503. Domain errors raised by the repositories for a
+ * missing user are passed through unchanged.
+ */
+async function db<T>(store: string, operation: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    if (error instanceof Error && error.message === 'User not found') throw error
+
+    const code = (error as { code?: unknown } | null)?.code
+    logger.error('Auth store database error', {
+      store,
+      operation,
+      errorCode: typeof code === 'string' ? code : undefined,
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+    throw new AppError(
+      ErrorCode.SERVICE_UNAVAILABLE,
+      503,
+      'Authentication service temporarily unavailable',
+    )
+  }
+}
+
 class UserStore {
   private postgresRepo = new PostgresUserRepository()
+  // Used only when the in-memory backend is selected (AUTH_STORE=memory or no DATABASE_URL).
   private fallbackCache = new Map<string, User>()
+  private landlordProfiles = new Map<string, LandlordProfile>()
 
   async getByEmail(email: string): Promise<User | undefined> {
-    try {
-      const result = await this.postgresRepo.getByEmail(email)
-      return result || undefined
-    } catch (error) {
-      console.warn('Postgres user lookup failed, using fallback cache:', error)
-      return this.fallbackCache.get(email)
-    }
+    if (inMemory()) return this.fallbackCache.get(email)
+    const result = await db('user', 'getByEmail', () => this.postgresRepo.getByEmail(email))
+    return result || undefined
   }
 
   async getById(userId: string): Promise<User | undefined> {
-    try {
-      const result = await this.postgresRepo.getById(userId)
-      return result || undefined
-    } catch (error) {
-      console.warn('Postgres user lookup by id failed, using fallback cache:', error)
+    if (inMemory()) {
       for (const user of this.fallbackCache.values()) {
         if (user.id === userId) return user
       }
       return undefined
     }
+    const result = await db('user', 'getById', () => this.postgresRepo.getById(userId))
+    return result || undefined
   }
 
   async getOrCreateByEmail(email: string): Promise<User> {
-    try {
-      const user = await this.postgresRepo.getOrCreateByEmail(email)
-      // Update fallback cache
-      this.fallbackCache.set(email, user)
-      return user
-    } catch (error) {
-      console.warn('Postgres user creation failed, using fallback cache:', error)
-
+    if (inMemory()) {
       const existing = this.fallbackCache.get(email)
       if (existing) return existing
 
-      const now = new Date()
       const user: User = {
         id: randomUUID(),
         email,
-        createdAt: now,
+        createdAt: new Date(),
         name: email.split('@')[0] ?? email,
         role: 'tenant',
         tier: 'free',
         planQuota: 100,
         displayCurrency: 'NGN',
       }
-
       this.fallbackCache.set(email, user)
       return user
     }
+    return db('user', 'getOrCreateByEmail', () => this.postgresRepo.getOrCreateByEmail(email))
   }
 
   async updateDisplayCurrency(email: string, displayCurrency: 'NGN' | 'USDC'): Promise<User> {
-    try {
-      const user = await this.postgresRepo.updateDisplayCurrency(email, displayCurrency)
-      this.fallbackCache.set(email, user)
-      return user
-    } catch (error) {
-      console.warn('Postgres display currency update failed, using fallback cache:', error)
+    if (inMemory()) {
       const user = this.fallbackCache.get(email)
-      if (user) {
-        user.displayCurrency = displayCurrency
-        this.fallbackCache.set(email, user)
-        return user
-      }
-      throw new Error('User not found for preference update')
+      if (!user) throw new Error('User not found for preference update')
+      user.displayCurrency = displayCurrency
+      return user
     }
+    return db('user', 'updateDisplayCurrency', () =>
+      this.postgresRepo.updateDisplayCurrency(email, displayCurrency),
+    )
   }
 
   async getByWalletAddress(address: string): Promise<User | undefined> {
-    try {
-      const result = await this.postgresRepo.getByWalletAddress(address)
-      return result || undefined
-    } catch (error) {
-      console.warn('Postgres wallet lookup failed, using fallback cache:', error)
+    if (inMemory()) {
       for (const user of this.fallbackCache.values()) {
-        if (user.walletAddress === address.toLowerCase()) {
-          return user
-        }
+        if (user.walletAddress === address.toLowerCase()) return user
       }
       return undefined
     }
+    const result = await db('user', 'getByWalletAddress', () =>
+      this.postgresRepo.getByWalletAddress(address),
+    )
+    return result || undefined
   }
 
   async linkWalletToUser(email: string, walletAddress: string): Promise<User> {
-    try {
-      const user = await this.postgresRepo.linkWalletToUser(email, walletAddress)
-      // Update fallback cache
-      this.fallbackCache.set(email, user)
-      return user
-    } catch (error) {
-      console.warn('Postgres wallet linking failed, using fallback cache:', error)
+    if (inMemory()) {
       const user = this.fallbackCache.get(email)
-      if (user) {
-        user.walletAddress = walletAddress.toLowerCase()
-        this.fallbackCache.set(email, user)
-        return user
-      }
-      throw new Error('User not found for wallet linking')
+      if (!user) throw new Error('User not found for wallet linking')
+      user.walletAddress = walletAddress.toLowerCase()
+      return user
     }
+    return db('user', 'linkWalletToUser', () => this.postgresRepo.linkWalletToUser(email, walletAddress))
   }
 
   async getLandlordProfile(userId: string): Promise<LandlordProfile | null> {
-    try {
-      return await this.postgresRepo.getLandlordProfile(userId)
-    } catch (error) {
-      console.warn('Postgres landlord profile lookup failed:', error)
-      return null
-    }
+    if (inMemory()) return this.landlordProfiles.get(userId) ?? null
+    return db('user', 'getLandlordProfile', () => this.postgresRepo.getLandlordProfile(userId))
   }
 
   async updateLandlordProfile(userId: string, profile: Partial<LandlordProfile>): Promise<void> {
-    try {
-      await this.postgresRepo.updateLandlordProfile(userId, profile)
-    } catch (error) {
-      console.warn('Postgres landlord profile update failed:', error)
-      throw error
+    if (inMemory()) {
+      const current = this.landlordProfiles.get(userId)
+      this.landlordProfiles.set(userId, {
+        notificationPreferences: {
+          newInquiries: true,
+          paymentUpdates: true,
+          propertyViews: true,
+          marketingTips: true,
+        },
+        ...current,
+        ...profile,
+        userId,
+      })
+      return
     }
+    await db('user', 'updateLandlordProfile', () => this.postgresRepo.updateLandlordProfile(userId, profile))
   }
 
   async updateName(userId: string, name: string): Promise<void> {
-    try {
-      await this.postgresRepo.updateName(userId, name)
-    } catch (error) {
-      console.warn('Postgres user name update failed:', error)
-      throw error
+    if (inMemory()) {
+      for (const user of this.fallbackCache.values()) {
+        if (user.id === userId) user.name = name
+      }
+      return
     }
+    await db('user', 'updateName', () => this.postgresRepo.updateName(userId, name))
   }
 
   /**
@@ -184,6 +222,7 @@ class UserStore {
 
   clear(): void {
     this.fallbackCache.clear()
+    this.landlordProfiles.clear()
   }
 }
 
@@ -192,44 +231,34 @@ class OtpChallengeStore {
   private fallbackCache = new Map<string, OtpChallenge>()
 
   async set(challenge: OtpChallenge): Promise<void> {
-    try {
-      await this.postgresRepo.set(challenge)
-    } catch (error) {
-      console.warn('Postgres OTP challenge storage failed, using fallback cache:', error)
+    if (inMemory()) {
       this.fallbackCache.set(challenge.email, challenge)
+      return
     }
+    await db('otp', 'set', () => this.postgresRepo.set(challenge))
   }
 
   async getByEmail(email: string): Promise<OtpChallenge | undefined> {
-    try {
-      const result = await this.postgresRepo.getByEmail(email)
-      return result || undefined
-    } catch (error) {
-      console.warn('Postgres OTP challenge lookup failed, using fallback cache:', error)
-      return this.fallbackCache.get(email)
-    }
+    if (inMemory()) return this.fallbackCache.get(email)
+    const result = await db('otp', 'getByEmail', () => this.postgresRepo.getByEmail(email))
+    return result || undefined
   }
 
   async deleteByEmail(email: string): Promise<void> {
-    try {
-      await this.postgresRepo.deleteByEmail(email)
-    } catch (error) {
-      console.warn('Postgres OTP challenge deletion failed, using fallback cache:', error)
+    if (inMemory()) {
       this.fallbackCache.delete(email)
+      return
     }
+    await db('otp', 'deleteByEmail', () => this.postgresRepo.deleteByEmail(email))
   }
 
   async updateAttempts(email: string, attempts: number): Promise<void> {
-    try {
-      await this.postgresRepo.updateAttempts(email, attempts)
-    } catch (error) {
-      console.warn('Postgres OTP attempts update failed, using fallback cache:', error)
+    if (inMemory()) {
       const challenge = this.fallbackCache.get(email)
-      if (challenge) {
-        challenge.attempts = attempts
-        this.fallbackCache.set(email, challenge)
-      }
+      if (challenge) challenge.attempts = attempts
+      return
     }
+    await db('otp', 'updateAttempts', () => this.postgresRepo.updateAttempts(email, attempts))
   }
 
   clear(): void {
@@ -242,54 +271,47 @@ class WalletChallengeStore {
   private fallbackCache = new Map<string, WalletChallenge>()
 
   async set(challenge: WalletChallenge): Promise<void> {
-    try {
-      await this.postgresRepo.set(challenge)
-    } catch (error) {
-      console.warn('Postgres wallet challenge storage failed, using fallback cache:', error)
+    if (inMemory()) {
       this.fallbackCache.set(challenge.address.toLowerCase(), challenge)
+      return
     }
+    await db('wallet_challenge', 'set', () => this.postgresRepo.set(challenge))
   }
 
   async getByAddress(address: string): Promise<WalletChallenge | undefined> {
-    try {
-      const result = await this.postgresRepo.getByAddress(address)
-      return result || undefined
-    } catch (error) {
-      console.warn('Postgres wallet challenge lookup failed, using fallback cache:', error)
-      return this.fallbackCache.get(address.toLowerCase())
-    }
+    if (inMemory()) return this.fallbackCache.get(address.toLowerCase())
+    const result = await db('wallet_challenge', 'getByAddress', () =>
+      this.postgresRepo.getByAddress(address),
+    )
+    return result || undefined
   }
 
   async deleteByAddress(address: string): Promise<void> {
-    try {
-      await this.postgresRepo.deleteByAddress(address)
-    } catch (error) {
-      console.warn('Postgres wallet challenge deletion failed, using fallback cache:', error)
+    if (inMemory()) {
       this.fallbackCache.delete(address.toLowerCase())
+      return
     }
+    await db('wallet_challenge', 'deleteByAddress', () => this.postgresRepo.deleteByAddress(address))
   }
 
   async updateAttempts(address: string, attempts: number): Promise<void> {
-    try {
-      await this.postgresRepo.updateAttempts(address, attempts)
-    } catch (error) {
-      console.warn('Postgres wallet attempts update failed, using fallback cache:', error)
+    if (inMemory()) {
       const challenge = this.fallbackCache.get(address.toLowerCase())
-      if (challenge) {
-        challenge.attempts = attempts
-        this.fallbackCache.set(address.toLowerCase(), challenge)
-      }
+      if (challenge) challenge.attempts = attempts
+      return
     }
+    await db('wallet_challenge', 'updateAttempts', () =>
+      this.postgresRepo.updateAttempts(address, attempts),
+    )
   }
 
   async markAsUsed(address: string): Promise<void> {
-    try {
-      await this.postgresRepo.markAsUsed(address)
-    } catch (error) {
-      console.warn('Postgres wallet challenge usage marking failed, using fallback cache:', error)
-      // In fallback mode, we just delete it
+    if (inMemory()) {
+      // The in-memory backend has no "used" flag: a used challenge is simply removed.
       this.fallbackCache.delete(address.toLowerCase())
+      return
     }
+    await db('wallet_challenge', 'markAsUsed', () => this.postgresRepo.markAsUsed(address))
   }
 
   clear(): void {
@@ -308,6 +330,7 @@ interface FallbackSessionMeta {
 
 class SessionStore {
   private postgresRepo = new PostgresSessionRepository()
+  // Used only when the in-memory backend is selected (AUTH_STORE=memory or no DATABASE_URL).
   private fallbackCache = new Map<string, Session>()
 
   async create(
@@ -329,20 +352,23 @@ class SessionStore {
       lastActiveAt: now,
     }
 
-    try {
-      await this.postgresRepo.create(email, token, session.expiresAt, auditInfo, { id: session.id, family })
-    } catch (error) {
-      console.warn('Postgres session creation failed, using fallback cache:', error)
+    if (inMemory()) {
+      this.fallbackCache.set(token, session as any)
+    } else {
+      // Postgres is the only record of this session; a failure means no session was created.
+      await db('session', 'create', () =>
+        this.postgresRepo.create(email, token, session.expiresAt!, auditInfo, { id: session.id, family }),
+      )
     }
-
-    this.fallbackCache.set(token, session as any)
     return session as any
   }
 
   async getByToken(token: string): Promise<Session | undefined> {
     let session: (Session & { expiresAt?: Date; userAgent?: string }) | undefined
-    try {
-      const dbSession = await this.postgresRepo.getByToken(token)
+    if (inMemory()) {
+      session = this.fallbackCache.get(token) as any
+    } else {
+      const dbSession = await db('session', 'getByToken', () => this.postgresRepo.getByToken(token))
       if (dbSession) {
         session = {
           token: dbSession.token,
@@ -352,9 +378,6 @@ class SessionStore {
           userAgent: (dbSession as any).userAgent,
         }
       }
-    } catch (error) {
-      console.warn('Postgres session lookup failed, using fallback cache:', error)
-      session = this.fallbackCache.get(token) as any
     }
 
     if (!session) return undefined
@@ -369,37 +392,36 @@ class SessionStore {
   }
 
   async getTokenState(token: string): Promise<'active' | 'expired' | 'invalid'> {
-    const fallback = this.fallbackCache.get(token) as (Session & { expiresAt?: Date }) | undefined
-    if (fallback) {
-      const expiresAt = fallback.expiresAt ?? new Date(fallback.createdAt.getTime() + SESSION_TTL_MS)
+    if (inMemory()) {
+      const cached = this.fallbackCache.get(token) as (Session & { expiresAt?: Date }) | undefined
+      if (!cached) return 'invalid'
+      const expiresAt = cached.expiresAt ?? new Date(cached.createdAt.getTime() + SESSION_TTL_MS)
       return expiresAt.getTime() < Date.now() ? 'expired' : 'active'
     }
-
-    try {
-      return await this.postgresRepo.getTokenState(token)
-    } catch (error) {
-      console.warn('Postgres token state lookup failed:', error)
-      return 'invalid'
-    }
+    return db('session', 'getTokenState', () => this.postgresRepo.getTokenState(token))
   }
 
   async deleteByToken(token: string): Promise<void> {
-    try {
-      await this.postgresRepo.revokeByToken(token)
-    } catch (error) {
-      console.warn('Postgres session deletion failed, using fallback cache:', error)
+    if (inMemory()) {
+      this.fallbackCache.delete(token)
+      return
     }
-    this.fallbackCache.delete(token)
+    await db('session', 'deleteByToken', () => this.postgresRepo.revokeByToken(token))
   }
 
-  revokeByToken(token: string): void {
-    this.fallbackCache.delete(token)
-    this.postgresRepo.revokeByToken(token).catch(err => {
-      console.warn('Postgres session revocation failed:', err)
-    })
+  /** Revoke one session. Rejects with a 503 if Postgres is unavailable, so a revocation is never silently lost. */
+  async revokeByToken(token: string): Promise<void> {
+    await this.deleteByToken(token)
   }
 
+  /**
+   * Active sessions for an email from the in-memory backend. Synchronous, so it
+   * cannot query Postgres; use `listActiveSessions` there.
+   */
   getActiveSessionsByEmail(email: string): Session[] {
+    if (!inMemory()) {
+      throw new Error('getActiveSessionsByEmail is only available with the in-memory auth store')
+    }
     const now = Date.now()
     const sessions: Session[] = []
     for (const session of this.fallbackCache.values()) {
@@ -414,15 +436,24 @@ class SessionStore {
     return sessions
   }
 
-  revokeAllByEmail(email: string): number {
-    let count = 0
-    for (const [token, session] of this.fallbackCache.entries()) {
-      if (session.email === email) {
-        this.fallbackCache.delete(token)
-        count++
+  /** Revoke every session for an email; returns how many were revoked. */
+  async revokeAllByEmail(email: string): Promise<number> {
+    if (inMemory()) {
+      let count = 0
+      for (const [token, session] of this.fallbackCache.entries()) {
+        if (session.email === email) {
+          this.fallbackCache.delete(token)
+          count++
+        }
       }
+      return count
     }
-    return count
+    const user = await userStore.getByEmail(email)
+    if (!user) return 0
+    const result = await db('session', 'revokeAllByEmail', () =>
+      this.postgresRepo.revokeAllSessions(user.id, {}),
+    )
+    return result.count
   }
 
   private fallbackActive(email: string, currentToken?: string): ActiveSession[] {
@@ -458,12 +489,8 @@ class SessionStore {
 
   /** Active sessions for a user (one entry per device); `current` flags the caller's own. */
   async listActiveSessions(userId: string, email: string, currentToken?: string): Promise<ActiveSession[]> {
-    try {
-      return await this.postgresRepo.listActiveSessions(userId, currentToken)
-    } catch (error) {
-      console.warn('Postgres session listing failed, using fallback cache:', error)
-      return this.fallbackActive(email, currentToken)
-    }
+    if (inMemory()) return this.fallbackActive(email, currentToken)
+    return db('session', 'listActiveSessions', () => this.postgresRepo.listActiveSessions(userId, currentToken))
   }
 
   /**
@@ -474,27 +501,25 @@ class SessionStore {
     const families = new Set<string>()
     let found = false
 
-    try {
-      const result = await this.postgresRepo.revokeSession(userId, sessionId)
+    if (inMemory()) {
+      const target = [...this.fallbackCache.values()].find(
+        (s) => s.email === email && (s as Session & FallbackSessionMeta).id === sessionId,
+      ) as (Session & FallbackSessionMeta) | undefined
+      if (target) {
+        found = true
+        if (target.family) families.add(target.family)
+        for (const [token, s] of this.fallbackCache.entries()) {
+          const meta = s as Session & FallbackSessionMeta
+          if (s.email === email && (meta.id === sessionId || (target.family && meta.family === target.family))) {
+            this.fallbackCache.delete(token)
+          }
+        }
+      }
+    } else {
+      const result = await db('session', 'revokeSession', () => this.postgresRepo.revokeSession(userId, sessionId))
       if (result) {
         found = true
         result.families.forEach((f) => families.add(f))
-      }
-    } catch (error) {
-      console.warn('Postgres session revocation failed, using fallback cache:', error)
-    }
-
-    const target = [...this.fallbackCache.values()].find(
-      (s) => s.email === email && (s as Session & FallbackSessionMeta).id === sessionId,
-    ) as (Session & FallbackSessionMeta) | undefined
-    if (target) {
-      found = true
-      if (target.family) families.add(target.family)
-      for (const [token, s] of this.fallbackCache.entries()) {
-        const meta = s as Session & FallbackSessionMeta
-        if (s.email === email && (meta.id === sessionId || (target.family && meta.family === target.family))) {
-          this.fallbackCache.delete(token)
-        }
       }
     }
 
@@ -516,24 +541,23 @@ class SessionStore {
     }
 
     let count = 0
-    try {
-      const result = await this.postgresRepo.revokeAllSessions(userId, { exceptSessionId })
+    if (inMemory()) {
+      for (const [token, s] of this.fallbackCache.entries()) {
+        const meta = s as Session & FallbackSessionMeta
+        if (s.email !== email) continue
+        if (exceptSessionId && (meta.id === exceptSessionId || (exceptFamily && meta.family === exceptFamily))) continue
+        this.fallbackCache.delete(token)
+        count++
+      }
+    } else {
+      const result = await db('session', 'revokeAllSessions', () =>
+        this.postgresRepo.revokeAllSessions(userId, { exceptSessionId }),
+      )
       count = result.count
-    } catch (error) {
-      console.warn('Postgres session revocation failed, using fallback cache:', error)
-    }
-
-    let fallbackCount = 0
-    for (const [token, s] of this.fallbackCache.entries()) {
-      const meta = s as Session & FallbackSessionMeta
-      if (s.email !== email) continue
-      if (exceptSessionId && (meta.id === exceptSessionId || (exceptFamily && meta.family === exceptFamily))) continue
-      this.fallbackCache.delete(token)
-      fallbackCount++
     }
 
     await refreshTokenStore.invalidateAllByUserId(userId, exceptFamily)
-    return Math.max(count, fallbackCount)
+    return count
   }
 
   clear(): void {

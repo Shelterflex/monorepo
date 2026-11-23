@@ -60,7 +60,31 @@ export class EmailNotificationProvider implements NotificationProvider {
 }
 
 /**
+ * Mask values that must never reach logs or a terminal: one-time codes, tokens,
+ * JWTs and credential-like query parameters.
+ */
+export function maskSensitiveValues(text: string): string {
+  return text
+    .replace(/\b(token|code|otp|secret|key|signature)=([^&\s]+)/gi, '$1=[REDACTED]')
+    .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+    .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '[REDACTED]')
+    .replace(/\b\d{4,10}\b/g, '[REDACTED]')
+}
+
+/**
+ * Dev-mode notification output is opt-in: set NOTIFICATION_DEV_PRINT=true (and
+ * LOG_LEVEL=debug to see it). It is never available in production.
+ */
+export function isDevNotificationPrintEnabled(): boolean {
+  return env.NODE_ENV !== 'production' && process.env.NOTIFICATION_DEV_PRINT === 'true'
+}
+
+/**
  * Console Notification Provider (fallback for development/testing)
+ *
+ * Does not deliver anything. By default it only records that a notification was
+ * skipped (recipient and subject, never the body). With NOTIFICATION_DEV_PRINT=true
+ * the body is also logged at debug level with one-time codes and tokens masked.
  */
 export class ConsoleNotificationProvider implements NotificationProvider {
   channel = NotificationChannel.EMAIL
@@ -74,19 +98,19 @@ export class ConsoleNotificationProvider implements NotificationProvider {
       throw new Error('ConsoleNotificationProvider should not be used in production')
     }
 
+    // Never log the body at info level: it can contain one-time codes or personal data.
     logger.info('[Notification] Console provider', {
       recipient: payload.recipient,
       subject: payload.subject,
-      body: payload.body,
     })
 
-    console.log('\n' + '='.repeat(60))
-    console.log('📧 Notification (Dev Mode)')
-    console.log('='.repeat(60))
-    console.log(`To: ${payload.recipient}`)
-    console.log(`Subject: ${payload.subject || 'Notification'}`)
-    console.log(`\n${payload.body}`)
-    console.log('='.repeat(60) + '\n')
+    if (isDevNotificationPrintEnabled()) {
+      logger.debug('[Notification] Console provider body (dev mode)', {
+        recipient: payload.recipient,
+        subject: payload.subject || 'Notification',
+        body: maskSensitiveValues(payload.body ?? ''),
+      })
+    }
   }
 }
 

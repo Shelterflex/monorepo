@@ -20,6 +20,7 @@ import {
 import { metrics } from '@opentelemetry/api';
 import { createRequire } from 'node:module';
 import { resourceFromAttributes } from '@opentelemetry/resources';
+import { logger } from './logger.js';
 
 // Skip metrics in test environment
 const isTestEnv = process.env.NODE_ENV === 'test';
@@ -38,7 +39,7 @@ if (!isTestEnv) {
         endpoint: '/metrics',
       },
       () => {
-        console.log(`[metrics] Prometheus exporter listening on port ${prometheusPort}`);
+        logger.info('Prometheus exporter listening', { port: prometheusPort });
       }
     );
 
@@ -54,7 +55,7 @@ if (!isTestEnv) {
 
     metrics.setGlobalMeterProvider(meterProvider);
   } catch (error) {
-    console.error('[metrics] Failed to initialize metrics:', error);
+    logger.error('Failed to initialize metrics', {}, error);
   }
 }
 
@@ -396,10 +397,10 @@ export async function shutdownMetrics(): Promise<void> {
     const meterProvider = metrics.getMeterProvider() as any;
     if (meterProvider && typeof meterProvider.shutdown === 'function') {
       await meterProvider.shutdown();
-      console.log('[metrics] Metrics provider shut down successfully');
+      logger.info('Metrics provider shut down successfully');
     }
   } catch (error) {
-    console.error('[metrics] Error shutting down metrics provider:', error);
+    logger.error('Error shutting down metrics provider', {}, error);
   }
 }
 
