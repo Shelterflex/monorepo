@@ -86,7 +86,7 @@ export default function TenantDashboard() {
       completedSteps: string[];
       currentStep: string;
       submitted: boolean;
-    }>("/api/onboarding/status")
+    }>("/api/v1/onboarding/status")
       .then(setOnboardingStatus)
       .catch(() => {});
   }, []);

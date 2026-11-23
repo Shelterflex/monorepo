@@ -14,7 +14,7 @@ describe('AuditLogFilters', () => {
       />,
     )
 
-    const actorInput = screen.getByLabelText(/actor id/i)
+    const actorInput = screen.getByRole('textbox', { name: /actor id/i })
     fireEvent.change(actorInput, { target: { value: 'actor-42' } })
     fireEvent.keyDown(actorInput, { key: 'Enter' })
 

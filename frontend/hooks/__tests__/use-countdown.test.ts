@@ -109,4 +109,24 @@ describe("useCountdown", () => {
 
     expect(result.current.formatTime()).toBe("00:02:05");
   });
+
+  it("clears the initial timeout on unmount", () => {
+    const target = new Date(Date.now() + 5000);
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+
+    const { unmount } = renderHook(() => useCountdown(target.toISOString()));
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it("leaves the countdown invalid for an unparseable target", () => {
+    const { result } = renderHook(() => useCountdown("not-a-date"));
+
+    act(() => { vi.advanceTimersByTime(1); });
+
+    expect(Number.isNaN(result.current.timeLeft)).toBe(true);
+    expect(result.current.isExpired).toBe(false);
+  });
 });

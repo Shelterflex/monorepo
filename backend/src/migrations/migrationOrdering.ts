@@ -56,7 +56,7 @@ export function buildOrderedMigrationFiles(
   }
 
   const timestampedFiles = files.filter((file) => !manifestFilenames.has(file))
-  const timestampPrefixes = new Set<string>()
+  const timestampPrefixMap = new Map<string, string>()
   for (const file of timestampedFiles) {
     const match = TIMESTAMPED_PREFIX.exec(file)
     if (!match) {
@@ -66,10 +66,13 @@ export function buildOrderedMigrationFiles(
     }
 
     const prefix = match[1]
-    if (timestampPrefixes.has(prefix)) {
-      throw new Error(`Duplicate migration timestamp prefix ${prefix} detected.`)
+    const existing = timestampPrefixMap.get(prefix)
+    if (existing) {
+      throw new Error(
+        `Duplicate migration timestamp prefix ${prefix} detected (${existing}, ${file}).`,
+      )
     }
-    timestampPrefixes.add(prefix)
+    timestampPrefixMap.set(prefix, file)
   }
 
   const orderedLegacy = [...manifest.legacyMigrations]

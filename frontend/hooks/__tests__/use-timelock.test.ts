@@ -127,6 +127,20 @@ describe("useTimelock", () => {
     expect(mockHandleError).toHaveBeenCalled();
   });
 
+  it("does not refresh or toast when execute reports failure", async () => {
+    mockExecute.mockResolvedValue({ success: false });
+
+    const { result } = renderHook(() => useTimelock());
+    await act(async () => {});
+
+    mockGetQueued.mockClear();
+    await act(async () => { await result.current.handleExecute("tx1"); });
+
+    expect(mockShowSuccess).not.toHaveBeenCalled();
+    expect(mockHandleError).not.toHaveBeenCalled();
+    expect(mockGetQueued).not.toHaveBeenCalled();
+  });
+
   it("cancel calls API and refreshes list", async () => {
     mockCancel.mockResolvedValue({ success: true });
     mockGetQueued.mockResolvedValue([makeTx({ txHash: "c1" })]);
@@ -150,6 +164,20 @@ describe("useTimelock", () => {
     await act(async () => { await result.current.handleCancel("tx1"); });
 
     expect(mockHandleError).toHaveBeenCalled();
+  });
+
+  it("does not refresh or toast when cancel reports failure", async () => {
+    mockCancel.mockResolvedValue({ success: false });
+
+    const { result } = renderHook(() => useTimelock());
+    await act(async () => {});
+
+    mockGetQueued.mockClear();
+    await act(async () => { await result.current.handleCancel("tx1"); });
+
+    expect(mockShowSuccess).not.toHaveBeenCalled();
+    expect(mockHandleError).not.toHaveBeenCalled();
+    expect(mockGetQueued).not.toHaveBeenCalled();
   });
 });
 
@@ -228,5 +256,21 @@ describe("useCountdown (timelock variant)", () => {
     const { result } = renderHook(() => useCountdown(-100));
     expect(result.current.timeLeft).toBe(0);
     expect(result.current.formatTime()).toBe("Ready to Execute");
+  });
+
+  it("recomputes after the eta changes", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const { result, rerender } = renderHook(
+      ({ eta }: { eta: number }) => useCountdown(eta),
+      { initialProps: { eta: now + 60 } },
+    );
+
+    expect(result.current.timeLeft).toBe(60);
+
+    rerender({ eta: now + 120 });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(result.current.timeLeft).toBe(119);
+    expect(result.current.formatTime()).toBe("0h 1m 59s");
   });
 });

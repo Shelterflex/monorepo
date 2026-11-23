@@ -59,6 +59,13 @@ export const rateLimitProfiles = {
     keyPrefix: 'rl:public_rating_card',
     keyBy: 'ip',
   },
+  // Public contact-form submissions (#2056): five per hour per IP.
+  supportMessage: {
+    points: 5,
+    duration: 60 * 60, // 1 hour
+    keyPrefix: 'rl:support_message',
+    keyBy: 'ip',
+  },
 } as const satisfies Record<string, RateLimiterOptions>
 
 export type RateLimitProfileName = keyof typeof rateLimitProfiles

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { validate } from '../middleware/validate.js'
-import { idempotency } from '../middleware/idempotency.js'
+import { durableApiIdempotency } from '../middleware/durableApiIdempotency.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/rbac.js'
 import { confirmPaymentSchema } from '../schemas/payment.js'
@@ -48,7 +48,7 @@ export function createPaymentsRouter(adapter: SorobanAdapter) {
     '/confirm',
     authenticateToken,
     requirePermission('payments', 'confirm'),
-    idempotency(),
+    durableApiIdempotency(),
     validate(confirmPaymentSchema),
     async (req: Request, res: Response, next: NextFunction) => {
       try {

@@ -225,6 +225,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bond_collateral"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban_access_control",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -699,6 +707,14 @@ dependencies = [
  "r-efi",
  "wasip2",
  "wasip3",
+]
+
+[[package]]
+name = "governance"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban_access_control",
 ]
 
 [[package]]
@@ -1205,6 +1221,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 name = "rent_payments"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-pausable",
  "soroban-sdk",
 ]
@@ -1213,6 +1230,7 @@ dependencies = [
 name = "rent_schedule"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-pausable",
  "soroban-sdk",
 ]
@@ -1221,6 +1239,7 @@ dependencies = [
 name = "rent_wallet"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-pausable",
  "soroban-sdk",
  "soroban_access_control",
@@ -1274,6 +1293,14 @@ dependencies = [
  "quick-error",
  "tempfile",
  "wait-timeout",
+]
+
+[[package]]
+name = "schema_registry"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban_access_control",
 ]
 
 [[package]]
@@ -1659,6 +1686,7 @@ dependencies = [
 name = "staking_pool"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "soroban-pausable",

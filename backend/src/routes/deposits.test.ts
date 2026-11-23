@@ -3,6 +3,7 @@ import request from 'supertest'
 import { createApp } from '../app.js'
 import { conversionStore } from '../models/conversionStore.js'
 import { depositStore } from '../models/depositStore.js'
+import { _resetDurableIdempotencyMemory } from '../services/durableIdempotencyService.js'
 
 // Mock authenticateToken to bypass authentication for functional tests
 vi.mock('../middleware/auth.js', () => ({
@@ -33,6 +34,7 @@ describe('POST /api/deposits/confirm', () => {
   const app = createApp()
 
   beforeEach(async () => {
+    _resetDurableIdempotencyMemory()
     await conversionStore.clear()
     await depositStore.clear()
   })
@@ -123,5 +125,31 @@ describe('POST /api/deposits/confirm', () => {
 
     expect(conflictRes.body.error.code).toBe('CONFLICT')
     expect(conflictRes.body.error.message).toMatch(/different request payload/)
+  })
+
+  it('handles concurrent duplicate requests rejecting one with 409 REQUEST_IN_FLIGHT', async () => {
+    const payload = {
+      depositId: 'onramp:dep_005',
+      userId: 'user_1',
+      amountNgn: 50000,
+      provider: 'onramp',
+      providerRef: 'provider-ref-005',
+    }
+
+    const [resA, resB] = await Promise.all([
+      request(app)
+        .post('/api/deposits/confirm')
+        .set('x-idempotency-key', 'idem-key-005')
+        .send(payload),
+      request(app)
+        .post('/api/deposits/confirm')
+        .set('x-idempotency-key', 'idem-key-005')
+        .send(payload),
+    ])
+
+    const statuses = [resA.status, resB.status].sort()
+    expect(statuses).toEqual([200, 409])
+    const rejected = resA.status === 409 ? resA : resB
+    expect(rejected.body.error.code).toBe('REQUEST_IN_FLIGHT')
   })
 })
