@@ -25,6 +25,7 @@ The contracts directory is a Cargo workspace. Each subdirectory is a separate co
 | `soroban_access_control/` | Shared access-control primitives |
 | `soroban_pausable/` | Shared pausable primitive used across contracts |
 | `contract_access/` | Contract-level access helpers |
+| `multisig_admin/` | M-of-N approval gate for privileged admin actions ([README](multisig_admin/README.md)) |
 
 ## Formal Verification
 

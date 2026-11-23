@@ -271,7 +271,7 @@ router.post('/logout', async (req: Request, res: Response) => {
  */
 router.post('/logout-all', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const email = req.user!.email
-  const count = sessionStore.revokeAllByEmail(email)
+  const count = await sessionStore.revokeAllByEmail(email)
   const refreshCount = await refreshTokenStore.invalidateAllByUserId(req.user!.id)
   clearRefreshCookie(res)
   auditAuthLogoutAll(req, { userId: req.user!.id, sessionCount: count + refreshCount })

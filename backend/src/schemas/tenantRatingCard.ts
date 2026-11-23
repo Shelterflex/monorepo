@@ -26,6 +26,17 @@ export const createTenantRatingSchema = z.object({
 
 export type CreateTenantRatingRequest = z.infer<typeof createTenantRatingSchema>
 
+/** Landlord rating body. The deal id comes from the path, and the tenant is read from the deal. */
+export const tenantRatingBodySchema = createTenantRatingSchema.omit({ dealId: true })
+
+export const dealIdParamsSchema = z.object({
+  dealId: z.string().uuid('dealId must be a valid deal id'),
+})
+
+export const shareTokenIdParamsSchema = z.object({
+  tokenId: z.string().uuid('tokenId must be a valid share link id'),
+})
+
 export const shareRatingCardSchema = z.object({
   ttlDays: z.number().int().min(1).max(30),
 })

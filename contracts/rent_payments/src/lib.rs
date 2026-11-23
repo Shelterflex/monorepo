@@ -8,6 +8,9 @@ use soroban_sdk::{
 #[cfg(kani)]
 mod formal_properties;
 
+#[cfg(test)]
+mod proptest_invariants;
+
 /// Deal ID type - using u64 for simplicity
 pub type DealId = u64;
 
