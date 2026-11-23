@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
-import { randomUUID } from "node:crypto";
 import { createTenantSavedPropertiesRouter } from "./tenantSavedProperties.js";
 import { listingStore } from "../models/listingStore.js";
 import { ListingStatus, type Listing } from "../models/listing.js";
@@ -26,7 +25,7 @@ vi.mock("../middleware/auth.js", () => ({
 const listingsById = new Map<string, Listing>();
 
 function seedListing(status: ListingStatus): string {
-  const listingId = randomUUID();
+  const listingId = globalThis.crypto.randomUUID();
   listingsById.set(listingId, {
     listingId,
     whistleblowerId: "wb-test",
@@ -62,7 +61,7 @@ describe("tenant saved properties (#2049)", () => {
 
   beforeEach(() => {
     app = buildApp();
-    tenant = randomUUID();
+    tenant = globalThis.crypto.randomUUID();
     listingsById.clear();
     vi.spyOn(listingStore, "getById").mockImplementation(
       async (listingId: string) => listingsById.get(listingId) ?? null,
@@ -123,7 +122,7 @@ describe("tenant saved properties (#2049)", () => {
 
   it("returns 404 for a listing id that does not exist", async () => {
     const res = await request(app)
-      .put(`/api/tenant/saved-properties/${randomUUID()}`)
+      .put(`/api/tenant/saved-properties/${globalThis.crypto.randomUUID()}`)
       .set("x-test-user", tenant)
       .expect(404);
 
@@ -196,7 +195,7 @@ describe("tenant saved properties (#2049)", () => {
 
   it("only shows each tenant their own saved listings", async () => {
     const listingId = seedListing(ListingStatus.APPROVED);
-    const otherTenant = randomUUID();
+    const otherTenant = globalThis.crypto.randomUUID();
 
     await request(app)
       .put(`/api/tenant/saved-properties/${listingId}`)

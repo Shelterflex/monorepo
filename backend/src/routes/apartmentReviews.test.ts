@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import request from 'supertest'
 import express from 'express'
-import { randomUUID } from 'node:crypto'
 import { createApartmentReviewsRouter, createAdminApartmentReviewsRouter } from './apartmentReviews.js'
 import { errorHandler } from '../middleware/errorHandler.js'
 import { DealStatus } from '../models/deal.js'
@@ -63,7 +62,7 @@ function buildApp(): express.Application {
 }
 
 function tenantWithStay(listingId: string): string {
-  const tenantId = randomUUID()
+  const tenantId = globalThis.crypto.randomUUID()
   deals.push({ tenantId, listingId, status: DealStatus.COMPLETED })
   return tenantId
 }
@@ -80,12 +79,12 @@ describe('apartment reviews (#2050)', () => {
   it('requires authentication to create a review', async () => {
     const res = await request(app)
       .post('/api/v1/apartment-reviews')
-      .send({ listingId: randomUUID(), rating: 4, text: 'Fine' })
+      .send({ listingId: globalThis.crypto.randomUUID(), rating: 4, text: 'Fine' })
     expect(res.status).toBe(401)
   })
 
   it('lets a tenant with a completed deal review the listing and hides the reviewer id', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const tenantId = tenantWithStay(listingId)
 
     const res = await request(app)
@@ -99,8 +98,8 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('accepts a live application without marking the review as a verified stay', async () => {
-    const listingId = randomUUID()
-    const tenantId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
+    const tenantId = globalThis.crypto.randomUUID()
     applications.push({ tenantId, listingId, status: ListingApplicationStatus.UNDER_REVIEW })
 
     const res = await request(app)
@@ -115,13 +114,13 @@ describe('apartment reviews (#2050)', () => {
   it('refuses a review from someone with no relationship to the listing', async () => {
     const res = await request(app)
       .post('/api/v1/apartment-reviews')
-      .set('x-test-user', randomUUID())
-      .send({ listingId: randomUUID(), rating: 2, text: 'Never lived here.' })
+      .set('x-test-user', globalThis.crypto.randomUUID())
+      .send({ listingId: globalThis.crypto.randomUUID(), rating: 2, text: 'Never lived here.' })
     expect(res.status).toBe(403)
   })
 
   it('allows only one review per user per listing', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const tenantId = tenantWithStay(listingId)
     const body = { listingId, rating: 4, text: 'First review.' }
 
@@ -133,7 +132,7 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('rejects HTML in review text and ratings outside 1 to 5', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const tenantId = tenantWithStay(listingId)
 
     const html = await request(app)
@@ -150,7 +149,7 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('enforces the maximum text length', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const tenantId = tenantWithStay(listingId)
     const res = await request(app)
       .post('/api/v1/apartment-reviews')
@@ -160,7 +159,7 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('bounds pagination and returns the average over visible reviews only', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const tenantA = tenantWithStay(listingId)
     const tenantB = tenantWithStay(listingId)
     await request(app).post('/api/v1/apartment-reviews').set('x-test-user', tenantA).send({ listingId, rating: 5, text: 'Great' })
@@ -177,7 +176,7 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('hides a review once it reaches the report threshold, and removes it from listings and the average', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const author = tenantWithStay(listingId)
     const created = await request(app)
       .post('/api/v1/apartment-reviews')
@@ -187,7 +186,7 @@ describe('apartment reviews (#2050)', () => {
 
     // Each reporter needs a deal or application to matter for the review itself; reports only need a user id.
     for (let i = 0; i < 3; i++) {
-      const res = await request(app).post(`/api/v1/apartment-reviews/${reviewId}/report`).set('x-test-user', randomUUID())
+      const res = await request(app).post(`/api/v1/apartment-reviews/${reviewId}/report`).set('x-test-user', globalThis.crypto.randomUUID())
       expect(res.status).toBe(200)
     }
 
@@ -197,14 +196,14 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('counts a repeat report from the same user once', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const author = tenantWithStay(listingId)
     const created = await request(app)
       .post('/api/v1/apartment-reviews')
       .set('x-test-user', author)
       .send({ listingId, rating: 2, text: 'Could be better.' })
     const reviewId = created.body.data.id as string
-    const reporter = randomUUID()
+    const reporter = globalThis.crypto.randomUUID()
 
     const first = await request(app).post(`/api/v1/apartment-reviews/${reviewId}/report`).set('x-test-user', reporter)
     const again = await request(app).post(`/api/v1/apartment-reviews/${reviewId}/report`).set('x-test-user', reporter)
@@ -217,7 +216,7 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('does not let an author report their own review', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const author = tenantWithStay(listingId)
     const created = await request(app)
       .post('/api/v1/apartment-reviews')
@@ -231,7 +230,7 @@ describe('apartment reviews (#2050)', () => {
   })
 
   it('lets only a moderator change visibility', async () => {
-    const listingId = randomUUID()
+    const listingId = globalThis.crypto.randomUUID()
     const author = tenantWithStay(listingId)
     const created = await request(app)
       .post('/api/v1/apartment-reviews')
@@ -239,7 +238,7 @@ describe('apartment reviews (#2050)', () => {
       .send({ listingId, rating: 4, text: 'Visible until moderated.' })
     const path = `/api/v1/admin/apartment-reviews/${created.body.data.id}`
 
-    const moderator = randomUUID()
+    const moderator = globalThis.crypto.randomUUID()
     const denied = await request(app).patch(path).set('x-test-user', moderator).send({ isHidden: true })
     expect(denied.status).toBe(403)
 

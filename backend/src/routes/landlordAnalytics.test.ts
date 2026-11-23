@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
-import { randomUUID } from "node:crypto";
 import { createLandlordAnalyticsRouter } from "./landlordAnalytics.js";
 import { landlordPropertyStore } from "../models/landlordPropertyStore.js";
 import { listingStore } from "../models/listingStore.js";
@@ -38,7 +37,7 @@ const deals = new Map<string, Record<string, unknown>>();
 
 function addProperty(landlordId: string, overrides: Partial<LandlordProperty> = {}): LandlordProperty {
   const property = {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     landlordId,
     title: "Lekki Flat",
     address: "1 Test Road",
@@ -61,8 +60,8 @@ function addProperty(landlordId: string, overrides: Partial<LandlordProperty> = 
 
 /** Links a property to an active deal that started on `createdAt`, with a two-instalment schedule. */
 function letProperty(property: LandlordProperty, createdAt: string): void {
-  const listingId = randomUUID();
-  const dealId = randomUUID();
+  const listingId = globalThis.crypto.randomUUID();
+  const dealId = globalThis.crypto.randomUUID();
   listings.set(listingId, { listingId, dealId });
   deals.set(dealId, {
     dealId,
@@ -97,7 +96,7 @@ describe("landlord analytics (#2054)", () => {
     vi.setSystemTime(new Date("2026-03-20T12:00:00.000Z"));
 
     app = buildApp();
-    landlord = randomUUID();
+    landlord = globalThis.crypto.randomUUID();
     properties.length = 0;
     listings.clear();
     deals.clear();
@@ -188,7 +187,7 @@ describe("landlord analytics (#2054)", () => {
 
   it("returns 404 for a propertyId that belongs to another landlord", async () => {
     const mine = addProperty(landlord);
-    const theirs = addProperty(randomUUID());
+    const theirs = addProperty(globalThis.crypto.randomUUID());
 
     await request(app)
       .get(`/api/landlord/analytics?propertyId=${theirs.id}`)
@@ -204,7 +203,7 @@ describe("landlord analytics (#2054)", () => {
 
   it("never includes another landlord's properties in the totals", async () => {
     addProperty(landlord);
-    const other = addProperty(randomUUID());
+    const other = addProperty(globalThis.crypto.randomUUID());
     letProperty(other, "2026-01-01T00:00:00.000Z");
 
     const res = await request(app)
