@@ -20,8 +20,23 @@ import { createSorobanAdapter } from "./soroban/index.js"
 import { getSorobanConfigFromEnv } from "./soroban/client.js"
 import { closeDbPools } from "./db.js"
 import { closeRedis } from "./utils/redis.js"
+import { logger } from "./utils/logger.js"
 
 const SHUTDOWN_TIMEOUT_MS = 20_000
+
+/**
+ * Bootstrap fallback (the only direct output in this file).
+ *
+ * Fatal exits call process.exit() right after logging. The structured logger
+ * writes to stdout asynchronously when stdout is a pipe on some platforms, so
+ * the JSON line can be lost when the process exits immediately. This writes one
+ * plain, readable line to stderr as well, so a failed startup is never silent.
+ * It is not used for anything else.
+ */
+function fatalExit(message: string, detail?: string): never {
+  process.stderr.write(`[backend] ${message}${detail ? `: ${detail}` : ""}\n`)
+  process.exit(1)
+}
 
 const require = createRequire(import.meta.url)
 const { version } = require("../package.json") as { version: string }
@@ -32,11 +47,14 @@ const { version } = require("../package.json") as { version: string }
 if (env.NODE_ENV === 'production') {
   try {
     getUsdcTokenAddress()
-    console.log(`[backend] Environment validation passed for ${env.SOROBAN_NETWORK} network`)
+    logger.info("Environment validation passed", { network: env.SOROBAN_NETWORK })
   } catch (error) {
-    console.error(`[backend] Environment validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    console.error(`[backend] Please check your environment variables and restart the server`)
-    process.exit(1)
+    const reason = error instanceof Error ? error.message : "Unknown error"
+    logger.error("Environment validation failed", {
+      reason,
+      hint: "Check your environment variables and restart the server",
+    })
+    fatalExit("Environment validation failed", `${reason}. Check your environment variables and restart the server`)
   }
 }
 
@@ -76,7 +94,7 @@ async function main() {
     void sorobanEventIndexer?.start()
 
     const server = app.listen(env.PORT, () => {
-      console.log(`[backend] listening on http://localhost:${env.PORT}`)
+      logger.info("Backend listening", { port: env.PORT, url: `http://localhost:${env.PORT}` })
     })
     notificationWSS.attach(server)
 
@@ -84,11 +102,11 @@ async function main() {
     const shutdown = async (signal: string) => {
       if (shuttingDown) return
       shuttingDown = true
-      console.log(`[backend] ${signal} received, starting graceful shutdown`)
+      logger.info("Shutdown signal received, starting graceful shutdown", { signal })
 
       const forceExitTimer = setTimeout(() => {
-        console.error("[backend] Graceful shutdown timed out, forcing exit")
-        process.exit(1)
+        logger.error("Graceful shutdown timed out, forcing exit", { timeoutMs: SHUTDOWN_TIMEOUT_MS })
+        fatalExit("Graceful shutdown timed out, forcing exit")
       }, SHUTDOWN_TIMEOUT_MS)
       forceExitTimer.unref()
 
@@ -107,7 +125,7 @@ async function main() {
 
         await new Promise<void>((resolve) => {
           server.close((err) => {
-            if (err) console.error("[backend] Error closing HTTP server:", err)
+            if (err) logger.error("Error closing HTTP server", {}, err)
             resolve()
           })
         })
@@ -116,20 +134,20 @@ async function main() {
         await closeRedis()
 
         clearTimeout(forceExitTimer)
-        console.log("[backend] Graceful shutdown complete")
+        logger.info("Graceful shutdown complete")
         process.exit(0)
       } catch (error) {
         clearTimeout(forceExitTimer)
-        console.error(`[backend] Error during graceful shutdown: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)
-        process.exit(1)
+        logger.error("Error during graceful shutdown", {}, error)
+        fatalExit("Error during graceful shutdown", error instanceof Error ? error.message : String(error))
       }
     }
 
     process.on("SIGTERM", () => void shutdown("SIGTERM"))
     process.on("SIGINT", () => void shutdown("SIGINT"))
   } catch (error) {
-    console.error(`[backend] Fatal startup error: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)
-    process.exit(1)
+    logger.error("Fatal startup error", {}, error)
+    fatalExit("Fatal startup error", error instanceof Error ? error.message : String(error))
   }
 }
 

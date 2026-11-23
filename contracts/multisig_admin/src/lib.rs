@@ -74,12 +74,35 @@ pub enum DataKey {
     Paused,
 }
 
+// Ledger TTL policy. These match `soroban_access_control::extend_storage_ttl`, which
+// extends persistent entries: an entry below 10,000 remaining ledgers is extended to
+// 500,000 ledgers (about 29 days at a 5 second ledger close). Instance storage (signers,
+// threshold, proposal TTL, pause flag) uses the same values.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the contract instance (signers, threshold, proposal TTL, pause flag).
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of a persistent entry when it exists. Extending a missing key is a
+/// host error, so reads of absent keys are skipped.
+fn extend_persistent_if_present(env: &Env, key: &DataKey) {
+    if env.storage().persistent().has(key) {
+        extend_storage_ttl(env, &key.into_val(env));
+    }
+}
+
 #[contract]
 pub struct MultisigAdmin;
 
 #[contractimpl]
 impl MultisigAdmin {
     pub fn init(env: Env, signers: Vec<Address>, threshold: u32) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Signers) {
             return Err(Error::AlreadyInitialized);
         }
@@ -117,6 +140,7 @@ impl MultisigAdmin {
         function: Symbol,
         args: Vec<Val>,
     ) -> Result<u64, Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         if !Self::is_signer(env.clone(), proposer.clone()) {
             return Err(Error::NotSigner);
@@ -165,6 +189,7 @@ impl MultisigAdmin {
     }
 
     pub fn approve(env: Env, signer: Address, proposal_id: u64) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         if !Self::is_signer(env.clone(), signer.clone()) {
             return Err(Error::NotSigner);
@@ -177,6 +202,7 @@ impl MultisigAdmin {
             .persistent()
             .get(&prop_key)
             .ok_or(Error::ProposalNotFound)?;
+        extend_persistent_if_present(&env, &prop_key);
 
         if proposal.status != ProposalStatus::Pending {
             return Err(Error::ProposalNotPending);
@@ -204,6 +230,7 @@ impl MultisigAdmin {
     }
 
     pub fn revoke_approval(env: Env, signer: Address, proposal_id: u64) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         if !Self::is_signer(env.clone(), signer.clone()) {
             return Err(Error::NotSigner);
@@ -216,6 +243,7 @@ impl MultisigAdmin {
             .persistent()
             .get(&prop_key)
             .ok_or(Error::ProposalNotFound)?;
+        extend_persistent_if_present(&env, &prop_key);
 
         if proposal.status != ProposalStatus::Pending {
             return Err(Error::ProposalNotPending);
@@ -251,6 +279,7 @@ impl MultisigAdmin {
     }
 
     pub fn execute(env: Env, executor: Address, proposal_id: u64) -> Result<Val, Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         if !Self::is_signer(env.clone(), executor.clone()) {
             return Err(Error::NotSigner);
@@ -263,6 +292,7 @@ impl MultisigAdmin {
             .persistent()
             .get(&prop_key)
             .ok_or(Error::ProposalNotFound)?;
+        extend_persistent_if_present(&env, &prop_key);
 
         if proposal.status == ProposalStatus::Executed {
             return Err(Error::AlreadyExecuted);
@@ -286,6 +316,7 @@ impl MultisigAdmin {
 
         proposal.status = ProposalStatus::Executed;
         env.storage().persistent().set(&prop_key, &proposal);
+        extend_storage_ttl(&env, &prop_key.into_val(&env));
         let res = if proposal.target == env.current_contract_address() {
             if proposal.function == Symbol::new(&env, "change_signers") {
                 let val = proposal.args.get(0).ok_or(Error::NotAuthorized)?;
@@ -320,6 +351,7 @@ impl MultisigAdmin {
     }
 
     pub fn cancel(env: Env, caller: Address, proposal_id: u64) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         caller.require_auth();
 
@@ -329,6 +361,7 @@ impl MultisigAdmin {
             .persistent()
             .get(&prop_key)
             .ok_or(Error::ProposalNotFound)?;
+        extend_persistent_if_present(&env, &prop_key);
 
         if proposal.status != ProposalStatus::Pending {
             return Err(Error::ProposalNotPending);
@@ -356,6 +389,7 @@ impl MultisigAdmin {
                 .persistent()
                 .get(&cancel_key)
                 .unwrap_or(Vec::new(&env));
+            extend_persistent_if_present(&env, &cancel_key);
 
             let mut already_voted = false;
             for a in cancel_approvals.iter() {
@@ -408,11 +442,13 @@ impl MultisigAdmin {
     }
 
     pub fn get_proposal(env: Env, id: u64) -> Result<Proposal, Error> {
+        extend_instance_ttl(&env);
         let mut proposal: Proposal = env
             .storage()
             .persistent()
             .get(&DataKey::Proposal(id))
             .ok_or(Error::ProposalNotFound)?;
+        extend_persistent_if_present(&env, &DataKey::Proposal(id));
 
         if proposal.status == ProposalStatus::Pending
             && env.ledger().timestamp() > proposal.expires_at
@@ -424,11 +460,13 @@ impl MultisigAdmin {
     }
 
     pub fn list_proposals(env: Env, status_filter: Option<ProposalStatus>) -> Vec<u64> {
+        extend_instance_ttl(&env);
         let count: u64 = env
             .storage()
             .persistent()
             .get(&DataKey::ProposalCount)
             .unwrap_or(0u64);
+        extend_persistent_if_present(&env, &DataKey::ProposalCount);
         let mut result = Vec::new(&env);
 
         let mut id = 1u64;
@@ -451,16 +489,19 @@ impl MultisigAdmin {
     // ── Self-Targeting Governance Methods ─────────────────────────────────────
 
     pub fn change_signers(env: Env, new_signers: Vec<Address>) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         env.current_contract_address().require_auth();
         change_signers_internal(&env, new_signers)
     }
 
     pub fn change_threshold(env: Env, new_threshold: u32) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         env.current_contract_address().require_auth();
         change_threshold_internal(&env, new_threshold)
     }
 
     pub fn set_proposal_ttl(env: Env, new_ttl: u64) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         env.current_contract_address().require_auth();
         set_proposal_ttl_internal(&env, new_ttl)
     }
@@ -468,6 +509,7 @@ impl MultisigAdmin {
     // ── View Helpers ──────────────────────────────────────────────────────────
 
     pub fn get_signers(env: Env) -> Vec<Address> {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::Signers)
@@ -475,6 +517,7 @@ impl MultisigAdmin {
     }
 
     pub fn get_threshold(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::Threshold)
@@ -482,6 +525,7 @@ impl MultisigAdmin {
     }
 
     pub fn get_proposal_ttl(env: Env) -> u64 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&DataKey::ProposalTtl)
@@ -489,6 +533,7 @@ impl MultisigAdmin {
     }
 
     pub fn is_signer(env: Env, caller: Address) -> bool {
+        extend_instance_ttl(&env);
         let signers: Vec<Address> = env
             .storage()
             .instance()
@@ -506,6 +551,7 @@ impl MultisigAdmin {
 #[contractimpl]
 impl Pausable for MultisigAdmin {
     fn pause(env: Env, admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if !MultisigAdmin::is_signer(env.clone(), admin.clone()) {
             return Err(PausableError::NotAuthorized);
         }
@@ -519,6 +565,7 @@ impl Pausable for MultisigAdmin {
     }
 
     fn unpause(env: Env, admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if !MultisigAdmin::is_signer(env.clone(), admin.clone()) {
             return Err(PausableError::NotAuthorized);
         }
@@ -532,6 +579,7 @@ impl Pausable for MultisigAdmin {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, bool>(&DataKey::Paused)

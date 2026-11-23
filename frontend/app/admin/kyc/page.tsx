@@ -91,7 +91,7 @@ export default function KycReviewQueuePage() {
       params.set("pageSize", String(pageSize))
 
       const result = await apiGet<{ success: boolean; data: ListResponse }>(
-        `/api/kyc/admin?${params.toString()}`
+        `/api/v1/kyc/admin?${params.toString()}`
       )
       setRecords(result.data.records)
       setTotal(result.data.total)

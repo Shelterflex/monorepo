@@ -23,6 +23,61 @@ fn setup_contract(env: &Env) -> (Address, StakingPoolClient<'_>, Address, Addres
     (contract_id, client, admin, user, token_contract_id)
 }
 
+/// Ledgers to advance in the TTL tests. This is past the test env default persistent TTL
+/// (`min_persistent_entry_ttl` = 4096), so an entry that was never extended would be archived.
+const LEDGERS_PAST_DEFAULT_TTL: u32 = 5_000;
+
+fn advance_ledgers(env: &Env, ledgers: u32) {
+    let next = env.ledger().sequence() + ledgers;
+    env.ledger().set_sequence_number(next);
+}
+
+#[test]
+fn stake_state_survives_past_default_ttl() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_contract_id, client, admin, user, token_id) = setup_contract(&env);
+
+    let asset = StellarAssetClient::new(&env, &token_id);
+    asset.mint(&user, &1000i128);
+    client.stake(&user, &100i128);
+    client.utilize_stake(&admin, &user, &40i128);
+
+    advance_ledgers(&env, LEDGERS_PAST_DEFAULT_TTL);
+
+    // Values are unchanged after the ledger jump.
+    assert_eq!(client.staked_balance(&user), 100i128);
+    assert_eq!(client.used_stake(&user), 40i128);
+    assert_eq!(client.unused_stake(&user), 60i128);
+    assert_eq!(client.total_staked(), 100i128);
+}
+
+#[test]
+fn reads_extend_ttl_so_stake_survives_beyond_first_window() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_contract_id, client, _admin, user, token_id) = setup_contract(&env);
+
+    // A getter for an address that never staked must not fail while extending TTL.
+    let stranger = Address::generate(&env);
+    assert_eq!(client.staked_balance(&stranger), 0i128);
+
+    let asset = StellarAssetClient::new(&env, &token_id);
+    asset.mint(&user, &1000i128);
+    client.stake(&user, &100i128);
+
+    // The stake writes at ledger 0 extend entries to ledger 500,000. At ledger 495,000 the
+    // remaining lifetime is under the 10,000-ledger threshold, so these reads extend again.
+    advance_ledgers(&env, 495_000);
+    assert_eq!(client.staked_balance(&user), 100i128);
+    assert_eq!(client.total_staked(), 100i128);
+
+    // Past the original 500,000-ledger window. Only the read-driven extension keeps these alive.
+    advance_ledgers(&env, 400_000);
+    assert_eq!(client.staked_balance(&user), 100i128);
+    assert_eq!(client.total_staked(), 100i128);
+}
+
 #[test]
 fn stake_tokens() {
     let env = Env::default();

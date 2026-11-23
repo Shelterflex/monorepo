@@ -41,6 +41,54 @@ pub const ALLOWED_TX_TYPES: [&str; 7] = [
     "CONVERSION",
 ];
 
+/// Ledger TTL policy for contract storage.
+///
+/// Whenever an instance or persistent entry is read or written, its lifetime is
+/// extended to `TTL_EXTEND_TO_LEDGERS` if fewer than `TTL_THRESHOLD_LEDGERS` remain.
+/// 500,000 ledgers is about 29 days at Stellar's ~5 second ledger close (about 58 days
+/// at 10 seconds). This matches `soroban_access_control::extend_storage_ttl`. Receipts
+/// are permanent evidence, so an unread receipt must still be touched at least once
+/// per window; the backend indexer's periodic reads serve that purpose.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the contract instance (admin, operator, paused flag, version).
+fn extend_instance_ttl(env: &soroban_sdk::Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of a persistent entry. Extending a missing key is a host error,
+/// so absent keys are skipped.
+fn extend_persistent_ttl(env: &soroban_sdk::Env, key: &StorageKey) {
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+    }
+}
+
+/// Reads a persistent entry and extends its TTL when it exists.
+fn get_persistent<V>(env: &soroban_sdk::Env, key: &StorageKey) -> Option<V>
+where
+    V: soroban_sdk::TryFromVal<soroban_sdk::Env, soroban_sdk::Val>,
+    <V as soroban_sdk::TryFromVal<soroban_sdk::Env, soroban_sdk::Val>>::Error: core::fmt::Debug,
+{
+    let value: Option<V> = env.storage().persistent().get(key);
+    extend_persistent_ttl(env, key);
+    value
+}
+
+/// Writes a persistent entry and extends its TTL.
+fn set_persistent<V>(env: &soroban_sdk::Env, key: &StorageKey, value: &V)
+where
+    V: soroban_sdk::IntoVal<soroban_sdk::Env, soroban_sdk::Val>,
+{
+    env.storage().persistent().set(key, value);
+    extend_persistent_ttl(env, key);
+}
+
 /// Input parameters for recording a receipt (to avoid 10-parameter limit)
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -305,6 +353,8 @@ impl TransactionReceiptContract {
         admin: Address,
         operator: Address,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+
         // Check if already initialized by checking if Admin key exists
         if env.storage().instance().has(&StorageKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
@@ -337,6 +387,7 @@ impl TransactionReceiptContract {
     }
 
     pub fn contract_version(env: soroban_sdk::Env) -> u32 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, u32>(&StorageKey::ContractVersion)
@@ -367,6 +418,8 @@ impl TransactionReceiptContract {
         admin: Address,
         new_operator: Address,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+
         // Require authentication from the admin
         admin.require_auth();
 
@@ -416,6 +469,8 @@ impl TransactionReceiptContract {
         operator: Address,
         input: ReceiptInput,
     ) -> Result<BytesN<32>, ContractError> {
+        extend_instance_ttl(&env);
+
         // Require authentication from the operator
         operator.require_auth();
 
@@ -477,45 +532,40 @@ impl TransactionReceiptContract {
         };
 
         // Store receipt in persistent storage
-        env.storage()
-            .persistent()
-            .set(&StorageKey::Receipt(tx_id.clone()), &receipt);
+        set_persistent(&env, &StorageKey::Receipt(tx_id.clone()), &receipt);
 
         // Update deal index
         let deal_count_key = StorageKey::DealCount(input.deal_id.clone());
-        let current_count: u32 = env.storage().persistent().get(&deal_count_key).unwrap_or(0);
+        let current_count: u32 = get_persistent(&env, &deal_count_key).unwrap_or(0);
 
         // Store tx_id in deal index
         let deal_index_key = StorageKey::DealIndex(input.deal_id.clone(), current_count);
-        env.storage().persistent().set(&deal_index_key, &tx_id);
+        set_persistent(&env, &deal_index_key, &tx_id);
 
         // Increment deal count
-        env.storage()
-            .persistent()
-            .set(&deal_count_key, &(current_count + 1));
+        set_persistent(&env, &deal_count_key, &(current_count + 1));
 
         // Update user indices for from and to addresses
         if let Some(ref from_addr) = receipt.from {
             let user_count_key = StorageKey::UserCount(from_addr.clone());
-            let user_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
-            env.storage().persistent().set(
+            let user_count: u32 = get_persistent(&env, &user_count_key).unwrap_or(0);
+            set_persistent(
+                &env,
                 &StorageKey::UserIndex(from_addr.clone(), user_count),
                 &tx_id,
             );
-            env.storage()
-                .persistent()
-                .set(&user_count_key, &(user_count + 1));
+            set_persistent(&env, &user_count_key, &(user_count + 1));
         }
 
         if let Some(ref to_addr) = receipt.to {
             let user_count_key = StorageKey::UserCount(to_addr.clone());
-            let user_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
-            env.storage()
-                .persistent()
-                .set(&StorageKey::UserIndex(to_addr.clone(), user_count), &tx_id);
-            env.storage()
-                .persistent()
-                .set(&user_count_key, &(user_count + 1));
+            let user_count: u32 = get_persistent(&env, &user_count_key).unwrap_or(0);
+            set_persistent(
+                &env,
+                &StorageKey::UserIndex(to_addr.clone(), user_count),
+                &tx_id,
+            );
+            set_persistent(&env, &user_count_key, &(user_count + 1));
         }
 
         // Emit event with topic ("receipt", tx_id) and receipt payload
@@ -546,7 +596,8 @@ impl TransactionReceiptContract {
     /// * Returns None for non-existent tx_id (Requirement 8.2)
     /// * No authorization required (public read)
     pub fn get_receipt(env: soroban_sdk::Env, tx_id: BytesN<32>) -> Option<Receipt> {
-        env.storage().persistent().get(&StorageKey::Receipt(tx_id))
+        extend_instance_ttl(&env);
+        get_persistent(&env, &StorageKey::Receipt(tx_id))
     }
 
     /// List all receipts for a specific deal with pagination
@@ -573,11 +624,13 @@ impl TransactionReceiptContract {
     ) -> soroban_sdk::Vec<Receipt> {
         use soroban_sdk::Vec;
 
+        extend_instance_ttl(&env);
+
         let mut results = Vec::new(&env);
 
         // Get total count of receipts for this deal
         let deal_count_key = StorageKey::DealCount(deal_id.clone());
-        let total_count: u32 = env.storage().persistent().get(&deal_count_key).unwrap_or(0);
+        let total_count: u32 = get_persistent(&env, &deal_count_key).unwrap_or(0);
 
         // Calculate start index from cursor (default 0)
         let start_index = cursor.unwrap_or(0);
@@ -594,16 +647,9 @@ impl TransactionReceiptContract {
             let deal_index_key = StorageKey::DealIndex(deal_id.clone(), index);
 
             // Load tx_id from deal index
-            if let Some(tx_id) = env
-                .storage()
-                .persistent()
-                .get::<StorageKey, BytesN<32>>(&deal_index_key)
-            {
+            if let Some(tx_id) = get_persistent::<BytesN<32>>(&env, &deal_index_key) {
                 // Load receipt for this tx_id
-                if let Some(receipt) = env
-                    .storage()
-                    .persistent()
-                    .get::<StorageKey, Receipt>(&StorageKey::Receipt(tx_id))
+                if let Some(receipt) = get_persistent::<Receipt>(&env, &StorageKey::Receipt(tx_id))
                 {
                     results.push_back(receipt);
                 }
@@ -631,10 +677,12 @@ impl TransactionReceiptContract {
     ) -> soroban_sdk::Vec<Receipt> {
         use soroban_sdk::Vec;
 
+        extend_instance_ttl(&env);
+
         let mut results = Vec::new(&env);
 
         let user_count_key = StorageKey::UserCount(user.clone());
-        let total_count: u32 = env.storage().persistent().get(&user_count_key).unwrap_or(0);
+        let total_count: u32 = get_persistent(&env, &user_count_key).unwrap_or(0);
 
         let start_index = cursor.unwrap_or(0);
         let capped_limit = core::cmp::min(limit, 100);
@@ -646,15 +694,8 @@ impl TransactionReceiptContract {
         for index in start_index..end_index {
             let user_index_key = StorageKey::UserIndex(user.clone(), index);
 
-            if let Some(tx_id) = env
-                .storage()
-                .persistent()
-                .get::<StorageKey, BytesN<32>>(&user_index_key)
-            {
-                if let Some(receipt) = env
-                    .storage()
-                    .persistent()
-                    .get::<StorageKey, Receipt>(&StorageKey::Receipt(tx_id))
+            if let Some(tx_id) = get_persistent::<BytesN<32>>(&env, &user_index_key) {
+                if let Some(receipt) = get_persistent::<Receipt>(&env, &StorageKey::Receipt(tx_id))
                 {
                     results.push_back(receipt);
                 }
@@ -668,6 +709,7 @@ impl TransactionReceiptContract {
 #[contractimpl]
 impl Pausable for TransactionReceiptContract {
     fn pause(env: soroban_sdk::Env, admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if require_admin(&env, &admin).is_err() {
             return Err(PausableError::NotAuthorized);
         }
@@ -680,6 +722,7 @@ impl Pausable for TransactionReceiptContract {
     }
 
     fn unpause(env: soroban_sdk::Env, admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if require_admin(&env, &admin).is_err() {
             return Err(PausableError::NotAuthorized);
         }
@@ -692,6 +735,7 @@ impl Pausable for TransactionReceiptContract {
     }
 
     fn is_paused(env: soroban_sdk::Env) -> bool {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, bool>(&StorageKey::Paused)

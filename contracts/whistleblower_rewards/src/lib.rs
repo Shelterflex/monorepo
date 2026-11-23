@@ -82,6 +82,34 @@ pub struct WhistleblowerRewards;
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
+// ── Ledger TTL ────────────────────────────────────────────────────────────────
+
+/// An entry is extended whenever it is read or written and fewer than this many
+/// ledgers remain (about 14 hours at a 5 second ledger close).
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+/// Extend to 500,000 ledgers: about 29 days at a 5 second ledger close, or 58 days at
+/// 10 seconds. Matches `soroban_access_control::extend_storage_ttl`. A claimable balance
+/// that nobody reads or writes for longer than this window will expire, so the operator
+/// must keep allocations touched (for example by a periodic `claimable` read).
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the contract instance (admin, operator, token, hold window, pause).
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of a persistent entry. Extending a missing key is a host error,
+/// so absent keys are skipped.
+fn extend_persistent_ttl(env: &Env, key: &StorageKey) {
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+    }
+}
+
 fn get_admin(env: &Env) -> Address {
     env.storage()
         .instance()
@@ -157,13 +185,10 @@ fn get_hold_window(env: &Env) -> u64 {
 }
 
 fn get_allocation_nonce(env: &Env, whistleblower: &Address, listing_id: &String) -> u64 {
-    env.storage()
-        .persistent()
-        .get::<_, u64>(&StorageKey::AllocationNonce(
-            whistleblower.clone(),
-            listing_id.clone(),
-        ))
-        .unwrap_or(0)
+    let key = StorageKey::AllocationNonce(whistleblower.clone(), listing_id.clone());
+    let nonce: u64 = env.storage().persistent().get(&key).unwrap_or(0);
+    extend_persistent_ttl(env, &key);
+    nonce
 }
 
 fn get_allocation(
@@ -172,11 +197,10 @@ fn get_allocation(
     listing_id: &String,
     id: u64,
 ) -> Option<AllocationRecord> {
-    env.storage().persistent().get(&StorageKey::Allocation(
-        whistleblower.clone(),
-        listing_id.clone(),
-        id,
-    ))
+    let key = StorageKey::Allocation(whistleblower.clone(), listing_id.clone(), id);
+    let record: Option<AllocationRecord> = env.storage().persistent().get(&key);
+    extend_persistent_ttl(env, &key);
+    record
 }
 
 fn put_allocation(
@@ -186,10 +210,9 @@ fn put_allocation(
     id: u64,
     record: &AllocationRecord,
 ) {
-    env.storage().persistent().set(
-        &StorageKey::Allocation(whistleblower.clone(), listing_id.clone(), id),
-        record,
-    );
+    let key = StorageKey::Allocation(whistleblower.clone(), listing_id.clone(), id);
+    env.storage().persistent().set(&key, record);
+    extend_persistent_ttl(env, &key);
 }
 
 /// Sum all claimable amounts: Pending allocations past the hold window.
@@ -226,6 +249,7 @@ impl WhistleblowerRewards {
         token: Address,
         hold_window_secs: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&StorageKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
@@ -253,6 +277,7 @@ impl WhistleblowerRewards {
     }
 
     pub fn contract_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, u32>(&StorageKey::ContractVersion)
@@ -265,6 +290,7 @@ impl WhistleblowerRewards {
         admin: Address,
         window_secs: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         env.storage()
             .instance()
@@ -280,6 +306,7 @@ impl WhistleblowerRewards {
     }
 
     pub fn get_hold_window(env: Env) -> u64 {
+        extend_instance_ttl(&env);
         get_hold_window(&env)
     }
 
@@ -295,6 +322,7 @@ impl WhistleblowerRewards {
         deal_id: String,
         amount: i128,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_operator(&env, &operator)?;
         require_not_paused(&env)?;
         require_non_empty_string(&listing_id)?;
@@ -315,10 +343,9 @@ impl WhistleblowerRewards {
             status: AllocationStatus::Pending,
         };
         put_allocation(&env, &whistleblower, &listing_id, nonce, &record);
-        env.storage().persistent().set(
-            &StorageKey::AllocationNonce(whistleblower.clone(), listing_id.clone()),
-            &(nonce + 1),
-        );
+        let nonce_key = StorageKey::AllocationNonce(whistleblower.clone(), listing_id.clone());
+        env.storage().persistent().set(&nonce_key, &(nonce + 1));
+        extend_persistent_ttl(&env, &nonce_key);
 
         let hold_window = get_hold_window(&env);
         let claimable_at = timestamp + hold_window;
@@ -347,6 +374,7 @@ impl WhistleblowerRewards {
         allocation_id: u64,
         reason: String,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         caller.require_auth();
         let op = get_operator(&env);
         let guardian_opt = env
@@ -409,6 +437,7 @@ impl WhistleblowerRewards {
         listing_id: String,
         amount: Option<i128>,
     ) -> Result<i128, ContractError> {
+        extend_instance_ttl(&env);
         to.require_auth();
         require_not_paused(&env)?;
         require_non_empty_string(&listing_id)?;
@@ -478,6 +507,7 @@ impl WhistleblowerRewards {
     }
 
     pub fn claimable(env: Env, whistleblower: Address, listing_id: String) -> i128 {
+        extend_instance_ttl(&env);
         if require_non_empty_string(&listing_id).is_err() {
             return 0;
         }
@@ -492,6 +522,7 @@ impl WhistleblowerRewards {
         admin: Address,
         new_operator: Address,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         let old_operator = get_operator(&env);
         env.storage()
@@ -511,6 +542,7 @@ impl WhistleblowerRewards {
 #[contractimpl]
 impl Pausable for WhistleblowerRewards {
     fn pause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if require_admin(&env, &_admin).is_err() {
             return Err(PausableError::NotAuthorized);
         }
@@ -523,6 +555,7 @@ impl Pausable for WhistleblowerRewards {
     }
 
     fn unpause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         if require_admin(&env, &_admin).is_err() {
             return Err(PausableError::NotAuthorized);
         }
@@ -535,6 +568,7 @@ impl Pausable for WhistleblowerRewards {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         get_paused(&env)
     }
 }
@@ -542,6 +576,7 @@ impl Pausable for WhistleblowerRewards {
 #[contractimpl]
 impl WhistleblowerRewards {
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         env.storage()
             .instance()
@@ -557,6 +592,7 @@ impl WhistleblowerRewards {
     }
 
     pub fn set_upgrade_delay(env: Env, admin: Address, delay: u64) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         env.storage()
             .instance()
@@ -576,6 +612,7 @@ impl WhistleblowerRewards {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         if env
             .storage()
@@ -607,6 +644,7 @@ impl WhistleblowerRewards {
     }
 
     pub fn execute_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         let hash = env
             .storage()
@@ -643,6 +681,7 @@ impl WhistleblowerRewards {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         let guardian = env
             .storage()
@@ -668,6 +707,7 @@ impl WhistleblowerRewards {
     }
 
     pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_admin(&env, &admin)?;
         if !env
             .storage()
@@ -1771,5 +1811,48 @@ mod test {
             .unwrap_err()
             .unwrap();
         assert_eq!(err, ContractError::NotAuthorized);
+    }
+
+    /// Ledgers advanced in the TTL test. This is beyond the test environment's default
+    /// 4,096-ledger minimum persistent TTL, so an entry that was never extended expires,
+    /// and it is below the 500,000-ledger extension the contract applies.
+    const TTL_TEST_LEDGER_JUMP: u32 = 100_000;
+
+    #[test]
+    fn allocation_survives_ledger_jump_and_can_still_be_claimed() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(WhistleblowerRewards, ());
+        let client = WhistleblowerRewardsClient::new(&env, &contract_id);
+
+        // The token contract and the contract's token balance are created with a long
+        // minimum TTL so they outlive the jump. This test is about the whistleblower
+        // contract's own entries, which are created below with the default TTL and rely on
+        // the contract's extension to survive.
+        env.ledger().set_min_persistent_entry_ttl(1_000_000);
+        let token_admin = Address::generate(&env);
+        let token_id = env
+            .register_stellar_asset_contract_v2(token_admin.clone())
+            .address();
+        mint_to_contract(&env, &token_id, &token_admin, &contract_id, 1_000);
+        env.ledger().set_min_persistent_entry_ttl(4096);
+
+        let admin = Address::generate(&env);
+        let operator = Address::generate(&env);
+        client.init(&admin, &operator, &token_id, &0u64);
+
+        let whistleblower = Address::generate(&env);
+        let listing = SString::from_str(&env, "listing-ttl");
+        let deal = SString::from_str(&env, "deal-ttl");
+        client.allocate(&operator, &whistleblower, &listing, &deal, &1_000i128);
+
+        env.ledger()
+            .with_mut(|li| li.sequence_number += TTL_TEST_LEDGER_JUMP);
+
+        // Hold window is 0, so the allocation is claimable; the stored amount is unchanged.
+        assert_eq!(client.claimable(&whistleblower, &listing), 1_000);
+        assert_eq!(client.get_hold_window(), 0);
+        assert_eq!(client.claim(&whistleblower, &listing, &None), 1_000);
+        assert_eq!(client.claimable(&whistleblower, &listing), 0);
     }
 }

@@ -2,8 +2,27 @@
 
 use soroban_pausable::{Pausable, PausableError};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
 };
+
+/// Typed errors returned by the contract. Each variant replaces one former panic message,
+/// so clients and cross-contract callers can match on the failure without parsing text.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    NotAuthorized = 3,
+    ContractPaused = 4,
+    InvalidAmount = 5,
+    ScheduleExists = 6,
+    NoSchedule = 7,
+    NotFound = 8,
+    InvalidStatus = 9,
+    Overpayment = 10,
+    AlreadyWaived = 11,
+}
 
 #[contracttype]
 #[derive(Clone)]
@@ -66,19 +85,52 @@ fn is_paused_state(env: &Env) -> bool {
         .unwrap_or(false)
 }
 
-fn require_not_paused(env: &Env) {
+fn require_not_paused(env: &Env) -> Result<(), Error> {
     if <RentSchedule as Pausable>::is_paused(env.clone()) {
-        panic!("ContractPaused");
+        return Err(Error::ContractPaused);
     }
+    Ok(())
 }
 
 fn instalment_remaining(inst: &ScheduledInstalment) -> i128 {
     inst.amount_due - inst.amount_paid
 }
 
-fn assert_positive_payment(amount: i128) {
+fn assert_positive_payment(amount: i128) -> Result<(), Error> {
     if amount <= 0 {
-        panic!("InvalidAmount");
+        return Err(Error::InvalidAmount);
+    }
+    Ok(())
+}
+
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+//
+// Soroban archives an entry once its TTL runs out. Every entrypoint extends the instance
+// entry. Every read or write of a deal's schedule or waiver entry extends that entry. An
+// entry is extended only when its remaining lifetime is below `TTL_THRESHOLD_LEDGERS`, and
+// then it is set to `TTL_EXTEND_TO_LEDGERS` ledgers from the current ledger. At about 10
+// seconds per ledger, 500,000 ledgers is roughly 58 days, the same policy as
+// `soroban_access_control::extend_storage_ttl`.
+//
+// This contract cannot bump entries nobody touches. A deal's schedule stays alive while any
+// call reads or writes it within each window. Otherwise it needs a restore transaction
+// before it can be read again.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the instance storage, which also keeps the contract's code alive.
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of one persistent entry. A key that was never written is skipped, because
+/// the host rejects TTL extensions for missing entries.
+fn extend_persistent_ttl(env: &Env, key: &DataKey) {
+    let persistent = env.storage().persistent();
+    if persistent.has(key) {
+        persistent.extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
     }
 }
 
@@ -87,9 +139,10 @@ pub struct RentSchedule;
 
 #[contractimpl]
 impl RentSchedule {
-    pub fn init(env: Env, admin: Address, operator: Address) {
+    pub fn init(env: Env, admin: Address, operator: Address) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Config) {
-            panic!("AlreadyInitialized");
+            return Err(Error::AlreadyInitialized);
         }
         let cfg = Config {
             admin: admin.clone(),
@@ -104,6 +157,7 @@ impl RentSchedule {
             ),
             (),
         );
+        Ok(())
     }
 
     pub fn create_schedule(
@@ -111,14 +165,15 @@ impl RentSchedule {
         caller: Address,
         deal_id: String,
         instalments: Vec<ScheduledInstalment>,
-    ) {
+    ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(Error::NotInitialized)?;
         if caller != cfg.admin && caller != cfg.operator {
-            panic!("NotAuthorized");
+            return Err(Error::NotAuthorized);
         }
         caller.require_auth();
         if env
@@ -126,13 +181,14 @@ impl RentSchedule {
             .persistent()
             .has(&DataKey::Schedule(deal_id.clone()))
         {
-            panic!("ScheduleExists");
+            return Err(Error::ScheduleExists);
         }
         let total_amount: i128 = instalments.iter().map(|i| i.amount_due).sum();
         let count = instalments.len();
         env.storage()
             .persistent()
             .set(&DataKey::Schedule(deal_id.clone()), &instalments);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         env.events().publish(
             (
                 Symbol::new(&env, "rent_schedule"),
@@ -141,6 +197,7 @@ impl RentSchedule {
             ),
             (count, total_amount),
         );
+        Ok(())
     }
 
     pub fn record_payment(
@@ -151,34 +208,35 @@ impl RentSchedule {
         amount: i128,
         tx_id: BytesN<32>,
         paid_at: u64,
-    ) {
-        require_not_paused(&env);
+    ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
+        require_not_paused(&env)?;
         let _cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(Error::NotInitialized)?;
         caller.require_auth();
-        assert_positive_payment(amount);
+        assert_positive_payment(amount)?;
 
         let mut schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
             .get(&DataKey::Schedule(deal_id.clone()))
-            .expect("NoSchedule");
+            .ok_or(Error::NoSchedule)?;
         let idx = schedule
             .iter()
             .position(|i| i.instalment_number == instalment_number)
-            .expect("NotFound");
-        let mut inst = schedule.get(idx as u32).unwrap();
+            .ok_or(Error::NotFound)?;
+        let mut inst = schedule.get(idx as u32).ok_or(Error::NotFound)?;
 
         if inst.status == InstalmentStatus::Paid || inst.status == InstalmentStatus::Waived {
-            panic!("InvalidStatus");
+            return Err(Error::InvalidStatus);
         }
 
         let remaining = instalment_remaining(&inst);
         if amount > remaining {
-            panic!("Overpayment");
+            return Err(Error::Overpayment);
         }
 
         inst.amount_paid += amount;
@@ -191,6 +249,7 @@ impl RentSchedule {
             env.storage()
                 .persistent()
                 .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+            extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
             env.events().publish(
                 (
                     Symbol::new(&env, "rent_schedule"),
@@ -204,6 +263,7 @@ impl RentSchedule {
             env.storage()
                 .persistent()
                 .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+            extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
             env.events().publish(
                 (
                     Symbol::new(&env, "rent_schedule"),
@@ -219,34 +279,41 @@ impl RentSchedule {
                 ),
             );
         }
+        Ok(())
     }
 
-    pub fn mark_overdue(env: Env, caller: Address, deal_id: String, instalment_number: u32) {
-        require_not_paused(&env);
+    pub fn mark_overdue(
+        env: Env,
+        caller: Address,
+        deal_id: String,
+        instalment_number: u32,
+    ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
+        require_not_paused(&env)?;
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(Error::NotInitialized)?;
         if caller != cfg.admin && caller != cfg.operator {
-            panic!("NotAuthorized");
+            return Err(Error::NotAuthorized);
         }
         caller.require_auth();
         let mut schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
             .get(&DataKey::Schedule(deal_id.clone()))
-            .expect("NoSchedule");
+            .ok_or(Error::NoSchedule)?;
         let idx = schedule
             .iter()
             .position(|i| i.instalment_number == instalment_number)
-            .expect("NotFound");
-        let mut inst = schedule.get(idx as u32).unwrap();
+            .ok_or(Error::NotFound)?;
+        let mut inst = schedule.get(idx as u32).ok_or(Error::NotFound)?;
         if inst.status == InstalmentStatus::Paid || inst.status == InstalmentStatus::Waived {
-            panic!("InvalidStatus");
+            return Err(Error::InvalidStatus);
         }
         if instalment_remaining(&inst) <= 0 {
-            panic!("InvalidStatus");
+            return Err(Error::InvalidStatus);
         }
         inst.status = InstalmentStatus::Overdue;
         let remaining = instalment_remaining(&inst);
@@ -254,6 +321,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         env.events().publish(
             (
                 Symbol::new(&env, "rent_schedule"),
@@ -262,6 +330,7 @@ impl RentSchedule {
             ),
             (instalment_number, remaining),
         );
+        Ok(())
     }
 
     pub fn waive_instalment(
@@ -270,31 +339,32 @@ impl RentSchedule {
         deal_id: String,
         instalment_number: u32,
         reason: WaiverReason,
-    ) {
+    ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         let cfg: Config = env
             .storage()
             .instance()
             .get(&DataKey::Config)
-            .expect("NotInitialized");
+            .ok_or(Error::NotInitialized)?;
         if caller != cfg.admin {
-            panic!("NotAuthorized");
+            return Err(Error::NotAuthorized);
         }
         caller.require_auth();
         let mut schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
             .get(&DataKey::Schedule(deal_id.clone()))
-            .expect("NoSchedule");
+            .ok_or(Error::NoSchedule)?;
         let idx = schedule
             .iter()
             .position(|i| i.instalment_number == instalment_number)
-            .expect("NotFound");
-        let mut inst = schedule.get(idx as u32).unwrap();
+            .ok_or(Error::NotFound)?;
+        let mut inst = schedule.get(idx as u32).ok_or(Error::NotFound)?;
         if inst.status == InstalmentStatus::Waived {
-            panic!("AlreadyWaived");
+            return Err(Error::AlreadyWaived);
         }
         if inst.status == InstalmentStatus::Paid {
-            panic!("InvalidStatus");
+            return Err(Error::InvalidStatus);
         }
 
         let amount_waived = instalment_remaining(&inst);
@@ -304,6 +374,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
 
         let audit = WaiverAudit {
             actor: caller.clone(),
@@ -314,6 +385,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Waiver(deal_id.clone(), instalment_number), &audit);
+        extend_persistent_ttl(&env, &DataKey::Waiver(deal_id.clone(), instalment_number));
 
         env.events().publish(
             (
@@ -329,21 +401,31 @@ impl RentSchedule {
                 waived_at,
             ),
         );
+        Ok(())
     }
 
     pub fn get_waiver(env: Env, deal_id: String, instalment_number: u32) -> Option<WaiverAudit> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &DataKey::Waiver(deal_id.clone(), instalment_number));
         env.storage()
             .persistent()
             .get(&DataKey::Waiver(deal_id, instalment_number))
     }
 
-    pub fn instalment_remaining(env: Env, deal_id: String, instalment_number: u32) -> i128 {
-        let inst = Self::get_instalment(env.clone(), deal_id, instalment_number);
-        instalment_remaining(&inst)
+    pub fn instalment_remaining(
+        env: Env,
+        deal_id: String,
+        instalment_number: u32,
+    ) -> Result<i128, Error> {
+        extend_instance_ttl(&env);
+        let inst = Self::get_instalment(env.clone(), deal_id, instalment_number)?;
+        Ok(instalment_remaining(&inst))
     }
 
     /// Returns instalments sorted by instalment_number ascending.
     pub fn get_schedule(env: Env, deal_id: String) -> Vec<ScheduledInstalment> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         let mut schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
@@ -354,8 +436,12 @@ impl RentSchedule {
         while i < len {
             let mut j = i;
             while j > 0 {
-                let a = schedule.get(j - 1).unwrap();
-                let b = schedule.get(j).unwrap();
+                // Indices are always in range here (j < len), so a missing entry can only
+                // mean the loop bound is wrong; stop sorting rather than panic.
+                let (a, b) = match (schedule.get(j - 1), schedule.get(j)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => break,
+                };
                 if a.instalment_number > b.instalment_number {
                     schedule.set(j - 1, b.clone());
                     schedule.set(j, a);
@@ -373,22 +459,25 @@ impl RentSchedule {
         env: Env,
         deal_id: String,
         instalment_number: u32,
-    ) -> ScheduledInstalment {
+    ) -> Result<ScheduledInstalment, Error> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         let schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
             .get(&DataKey::Schedule(deal_id))
-            .expect("NoSchedule");
+            .ok_or(Error::NoSchedule)?;
         schedule
             .iter()
             .find(|i| i.instalment_number == instalment_number)
-            .unwrap()
+            .ok_or(Error::NotFound)
     }
 }
 
 #[contractimpl]
 impl Pausable for RentSchedule {
     fn pause(env: Env, caller: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         caller.require_auth();
         let cfg: Config = env
             .storage()
@@ -407,6 +496,7 @@ impl Pausable for RentSchedule {
     }
 
     fn unpause(env: Env, caller: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         caller.require_auth();
         let cfg: Config = env
             .storage()
@@ -425,6 +515,7 @@ impl Pausable for RentSchedule {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         is_paused_state(&env)
     }
 }
@@ -433,11 +524,73 @@ impl Pausable for RentSchedule {
 mod formal_properties;
 
 #[cfg(test)]
+mod proptest_invariants;
+
+#[cfg(test)]
 mod test {
     extern crate std;
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::testutils::{Address as _, Events, Ledger};
     use soroban_sdk::{Address, BytesN, Env, String, TryIntoVal, Vec};
+
+    /// Ledgers to advance in the TTL tests. This is past the test env default persistent TTL
+    /// (`min_persistent_entry_ttl` = 4096), so an entry that was never extended would be archived.
+    const LEDGERS_PAST_DEFAULT_TTL: u32 = 5_000;
+
+    fn advance_ledgers(env: &Env, ledgers: u32) {
+        let next = env.ledger().sequence() + ledgers;
+        env.ledger().set_sequence_number(next);
+    }
+
+    #[test]
+    fn schedule_and_waiver_survive_past_default_ttl() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (admin, operator, contract_id) = setup(&env);
+        let client = RentScheduleClient::new(&env, &contract_id);
+        client.init(&admin, &operator);
+
+        let deal_id = make_deal_id(&env, "deal-ttl");
+        client.create_schedule(&admin, &deal_id, &make_instalments(&env, 3));
+        client.waive_instalment(&admin, &deal_id, &2u32, &WaiverReason::Hardship);
+
+        advance_ledgers(&env, LEDGERS_PAST_DEFAULT_TTL);
+
+        // Stored values are unchanged after the ledger jump.
+        assert_eq!(client.get_schedule(&deal_id).len(), 3);
+        assert_eq!(client.instalment_remaining(&deal_id, &1u32), 100_000i128);
+        assert!(client.get_instalment(&deal_id, &2u32).status == InstalmentStatus::Waived);
+        assert_eq!(
+            client.get_waiver(&deal_id, &2u32).unwrap().amount_waived,
+            200_000i128
+        );
+    }
+
+    #[test]
+    fn reads_extend_schedule_ttl_beyond_first_window() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (admin, operator, contract_id) = setup(&env);
+        let client = RentScheduleClient::new(&env, &contract_id);
+        client.init(&admin, &operator);
+
+        // A read for a deal that has no schedule must not fail while extending TTL.
+        let missing = make_deal_id(&env, "missing");
+        assert_eq!(client.get_schedule(&missing).len(), 0);
+
+        let deal_id = make_deal_id(&env, "deal-reads");
+        client.create_schedule(&admin, &deal_id, &make_instalments(&env, 3));
+
+        // The create at ledger 0 extends the schedule to ledger 500,000. At ledger 495,000 the
+        // remaining lifetime is under the 10,000-ledger threshold, so these reads extend it again.
+        advance_ledgers(&env, 495_000);
+        assert_eq!(client.get_schedule(&deal_id).len(), 3);
+
+        // Past the original 500,000-ledger window. Only the read-driven extension keeps it alive.
+        advance_ledgers(&env, 400_000);
+        assert_eq!(client.get_schedule(&deal_id).len(), 3);
+        assert_eq!(client.instalment_remaining(&deal_id, &3u32), 300_000i128);
+    }
 
     fn make_deal_id(env: &Env, s: &str) -> String {
         String::from_str(env, s)
@@ -483,7 +636,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "ScheduleExists")]
     fn create_schedule_fails_if_duplicate() {
         let env = Env::default();
         env.mock_all_auths();
@@ -494,7 +646,8 @@ mod test {
         let deal_id = make_deal_id(&env, "deal_002");
         let instalments = make_instalments(&env, 2);
         client.create_schedule(&admin, &deal_id, &instalments.clone());
-        client.create_schedule(&admin, &deal_id, &instalments);
+        let result = client.try_create_schedule(&admin, &deal_id, &instalments);
+        assert!(matches!(result, Err(Ok(Error::ScheduleExists))));
     }
 
     #[test]
@@ -525,7 +678,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Overpayment")]
     fn overpayment_beyond_due_is_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -538,7 +690,9 @@ mod test {
         client.create_schedule(&admin, &deal_id, &instalments);
 
         let tx = BytesN::from_array(&env, &[3u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &100_001i128, &tx, &1_000u64);
+        let result =
+            client.try_record_payment(&admin, &deal_id, &1u32, &100_001i128, &tx, &1_000u64);
+        assert!(matches!(result, Err(Ok(Error::Overpayment))));
     }
 
     #[test]
@@ -563,7 +717,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "InvalidStatus")]
     fn mark_overdue_on_paid_instalment_panics() {
         let env = Env::default();
         env.mock_all_auths();
@@ -577,7 +730,8 @@ mod test {
 
         let tx_id = BytesN::from_array(&env, &[2u8; 32]);
         client.record_payment(&admin, &deal_id, &1u32, &100_000i128, &tx_id, &1_000_000u64);
-        client.mark_overdue(&admin, &deal_id, &1u32);
+        let result = client.try_mark_overdue(&admin, &deal_id, &1u32);
+        assert!(matches!(result, Err(Ok(Error::InvalidStatus))));
     }
 
     #[test]
@@ -646,7 +800,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "InvalidStatus")]
     fn record_payment_on_waived_instalment_fails() {
         let env = Env::default();
         env.mock_all_auths();
@@ -660,11 +813,12 @@ mod test {
         client.waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::AdminAdjustment);
 
         let tx_id = BytesN::from_array(&env, &[3u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &1_000i128, &tx_id, &1_000_000u64);
+        let result =
+            client.try_record_payment(&admin, &deal_id, &1u32, &1_000i128, &tx_id, &1_000_000u64);
+        assert!(matches!(result, Err(Ok(Error::InvalidStatus))));
     }
 
     #[test]
-    #[should_panic(expected = "InvalidStatus")]
     fn double_pay_on_paid_instalment_fails() {
         let env = Env::default();
         env.mock_all_auths();
@@ -679,11 +833,11 @@ mod test {
         let tx1 = BytesN::from_array(&env, &[5u8; 32]);
         client.record_payment(&admin, &deal_id, &1u32, &100_000i128, &tx1, &1_000u64);
         let tx2 = BytesN::from_array(&env, &[6u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &1i128, &tx2, &2_000u64);
+        let result = client.try_record_payment(&admin, &deal_id, &1u32, &1i128, &tx2, &2_000u64);
+        assert!(matches!(result, Err(Ok(Error::InvalidStatus))));
     }
 
     #[test]
-    #[should_panic(expected = "ContractPaused")]
     fn paused_blocks_record_payment() {
         let env = Env::default();
         env.mock_all_auths();
@@ -697,11 +851,12 @@ mod test {
         client.pause(&admin);
 
         let tx_id = BytesN::from_array(&env, &[4u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &1_000i128, &tx_id, &1_000_000u64);
+        let result =
+            client.try_record_payment(&admin, &deal_id, &1u32, &1_000i128, &tx_id, &1_000_000u64);
+        assert!(matches!(result, Err(Ok(Error::ContractPaused))));
     }
 
     #[test]
-    #[should_panic(expected = "ContractPaused")]
     fn paused_blocks_mark_overdue() {
         let env = Env::default();
         env.mock_all_auths();
@@ -713,7 +868,8 @@ mod test {
         let instalments = make_instalments(&env, 1);
         client.create_schedule(&admin, &deal_id, &instalments);
         client.pause(&admin);
-        client.mark_overdue(&admin, &deal_id, &1u32);
+        let result = client.try_mark_overdue(&admin, &deal_id, &1u32);
+        assert!(matches!(result, Err(Ok(Error::ContractPaused))));
     }
 
     #[test]
@@ -918,7 +1074,6 @@ mod test {
     // ── A2 · authorization ─────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn create_schedule_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
@@ -926,11 +1081,12 @@ mod test {
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
         let stranger = Address::generate(&env);
-        client.create_schedule(
+        let result = client.try_create_schedule(
             &stranger,
             &make_deal_id(&env, "d"),
             &make_instalments(&env, 1),
         );
+        assert!(matches!(result, Err(Ok(Error::NotAuthorized))));
     }
 
     #[test]
@@ -946,7 +1102,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn mark_overdue_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
@@ -955,11 +1110,11 @@ mod test {
         client.init(&admin, &operator);
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
-        client.mark_overdue(&Address::generate(&env), &deal_id, &1u32);
+        let result = client.try_mark_overdue(&Address::generate(&env), &deal_id, &1u32);
+        assert!(matches!(result, Err(Ok(Error::NotAuthorized))));
     }
 
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn waive_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
@@ -968,18 +1123,18 @@ mod test {
         client.init(&admin, &operator);
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
-        client.waive_instalment(
+        let result = client.try_waive_instalment(
             &Address::generate(&env),
             &deal_id,
             &1u32,
             &WaiverReason::Hardship,
         );
+        assert!(matches!(result, Err(Ok(Error::NotAuthorized))));
     }
 
     /// `waive_instalment` is admin-only — the operator (accepted by
     /// `create_schedule` / `mark_overdue`) must NOT be able to waive.
     #[test]
-    #[should_panic(expected = "NotAuthorized")]
     fn waive_rejects_operator() {
         let env = Env::default();
         env.mock_all_auths();
@@ -988,7 +1143,9 @@ mod test {
         client.init(&admin, &operator);
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
-        client.waive_instalment(&operator, &deal_id, &1u32, &WaiverReason::Hardship);
+        let result =
+            client.try_waive_instalment(&operator, &deal_id, &1u32, &WaiverReason::Hardship);
+        assert!(matches!(result, Err(Ok(Error::NotAuthorized))));
     }
 
     #[test]
@@ -1042,60 +1199,65 @@ mod test {
     // ── A3 · initialization edges ──────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "AlreadyInitialized")]
     fn double_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
-        client.init(&admin, &operator);
+        let result = client.try_init(&admin, &operator);
+        assert!(matches!(result, Err(Ok(Error::AlreadyInitialized))));
     }
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn create_schedule_before_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
-        client.create_schedule(&admin, &make_deal_id(&env, "d"), &make_instalments(&env, 1));
+        let result = client.try_create_schedule(
+            &admin,
+            &make_deal_id(&env, "d"),
+            &make_instalments(&env, 1),
+        );
+        assert!(matches!(result, Err(Ok(Error::NotInitialized))));
     }
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn record_payment_before_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
         let tx = BytesN::from_array(&env, &[1u8; 32]);
-        client.record_payment(&admin, &make_deal_id(&env, "d"), &1u32, &1i128, &tx, &1u64);
+        let result =
+            client.try_record_payment(&admin, &make_deal_id(&env, "d"), &1u32, &1i128, &tx, &1u64);
+        assert!(matches!(result, Err(Ok(Error::NotInitialized))));
     }
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn mark_overdue_before_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
-        client.mark_overdue(&admin, &make_deal_id(&env, "d"), &1u32);
+        let result = client.try_mark_overdue(&admin, &make_deal_id(&env, "d"), &1u32);
+        assert!(matches!(result, Err(Ok(Error::NotInitialized))));
     }
 
     #[test]
-    #[should_panic(expected = "NotInitialized")]
     fn waive_before_init_rejected() {
         let env = Env::default();
         env.mock_all_auths();
         let (admin, _operator, contract_id) = setup(&env);
         let client = RentScheduleClient::new(&env, &contract_id);
-        client.waive_instalment(
+        let result = client.try_waive_instalment(
             &admin,
             &make_deal_id(&env, "d"),
             &1u32,
             &WaiverReason::Hardship,
         );
+        assert!(matches!(result, Err(Ok(Error::NotInitialized))));
     }
 
     #[test]
@@ -1119,7 +1281,6 @@ mod test {
     // ── A4 · state-machine & boundary ─────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "InvalidStatus")]
     fn waive_paid_instalment_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1130,11 +1291,12 @@ mod test {
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
         let tx = BytesN::from_array(&env, &[1u8; 32]);
         client.record_payment(&admin, &deal_id, &1u32, &100_000i128, &tx, &1u64);
-        client.waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::AdminAdjustment);
+        let result =
+            client.try_waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::AdminAdjustment);
+        assert!(matches!(result, Err(Ok(Error::InvalidStatus))));
     }
 
     #[test]
-    #[should_panic(expected = "AlreadyWaived")]
     fn waive_already_waived_instalment_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1144,11 +1306,11 @@ mod test {
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
         client.waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::Hardship);
-        client.waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::Hardship);
+        let result = client.try_waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::Hardship);
+        assert!(matches!(result, Err(Ok(Error::AlreadyWaived))));
     }
 
     #[test]
-    #[should_panic(expected = "InvalidStatus")]
     fn mark_overdue_on_waived_instalment_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1158,7 +1320,8 @@ mod test {
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
         client.waive_instalment(&admin, &deal_id, &1u32, &WaiverReason::Hardship);
-        client.mark_overdue(&admin, &deal_id, &1u32);
+        let result = client.try_mark_overdue(&admin, &deal_id, &1u32);
+        assert!(matches!(result, Err(Ok(Error::InvalidStatus))));
     }
 
     /// A partially-paid instalment waives only the OUTSTANDING remainder.
@@ -1239,7 +1402,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "InvalidAmount")]
     fn record_payment_zero_amount_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1249,11 +1411,11 @@ mod test {
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
         let tx = BytesN::from_array(&env, &[1u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &0i128, &tx, &1u64);
+        let result = client.try_record_payment(&admin, &deal_id, &1u32, &0i128, &tx, &1u64);
+        assert!(matches!(result, Err(Ok(Error::InvalidAmount))));
     }
 
     #[test]
-    #[should_panic(expected = "InvalidAmount")]
     fn record_payment_negative_amount_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1263,11 +1425,11 @@ mod test {
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
         let tx = BytesN::from_array(&env, &[1u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &-1i128, &tx, &1u64);
+        let result = client.try_record_payment(&admin, &deal_id, &1u32, &-1i128, &tx, &1u64);
+        assert!(matches!(result, Err(Ok(Error::InvalidAmount))));
     }
 
     #[test]
-    #[should_panic(expected = "NotFound")]
     fn record_payment_absent_instalment_number_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1277,11 +1439,11 @@ mod test {
         let deal_id = make_deal_id(&env, "d");
         client.create_schedule(&admin, &deal_id, &make_instalments(&env, 1));
         let tx = BytesN::from_array(&env, &[1u8; 32]);
-        client.record_payment(&admin, &deal_id, &99u32, &1i128, &tx, &1u64);
+        let result = client.try_record_payment(&admin, &deal_id, &99u32, &1i128, &tx, &1u64);
+        assert!(matches!(result, Err(Ok(Error::NotFound))));
     }
 
     #[test]
-    #[should_panic(expected = "NoSchedule")]
     fn record_payment_absent_schedule_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1289,7 +1451,7 @@ mod test {
         let client = RentScheduleClient::new(&env, &contract_id);
         client.init(&admin, &operator);
         let tx = BytesN::from_array(&env, &[1u8; 32]);
-        client.record_payment(
+        let result = client.try_record_payment(
             &admin,
             &make_deal_id(&env, "ghost"),
             &1u32,
@@ -1297,6 +1459,7 @@ mod test {
             &tx,
             &1u64,
         );
+        assert!(matches!(result, Err(Ok(Error::NoSchedule))));
     }
 
     /// An empty schedule can be created (no input validation) but is unusable.
@@ -1323,7 +1486,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "NotFound")]
     fn record_payment_on_empty_schedule_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1333,7 +1495,8 @@ mod test {
         let deal_id = make_deal_id(&env, "d_empty");
         client.create_schedule(&admin, &deal_id, &Vec::new(&env));
         let tx = BytesN::from_array(&env, &[1u8; 32]);
-        client.record_payment(&admin, &deal_id, &1u32, &1i128, &tx, &1u64);
+        let result = client.try_record_payment(&admin, &deal_id, &1u32, &1i128, &tx, &1u64);
+        assert!(matches!(result, Err(Ok(Error::NotFound))));
     }
 
     #[test]

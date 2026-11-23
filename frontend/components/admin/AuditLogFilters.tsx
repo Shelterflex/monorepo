@@ -83,12 +83,13 @@ export function AuditLogFilters({ filters, onFiltersChange }: AuditLogFiltersPro
   }, [filters.limit, onFiltersChange]);
 
   const hasActiveFilters =
-    filters.actorId ||
-    filters.action ||
-    filters.resourceType ||
-    filters.resourceId ||
-    filters.startDate ||
-    filters.endDate;
+    Boolean(actorId.trim()) ||
+    Boolean(filters.actorId) ||
+    Boolean(filters.action) ||
+    Boolean(filters.resourceType) ||
+    Boolean(filters.resourceId) ||
+    Boolean(filters.startDate) ||
+    Boolean(filters.endDate);
 
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">

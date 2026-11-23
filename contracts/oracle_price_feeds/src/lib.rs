@@ -58,6 +58,28 @@ pub enum DataKey {
 // Contract
 // ────────────────────────────────────────────────────────────────────────────
 
+// Ledger TTL policy. These match `soroban_access_control::extend_storage_ttl`, which
+// extends persistent entries: an entry below 10,000 remaining ledgers is extended to
+// 500,000 ledgers (about 29 days at a 5 second ledger close). Instance storage (admin,
+// pause flag, staleness threshold, deviation bound) uses the same values.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the contract instance (admin, pause flag, thresholds).
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of a persistent entry when it exists. Extending a missing key is a
+/// host error, so reads of absent keys are skipped.
+fn extend_persistent_if_present(env: &Env, key: &DataKey) {
+    if env.storage().persistent().has(key) {
+        extend_storage_ttl(env, &key.into_val(env));
+    }
+}
+
 #[contract]
 pub struct OraclePriceFeeds;
 
@@ -65,6 +87,7 @@ pub struct OraclePriceFeeds;
 impl OraclePriceFeeds {
     /// Initialize the contract with an admin.
     pub fn init(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::NotAuthorized);
         }
@@ -94,6 +117,7 @@ impl OraclePriceFeeds {
         pair: Symbol,
         source: Address,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -128,6 +152,7 @@ impl OraclePriceFeeds {
         pair: Symbol,
         source: Address,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -159,11 +184,8 @@ impl OraclePriceFeeds {
 
     /// Get all sources for a pair.
     pub fn get_sources(env: Env, pair: Symbol) -> Vec<Address> {
-        let key = DataKey::Sources(pair);
-        env.storage()
-            .persistent()
-            .get::<_, Vec<Address>>(&key)
-            .unwrap_or_else(|| vec![&env])
+        extend_instance_ttl(&env);
+        Self::get_sources_internal(&env, &pair)
     }
 
     /// Set the quorum required for a pair.
@@ -173,6 +195,7 @@ impl OraclePriceFeeds {
         pair: Symbol,
         quorum: u32,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -201,6 +224,7 @@ impl OraclePriceFeeds {
         pair: Symbol,
         price: i128,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         // Check if paused
         if Self::is_paused(env.clone()) {
             return Err(ContractError::Paused);
@@ -260,6 +284,7 @@ impl OraclePriceFeeds {
     /// Get the current price feed for a pair.
     /// Fails if price is stale or doesn't exist.
     pub fn get_price(env: Env, pair: Symbol) -> Result<PriceFeed, ContractError> {
+        extend_instance_ttl(&env);
         let feed = Self::get_price_internal(&env, &pair).ok_or(ContractError::UnknownPair)?;
 
         let staleness_threshold = Self::get_staleness_threshold(&env);
@@ -273,6 +298,7 @@ impl OraclePriceFeeds {
 
     /// Check if a price is stale.
     pub fn is_stale(env: Env, pair: Symbol) -> Result<bool, ContractError> {
+        extend_instance_ttl(&env);
         let feed = Self::get_price_internal(&env, &pair).ok_or(ContractError::UnknownPair)?;
 
         let staleness_threshold = Self::get_staleness_threshold(&env);
@@ -286,6 +312,7 @@ impl OraclePriceFeeds {
         admin: Address,
         threshold: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -310,6 +337,7 @@ impl OraclePriceFeeds {
 
     /// Set the maximum deviation in basis points.
     pub fn set_max_deviation_bps(env: Env, admin: Address, bps: u32) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -334,6 +362,7 @@ impl OraclePriceFeeds {
 
     /// Pause the contract.
     pub fn pause(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -353,6 +382,7 @@ impl OraclePriceFeeds {
 
     /// Unpause the contract.
     pub fn unpause(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let stored_admin = Self::get_admin(&env)?;
         require_admin_permission(
             &env,
@@ -372,6 +402,7 @@ impl OraclePriceFeeds {
 
     /// Check if the contract is paused.
     pub fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, bool>(&DataKey::Paused)
@@ -391,15 +422,16 @@ impl OraclePriceFeeds {
 
     fn get_price_internal(env: &Env, pair: &Symbol) -> Option<PriceFeed> {
         let key = DataKey::Price(pair.clone());
-        env.storage().persistent().get(&key)
+        let feed = env.storage().persistent().get(&key);
+        extend_persistent_if_present(env, &key);
+        feed
     }
 
     fn get_sources_internal(env: &Env, pair: &Symbol) -> Vec<Address> {
         let key = DataKey::Sources(pair.clone());
-        env.storage()
-            .persistent()
-            .get::<_, Vec<Address>>(&key)
-            .unwrap_or_else(|| vec![&env])
+        let sources = env.storage().persistent().get::<_, Vec<Address>>(&key);
+        extend_persistent_if_present(env, &key);
+        sources.unwrap_or_else(|| vec![&env])
     }
 
     fn get_staleness_threshold(env: &Env) -> u64 {
@@ -807,5 +839,32 @@ mod tests {
 
         let events = env.events().all();
         assert!(!events.is_empty());
+    }
+
+    /// Ledgers advanced in the TTL test: beyond the test environment's default 4,096-ledger
+    /// minimum persistent TTL, and below the 500,000-ledger extension the contract applies.
+    const TTL_TEST_LEDGER_JUMP: u32 = 100_000;
+
+    #[test]
+    fn sources_and_price_survive_ledger_jump_past_default_ttl() {
+        let env = Env::default();
+        let (admin, pair, client) = setup(&env);
+        let source = Address::generate(&env);
+        client.add_source(&admin, &pair, &source);
+        client.update_price(&source, &pair, &1_000_000i128);
+
+        env.ledger()
+            .with_mut(|li| li.sequence_number += TTL_TEST_LEDGER_JUMP);
+
+        // Sources (persistent) and the price feed (persistent) are intact. The timestamp
+        // has not moved, so the price is not stale.
+        let sources = client.get_sources(&pair);
+        assert_eq!(sources.len(), 1);
+        assert!(sources.contains(&source));
+        let feed = client.get_price(&pair);
+        assert_eq!(feed.price, 1_000_000i128);
+        assert_eq!(feed.sequence, 0);
+        assert!(!client.is_stale(&pair));
+        assert!(!client.is_paused());
     }
 }

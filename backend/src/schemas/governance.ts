@@ -31,7 +31,7 @@ export type VoteRequest = z.infer<typeof voteSchema>
 export const listProposalsSchema = z.object({
   status: z.enum(['pending', 'active', 'approved', 'rejected', 'executed']).optional(),
   page: z.number().int().positive().default(1),
-  limit: z.number().int().positive().default(20).max(100),
+  limit: z.number().int().positive().max(100).default(20),
 })
 
 export type ListProposalsRequest = z.infer<typeof listProposalsSchema>
