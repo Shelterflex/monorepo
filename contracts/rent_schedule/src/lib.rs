@@ -103,12 +103,44 @@ fn assert_positive_payment(amount: i128) -> Result<(), Error> {
     Ok(())
 }
 
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+//
+// Soroban archives an entry once its TTL runs out. Every entrypoint extends the instance
+// entry. Every read or write of a deal's schedule or waiver entry extends that entry. An
+// entry is extended only when its remaining lifetime is below `TTL_THRESHOLD_LEDGERS`, and
+// then it is set to `TTL_EXTEND_TO_LEDGERS` ledgers from the current ledger. At about 10
+// seconds per ledger, 500,000 ledgers is roughly 58 days, the same policy as
+// `soroban_access_control::extend_storage_ttl`.
+//
+// This contract cannot bump entries nobody touches. A deal's schedule stays alive while any
+// call reads or writes it within each window. Otherwise it needs a restore transaction
+// before it can be read again.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the instance storage, which also keeps the contract's code alive.
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of one persistent entry. A key that was never written is skipped, because
+/// the host rejects TTL extensions for missing entries.
+fn extend_persistent_ttl(env: &Env, key: &DataKey) {
+    let persistent = env.storage().persistent();
+    if persistent.has(key) {
+        persistent.extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+    }
+}
+
 #[contract]
 pub struct RentSchedule;
 
 #[contractimpl]
 impl RentSchedule {
     pub fn init(env: Env, admin: Address, operator: Address) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Config) {
             return Err(Error::AlreadyInitialized);
         }
@@ -134,6 +166,7 @@ impl RentSchedule {
         deal_id: String,
         instalments: Vec<ScheduledInstalment>,
     ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         let cfg: Config = env
             .storage()
             .instance()
@@ -155,6 +188,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Schedule(deal_id.clone()), &instalments);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         env.events().publish(
             (
                 Symbol::new(&env, "rent_schedule"),
@@ -175,6 +209,7 @@ impl RentSchedule {
         tx_id: BytesN<32>,
         paid_at: u64,
     ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         let _cfg: Config = env
             .storage()
@@ -214,6 +249,7 @@ impl RentSchedule {
             env.storage()
                 .persistent()
                 .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+            extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
             env.events().publish(
                 (
                     Symbol::new(&env, "rent_schedule"),
@@ -227,6 +263,7 @@ impl RentSchedule {
             env.storage()
                 .persistent()
                 .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+            extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
             env.events().publish(
                 (
                     Symbol::new(&env, "rent_schedule"),
@@ -251,6 +288,7 @@ impl RentSchedule {
         deal_id: String,
         instalment_number: u32,
     ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         let cfg: Config = env
             .storage()
@@ -283,6 +321,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         env.events().publish(
             (
                 Symbol::new(&env, "rent_schedule"),
@@ -301,6 +340,7 @@ impl RentSchedule {
         instalment_number: u32,
         reason: WaiverReason,
     ) -> Result<(), Error> {
+        extend_instance_ttl(&env);
         let cfg: Config = env
             .storage()
             .instance()
@@ -334,6 +374,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Schedule(deal_id.clone()), &schedule);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
 
         let audit = WaiverAudit {
             actor: caller.clone(),
@@ -344,6 +385,7 @@ impl RentSchedule {
         env.storage()
             .persistent()
             .set(&DataKey::Waiver(deal_id.clone(), instalment_number), &audit);
+        extend_persistent_ttl(&env, &DataKey::Waiver(deal_id.clone(), instalment_number));
 
         env.events().publish(
             (
@@ -363,6 +405,8 @@ impl RentSchedule {
     }
 
     pub fn get_waiver(env: Env, deal_id: String, instalment_number: u32) -> Option<WaiverAudit> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &DataKey::Waiver(deal_id.clone(), instalment_number));
         env.storage()
             .persistent()
             .get(&DataKey::Waiver(deal_id, instalment_number))
@@ -373,12 +417,15 @@ impl RentSchedule {
         deal_id: String,
         instalment_number: u32,
     ) -> Result<i128, Error> {
+        extend_instance_ttl(&env);
         let inst = Self::get_instalment(env.clone(), deal_id, instalment_number)?;
         Ok(instalment_remaining(&inst))
     }
 
     /// Returns instalments sorted by instalment_number ascending.
     pub fn get_schedule(env: Env, deal_id: String) -> Vec<ScheduledInstalment> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         let mut schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
@@ -413,6 +460,8 @@ impl RentSchedule {
         deal_id: String,
         instalment_number: u32,
     ) -> Result<ScheduledInstalment, Error> {
+        extend_instance_ttl(&env);
+        extend_persistent_ttl(&env, &DataKey::Schedule(deal_id.clone()));
         let schedule: Vec<ScheduledInstalment> = env
             .storage()
             .persistent()
@@ -428,6 +477,7 @@ impl RentSchedule {
 #[contractimpl]
 impl Pausable for RentSchedule {
     fn pause(env: Env, caller: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         caller.require_auth();
         let cfg: Config = env
             .storage()
@@ -446,6 +496,7 @@ impl Pausable for RentSchedule {
     }
 
     fn unpause(env: Env, caller: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         caller.require_auth();
         let cfg: Config = env
             .storage()
@@ -464,6 +515,7 @@ impl Pausable for RentSchedule {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         is_paused_state(&env)
     }
 }
@@ -478,8 +530,67 @@ mod proptest_invariants;
 mod test {
     extern crate std;
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::testutils::{Address as _, Events, Ledger};
     use soroban_sdk::{Address, BytesN, Env, String, TryIntoVal, Vec};
+
+    /// Ledgers to advance in the TTL tests. This is past the test env default persistent TTL
+    /// (`min_persistent_entry_ttl` = 4096), so an entry that was never extended would be archived.
+    const LEDGERS_PAST_DEFAULT_TTL: u32 = 5_000;
+
+    fn advance_ledgers(env: &Env, ledgers: u32) {
+        let next = env.ledger().sequence() + ledgers;
+        env.ledger().set_sequence_number(next);
+    }
+
+    #[test]
+    fn schedule_and_waiver_survive_past_default_ttl() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (admin, operator, contract_id) = setup(&env);
+        let client = RentScheduleClient::new(&env, &contract_id);
+        client.init(&admin, &operator);
+
+        let deal_id = make_deal_id(&env, "deal-ttl");
+        client.create_schedule(&admin, &deal_id, &make_instalments(&env, 3));
+        client.waive_instalment(&admin, &deal_id, &2u32, &WaiverReason::Hardship);
+
+        advance_ledgers(&env, LEDGERS_PAST_DEFAULT_TTL);
+
+        // Stored values are unchanged after the ledger jump.
+        assert_eq!(client.get_schedule(&deal_id).len(), 3);
+        assert_eq!(client.instalment_remaining(&deal_id, &1u32), 100_000i128);
+        assert!(client.get_instalment(&deal_id, &2u32).status == InstalmentStatus::Waived);
+        assert_eq!(
+            client.get_waiver(&deal_id, &2u32).unwrap().amount_waived,
+            200_000i128
+        );
+    }
+
+    #[test]
+    fn reads_extend_schedule_ttl_beyond_first_window() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (admin, operator, contract_id) = setup(&env);
+        let client = RentScheduleClient::new(&env, &contract_id);
+        client.init(&admin, &operator);
+
+        // A read for a deal that has no schedule must not fail while extending TTL.
+        let missing = make_deal_id(&env, "missing");
+        assert_eq!(client.get_schedule(&missing).len(), 0);
+
+        let deal_id = make_deal_id(&env, "deal-reads");
+        client.create_schedule(&admin, &deal_id, &make_instalments(&env, 3));
+
+        // The create at ledger 0 extends the schedule to ledger 500,000. At ledger 495,000 the
+        // remaining lifetime is under the 10,000-ledger threshold, so these reads extend it again.
+        advance_ledgers(&env, 495_000);
+        assert_eq!(client.get_schedule(&deal_id).len(), 3);
+
+        // Past the original 500,000-ledger window. Only the read-driven extension keeps it alive.
+        advance_ledgers(&env, 400_000);
+        assert_eq!(client.get_schedule(&deal_id).len(), 3);
+        assert_eq!(client.instalment_remaining(&deal_id, &3u32), 300_000i128);
+    }
 
     fn make_deal_id(env: &Env, s: &str) -> String {
         String::from_str(env, s)

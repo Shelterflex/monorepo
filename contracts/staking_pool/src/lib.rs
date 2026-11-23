@@ -122,6 +122,37 @@ pub struct ReceiptInput {
 #[contract]
 pub struct StakingPool;
 
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+//
+// Soroban archives an entry once its TTL runs out. Every entrypoint extends the instance
+// entry. Every read and write of a per-user persistent entry (balance, deposit count and
+// individual deposits) extends that entry. An entry is extended only when its remaining
+// lifetime is below `TTL_THRESHOLD_LEDGERS`, and then it is set to `TTL_EXTEND_TO_LEDGERS`
+// ledgers from the current ledger. At about 10 seconds per ledger, 500,000 ledgers is roughly
+// 58 days, the same policy as `soroban_access_control::extend_storage_ttl`.
+//
+// This contract cannot bump entries nobody touches. A user's stake entries stay alive while
+// that user calls `stake`, `unstake`, `staked_balance` or another path that reads them within
+// each window. Otherwise they need a restore transaction before they can be read.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the instance storage, which also keeps the contract's code alive.
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of one persistent entry. A key that was never written is skipped, because
+/// the host rejects TTL extensions for missing entries.
+fn extend_persistent_ttl(env: &Env, key: &DataKey) {
+    let persistent = env.storage().persistent();
+    if persistent.has(key) {
+        persistent.extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+    }
+}
+
 fn get_state_schema_version(env: &Env) -> u32 {
     env.storage()
         .instance()
@@ -172,16 +203,15 @@ fn is_operator(env: &Env, addr: &Address) -> bool {
 
 /// Per-user staked balance from persistent storage (#386)
 fn get_staked_balance(env: &Env, user: &Address) -> i128 {
-    env.storage()
-        .persistent()
-        .get::<_, i128>(&DataKey::StakedBalance(user.clone()))
-        .unwrap_or(0)
+    let key = DataKey::StakedBalance(user.clone());
+    extend_persistent_ttl(env, &key);
+    env.storage().persistent().get::<_, i128>(&key).unwrap_or(0)
 }
 
 fn put_staked_balance(env: &Env, user: &Address, balance: i128) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::StakedBalance(user.clone()), &balance);
+    let key = DataKey::StakedBalance(user.clone());
+    env.storage().persistent().set(&key, &balance);
+    extend_persistent_ttl(env, &key);
 }
 
 fn get_total_staked(env: &Env) -> i128 {
@@ -207,28 +237,27 @@ fn put_lock_period(env: &Env, period: u64) {
 }
 
 fn get_deposit_count(env: &Env, user: &Address) -> u32 {
-    env.storage()
-        .persistent()
-        .get::<_, u32>(&DataKey::DepositCount(user.clone()))
-        .unwrap_or(0)
+    let key = DataKey::DepositCount(user.clone());
+    extend_persistent_ttl(env, &key);
+    env.storage().persistent().get::<_, u32>(&key).unwrap_or(0)
 }
 
 fn put_deposit_count(env: &Env, user: &Address, count: u32) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::DepositCount(user.clone()), &count);
+    let key = DataKey::DepositCount(user.clone());
+    env.storage().persistent().set(&key, &count);
+    extend_persistent_ttl(env, &key);
 }
 
 fn get_deposit(env: &Env, user: &Address, index: u32) -> Option<Deposit> {
-    env.storage()
-        .persistent()
-        .get::<_, Deposit>(&DataKey::Deposit(user.clone(), index))
+    let key = DataKey::Deposit(user.clone(), index);
+    extend_persistent_ttl(env, &key);
+    env.storage().persistent().get::<_, Deposit>(&key)
 }
 
 fn put_deposit(env: &Env, user: &Address, index: u32, deposit: Deposit) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::Deposit(user.clone(), index), &deposit);
+    let key = DataKey::Deposit(user.clone(), index);
+    env.storage().persistent().set(&key, &deposit);
+    extend_persistent_ttl(env, &key);
 }
 
 fn remove_deposit(env: &Env, user: &Address, index: u32) {
@@ -366,6 +395,7 @@ fn compute_canonical_hash(env: &Env, payload: &Bytes) -> BytesN<32> {
 #[contractimpl]
 impl StakingPool {
     pub fn init(env: Env, admin: Address, token: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
@@ -393,6 +423,7 @@ impl StakingPool {
     }
 
     pub fn contract_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, u32>(&DataKey::ContractVersion)
@@ -401,10 +432,12 @@ impl StakingPool {
 
     /// Current state schema version stored on-chain.
     pub fn state_schema_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         get_state_schema_version(&env)
     }
 
     pub fn version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         Self::contract_version(env)
     }
 
@@ -413,6 +446,7 @@ impl StakingPool {
         admin: Address,
         new_operator: Option<Address>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_operator")?;
 
@@ -433,6 +467,7 @@ impl StakingPool {
     }
 
     pub fn set_admin(env: Env, admin: Address, new_admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_admin")?;
 
@@ -449,10 +484,12 @@ impl StakingPool {
     }
 
     pub fn is_operator(env: Env, addr: Address) -> bool {
+        extend_instance_ttl(&env);
         is_operator(&env, &addr)
     }
 
     pub fn stake(env: Env, from: Address, amount: i128) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         let _spender = require_user_or_operator(&env, &from, &from)?;
         validation::require_valid_amount(amount)?;
@@ -500,6 +537,7 @@ impl StakingPool {
     }
 
     pub fn unstake(env: Env, to: Address, amount: i128) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         require_not_paused(&env)?;
         let _spender = require_user_or_operator(&env, &to, &to)?;
         validation::require_valid_amount(amount)?;
@@ -581,14 +619,17 @@ impl StakingPool {
     }
 
     pub fn staked_balance(env: Env, user: Address) -> i128 {
+        extend_instance_ttl(&env);
         get_staked_balance(&env, &user)
     }
 
     pub fn total_staked(env: Env) -> i128 {
+        extend_instance_ttl(&env);
         get_total_staked(&env)
     }
 
     pub fn set_lock_period(env: Env, admin: Address, seconds: u64) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_lock_period")?;
         validation::require_valid_lock_period(seconds)?;
@@ -604,12 +645,14 @@ impl StakingPool {
     }
 
     pub fn get_lock_period(env: Env) -> u64 {
+        extend_instance_ttl(&env);
         get_lock_period(&env)
     }
 
     // ── Upgrade governance (#392) ─────────────────────────────────────────────
 
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_guardian")?;
         env.storage().instance().set(&DataKey::Guardian, &guardian);
@@ -628,6 +671,7 @@ impl StakingPool {
         admin: Address,
         delay_seconds: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -654,6 +698,7 @@ impl StakingPool {
         new_wasm_hash: BytesN<32>,
         new_version: u32,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "propose_upgrade")?;
         if env.storage().instance().has(&DataKey::PendingUpgradeHash) {
@@ -686,6 +731,7 @@ impl StakingPool {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "execute_upgrade")?;
         let pending: BytesN<32> = env
@@ -753,6 +799,7 @@ impl StakingPool {
         new_wasm_hash: BytesN<32>,
         new_version: u32,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -799,6 +846,7 @@ impl StakingPool {
     }
 
     pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "cancel_upgrade")?;
         let hash: BytesN<32> = env
@@ -875,6 +923,7 @@ impl StakingPool {
 #[contractimpl]
 impl Pausable for StakingPool {
     fn pause(env: Env, admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         if access_control::require_admin_permission(&env, &current_admin, &admin, "pause").is_err()
         {
@@ -889,6 +938,7 @@ impl Pausable for StakingPool {
     }
 
     fn unpause(env: Env, admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         if access_control::require_admin_permission(&env, &current_admin, &admin, "unpause")
             .is_err()
@@ -904,6 +954,7 @@ impl Pausable for StakingPool {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         is_paused(&env)
     }
 }
@@ -955,6 +1006,56 @@ mod test {
             .unwrap();
 
         (contract_id, client, admin, user, token_contract_id)
+    }
+
+    /// Ledgers to advance in the TTL tests. This is past the test env default persistent TTL
+    /// (`min_persistent_entry_ttl` = 4096), so an entry that was never extended would be archived.
+    const LEDGERS_PAST_DEFAULT_TTL: u32 = 5_000;
+
+    fn advance_ledgers(env: &Env, ledgers: u32) {
+        let next = env.ledger().sequence() + ledgers;
+        env.ledger().set_sequence_number(next);
+    }
+
+    // Token transfers are avoided after a ledger jump. The token contract's own balance entries
+    // are not extended by this contract, so these tests only read stake state after the jump.
+    #[test]
+    fn stake_state_survives_past_default_ttl() {
+        let env = Env::default();
+        let (_contract_id, client, _admin, user, token_id) = setup_contract(&env);
+        soroban_sdk::token::StellarAssetClient::new(&env, &token_id).mint(&user, &1000i128);
+        client.stake(&user, &300i128);
+        client.stake(&user, &200i128);
+
+        advance_ledgers(&env, LEDGERS_PAST_DEFAULT_TTL);
+
+        // Per-user stake and totals are unchanged after the ledger jump.
+        assert_eq!(client.staked_balance(&user), 500i128);
+        assert_eq!(client.total_staked(), 500i128);
+    }
+
+    #[test]
+    fn reads_extend_ttl_so_stake_survives_beyond_first_window() {
+        let env = Env::default();
+        let (_contract_id, client, _admin, user, token_id) = setup_contract(&env);
+
+        // A getter for an address with no stake must not fail while extending TTL.
+        let stranger = Address::generate(&env);
+        assert_eq!(client.staked_balance(&stranger), 0i128);
+
+        soroban_sdk::token::StellarAssetClient::new(&env, &token_id).mint(&user, &1000i128);
+        client.stake(&user, &300i128);
+
+        // The stake writes at ledger 0 extend entries to ledger 500,000. At ledger 495,000 the
+        // remaining lifetime is under the 10,000-ledger threshold, so these reads extend again.
+        advance_ledgers(&env, 495_000);
+        assert_eq!(client.staked_balance(&user), 300i128);
+        assert_eq!(client.total_staked(), 300i128);
+
+        // Past the original 500,000-ledger window. Only the read-driven extension keeps these alive.
+        advance_ledgers(&env, 400_000);
+        assert_eq!(client.staked_balance(&user), 300i128);
+        assert_eq!(client.total_staked(), 300i128);
     }
 
     #[test]
