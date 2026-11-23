@@ -17,7 +17,6 @@ const REAL_ENV: IntegrationEnv = {
   ESIGN_PROVIDER: 'docusign',
   CREDIT_BUREAU_PROVIDER: 'experian',
   AI_SCORING_PROVIDER: 'claude',
-  RENT_GUARANTEE_PROVIDER: 'leatherback',
 }
 
 describe('getStubbedIntegrations', () => {
@@ -38,7 +37,6 @@ describe('getStubbedIntegrations', () => {
         'esign',
         'creditBureau',
         'aiScoring',
-        'rentGuarantee',
       ]),
     )
   })
@@ -54,10 +52,10 @@ describe('getStubbedIntegrations', () => {
   })
 
   it('marks opted-out integrations as allowed, case-insensitively', () => {
-    const env = { ...REAL_ENV, RENT_GUARANTEE_PROVIDER: 'mock', ALLOW_STUB_PROVIDERS: ' RentGuarantee , aiScoring ' }
+    const env = { ...REAL_ENV, AI_SCORING_PROVIDER: 'stub', ALLOW_STUB_PROVIDERS: ' AiScoring ' }
     const stubbed = getStubbedIntegrations(env)
     expect(stubbed).toEqual([
-      { name: 'rentGuarantee', envVar: 'RENT_GUARANTEE_PROVIDER', allowed: true },
+      { name: 'aiScoring', envVar: 'AI_SCORING_PROVIDER', allowed: true },
     ])
   })
 })

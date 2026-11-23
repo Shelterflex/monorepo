@@ -53,7 +53,7 @@ paths:
                     items:
                       type: string
                     example:
-                    - rentGuarantee
+                    - conversion
         '429':
           $ref: '#/components/responses/TooManyRequests'
         default:

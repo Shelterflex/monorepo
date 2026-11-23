@@ -8,7 +8,7 @@
  * ALLOW_STUB_PROVIDERS, and lets /health report what is stubbed.
  *
  * ALLOW_STUB_PROVIDERS is a comma-separated list of check names, e.g.
- *   ALLOW_STUB_PROVIDERS=rentGuarantee,aiScoring
+ *   ALLOW_STUB_PROVIDERS=aiScoring
  * Opted-out stubs log a warning at boot and still appear in /health.
  */
 
@@ -87,11 +87,6 @@ export const INTEGRATION_CHECKS: readonly IntegrationCheck[] = [
     name: 'aiScoring',
     envVar: 'AI_SCORING_PROVIDER',
     isStub: stubWhenSelected('AI_SCORING_PROVIDER', 'stub', 'stub'),
-  },
-  {
-    name: 'rentGuarantee',
-    envVar: 'RENT_GUARANTEE_PROVIDER',
-    isStub: stubWhenSelected('RENT_GUARANTEE_PROVIDER', 'mock', 'mock'),
   },
 ]
 

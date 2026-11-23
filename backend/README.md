@@ -379,13 +379,12 @@ Set these in production so every integration uses its real provider:
 | `esign` | `ESIGN_PROVIDER` | `stub` |
 | `creditBureau` | `CREDIT_BUREAU_PROVIDER` | `mock` |
 | `aiScoring` | `AI_SCORING_PROVIDER` | `stub` |
-| `rentGuarantee` | `RENT_GUARANTEE_PROVIDER` | `mock` |
 
 An integration with no real provider yet can be accepted explicitly with
 `ALLOW_STUB_PROVIDERS` (comma-separated names from the table, case-insensitive):
 
 ```bash
-ALLOW_STUB_PROVIDERS=rentGuarantee,aiScoring
+ALLOW_STUB_PROVIDERS=aiScoring
 ```
 
 Opted-out stubs log a `production.stub_integration_allowed` warning at boot.

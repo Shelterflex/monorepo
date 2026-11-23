@@ -69,9 +69,6 @@ export const envSchema = z.object({
   METRICS_TOKEN: z.string().optional(),
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
 
-  // Rent guarantee insurance provider
-  RENT_GUARANTEE_PROVIDER: z.enum(['mock', 'leatherback', 'heirs']).default('mock'),
-
   // Full-payment incentive payout split (NGN)
   FULL_PAYMENT_SPLIT_VERSION: z.string().default('v1'),
   FULL_PAYMENT_PLATFORM_SHARE: z.coerce.number().min(0).max(1).default(0),
