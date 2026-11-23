@@ -10700,6 +10700,164 @@ components:
       properties:
         id:
           type: string
+          format: uuid
+        policyId
+          type: string
+          format: uuid
+        amountNgn:
+          type: number
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+            - submitted
+            - approved
+            - rejected
+            - paid
+        createdAt:
+          type: string
+          format: date-time
+
+    TenantCurrentLease:
+      type: object
+      required:
+        - dealId
+        - property
+        - location
+        - monthlyPayment
+        - nextPaymentDate
+        - leaseEnd
+        - totalPaid
+        - totalOwed
+        - progress
+        - landlord
+      properties:
+        dealId:
+          type: string
+          format: uuid
+          description: The deal ID of the current active lease
+        property:
+          type: string
+          description: Property address or name
+        location:
+          type: string
+          description: Property location (area, city)
+        monthlyPayment:
+          type: number
+          description: Monthly payment amount in NGN
+        nextPaymentDate:
+          type: string
+          format: date-time
+          description: ISO date string of the next payment due date
+        leaseEnd:
+          type: string
+          format: date-time
+          description: ISO date string when the lease ends
+        totalPaid:
+          type: number
+          description: Total amount paid so far in NGN
+        totalOwed:
+          type: number
+          description: Total amount owed for the lease in NGN
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Payment progress percentage (0-100)
+        landlord:
+          type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+              description: Landlord's name
+
+    TenantLeaseDetails:
+      type: object
+      required:
+        - dealId
+        - property
+        - lease
+        - landlord
+        - paymentProgress
+      properties:
+        dealId:
+          type: string
+          format: uuid
+        property:
+          type: object
+          required:
+            - title
+            - address
+            - beds
+            - baths
+            - sqm
+          properties:
+            title:
+              type: string
+            address:
+              type: string
+            beds:
+              type: integer
+            baths:
+              type: integer
+            sqm:
+              type: integer
+        lease:
+          type: object
+          required:
+            - startDate
+            - endDate
+            - duration
+            - monthlyPayment
+            - status
+          properties:
+            startDate:
+              type: string
+              format: date-time
+            endDate:
+              type: string
+              format: date-time
+            duration:
+              type: string
+              description: Human-readable duration, e.g. "12 months"
+            monthlyPayment:
+              type: number
+            status:
+              type: string
+        landlord:
+          type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+            company:
+              type: string
+              nullable: true
+            phone:
+              type: string
+            email:
+              type: string
+              format: email
+        paymentProgress:
+          type: object
+          required:
+            - totalPaid
+            - totalOwed
+            - paymentsCompleted
+            - totalPayments
+          properties:
+            totalPaid:
+              type: number
+            totalOwed:
+              type: number
+            paymentsCompleted:
+              type: integer
+            totalPayments:
+              type: integer:
         jobId:
           type: string
         jobName:
@@ -10970,81 +11128,144 @@ components:
           description: Invalid schedule preference
         '401':
           description: Authentication required
+
+  /api/v1/tenant/lease/current:
+    get:
+      summary: Get tenant's current active lease
+      description: Returns the tenant's current active lease summary including property details, payment progress, and next payment date. Returns null if no active lease exists.
+      operationId: getTenantCurrentLease
+      tags:
+        - Tenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current lease summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TenantCurrentLease'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/tenant/deals/{dealId}/lease:
+    get:
+      summary: Get detailed lease information for a specific deal
+      description: Returns full lease details for a specific deal including property details, lease terms, landlord information, and payment progress. Tenant-scoped: returns 404 if the deal doesn't belong to the tenant.
+      operationId: getTenantLeaseDetails
+      tags:
+        - Tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The deal ID to fetch lease details for
+      responses:
+        '200':
+          description: Lease details
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TenantLeaseDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
 tags:
-- name: Health
-  description: Health check operations
-- name: Soroban
-  description: Soroban blockchain configuration
-- name: Auth
-  description: Email/OTP authentication and sessions
-- name: Payments
-  description: Payment confirmation and on-chain USDC receipt recording
-- name: Risk
-  description: User risk state (frozen status)
-- name: Whistleblower
-  description: Whistleblower listing operations
-- name: Vesting
-  description: Authenticated vesting schedule operations
-- name: Epoch Rewards
-  description: 'Sealed, epoch-based staking rewards. Stakers stake, unstake and claim
-    by signing in their own
-
-    wallet; admins fund and seal epochs.
-
-    '
-- name: Multisig
-  description: 'M-of-N approval for privileged on-chain admin actions. When `MULTISIG_ADMIN_ID`
-    is set, the
-
-    circuit-breaker drain (`propose-drain`, `execute-drain`) and contract-access role
-    assignment
-
-    (`propose-assign-role`) admin endpoints file a proposal here and answer 202 with
-    a `multisig`
-
-    object instead of executing; `freeze` stays immediate. The drain endpoints then
-    need a
-
-    `drainHash` (64 hex characters), as the deal_escrow contract''s drain functions
-    take one.
-
-    '
-- name: Deals
-  description: Deal management and repayment schedule operations
-- name: Admin
-  description: Administrative operations including reward payouts
-- name: Wallet
-  description: NGN wallet balance, ledger and withdrawals, and the custodial Stellar
-    wallet
-- name: Deposits
-  description: Fiat deposit confirmation and conversion
-- name: Staking
-  description: Staking operations (stake, unstake, claim rewards)
-- name: Support
-  description: Public support/contact message intake
-- name: Erasure
-  description: Account erasure (NDPA/GDPR right-to-erasure) requests and admin review
-- name: Messaging
-  description: Conversations, messages and message attachments (presigned uploads/downloads)
-- name: Inspections
-  description: Property inspections (checklist + photos) feeding the listing trust
-    score, and inspector verification
-- name: Landlord
-  description: Partner landlord applications and landlord-facing operations
-- name: Rent Guarantee
-  description: Landlord rent guarantee insurance - quotes, policy binding and claims
-- name: Governance
-  description: Stake-weighted parameter governance proposals and voting (contracts/governance)
-- name: Tenant
-  description: Tenant account features, such as the saved-property shortlist
-- name: Tenant Rating
-  description: Landlord ratings of tenants after a deal, and the tenant's portable
-    rating card with expiring public share links (#1905)
-- name: Tenant Reputation
-  description: 'Computed on-chain tenant reputation scores derived from landlord ratings
-    and payment history. Scores (0–100) are synced to the tenant_reputation Soroban
-    contract via the outbox on every meaningful change (#1980).
-
-    '
-- name: Properties
-  description: Public search, lookup and detail for approved properties (#1956)
+  - name: Health
+    description: Health check operations
+  - name: Soroban
+    description: Soroban blockchain configuration
+  - name: Auth
+    description: Email/OTP authentication and sessions
+  - name: Payments
+    description: Payment confirmation and on-chain USDC receipt recording
+  - name: Risk
+    description: User risk state (frozen status)
+  - name: Whistleblower
+    description: Whistleblower listing operations
+  - name: Vesting
+    description: Authenticated vesting schedule operations
+  - name: Epoch Rewards
+    description: |
+      Sealed, epoch-based staking rewards. Stakers stake, unstake and claim by signing in their own
+      wallet; admins fund and seal epochs.
+  - name: Multisig
+    description: |
+      M-of-N approval for privileged on-chain admin actions. When `MULTISIG_ADMIN_ID` is set, the
+      circuit-breaker drain (`propose-drain`, `execute-drain`) and contract-access role assignment
+      (`propose-assign-role`) admin endpoints file a proposal here and answer 202 with a `multisig`
+      object instead of executing; `freeze` stays immediate. The drain endpoints then need a
+      `drainHash` (64 hex characters), as the deal_escrow contract's drain functions take one.
+  - name: Deals
+    description: Deal management and repayment schedule operations
+  - name: Admin
+    description: Administrative operations including reward payouts
+  - name: Wallet
+    description: NGN wallet balance, ledger and withdrawals, and the custodial
+      Stellar wallet
+  - name: Deposits
+    description: Fiat deposit confirmation and conversion
+  - name: Staking
+    description: Staking operations (stake, unstake, claim rewards)
+  - name: Support
+    description: Public support/contact message intake
+  - name: Erasure
+    description: Account erasure (NDPA/GDPR right-to-erasure) requests and admin review
+  - name: Messaging
+    description: Conversations, messages and message attachments (presigned
+      uploads/downloads)
+  - name: Inspections
+    description: Property inspections (checklist + photos) feeding the listing trust
+      score, and inspector verification
+  - name: Landlord
+    description: Partner landlord applications and landlord-facing operations
+  - name: Rent Guarantee
+    description: Landlord rent guarantee insurance - quotes, policy binding and claims
+  - name: Governance
+    description: Stake-weighted parameter governance proposals and voting
+      (contracts/governance)
+  - name: Tenant Rating
+    description: Landlord ratings of tenants after a deal, and the tenant's portable
+      rating card with expiring public share links (#1905)
+  - name: Tenant Reputation
+    description: >
+      Computed on-chain tenant reputation scores derived from landlord ratings
+      and payment history. Scores (0–100) are synced to the tenant_reputation
+      Soroban contract via the outbox on every meaningful change (#1980).
+  - name: Properties
+    description: Public search, lookup and detail for approved properties (#1956)
+  - name: Tenant
+    description: Tenant-facing lease and payment operations
