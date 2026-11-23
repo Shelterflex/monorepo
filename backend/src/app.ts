@@ -929,7 +929,7 @@ export function createApp() {
     );
     app.use("/api/landlord", authenticateToken, createLandlordRouter());
     app.use("/api/tenant/applications", createTenantApplicationsRouter());
-    app.use("/api/tenant/lease", createTenantLeaseRouter());
+    app.use("/api", createTenantLeaseRouter());
     app.use(
       "/api/whistleblower/applications",
       createWhistleblowerApplicationsRouter(),
@@ -1034,7 +1034,7 @@ export function createApp() {
   app.use("/api/v1/landlord", authenticateToken, createLandlordRouter());
   app.use("/api/v1/admin", createAdminLandlordVerificationRouter());
   app.use("/api/v1/tenant/applications", createTenantApplicationsRouter());
-  app.use("/api/v1/tenant/lease", createTenantLeaseRouter());
+  app.use("/api/v1", createTenantLeaseRouter());
   app.use(
     "/api/v1/whistleblower/applications",
     createWhistleblowerApplicationsRouter(),
