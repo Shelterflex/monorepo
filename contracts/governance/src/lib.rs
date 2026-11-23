@@ -79,8 +79,6 @@ fn get_total_staked(env: &Env) -> i128 {
         .unwrap_or(0)
 }
 
-
-
 fn get_min_proposer_stake(env: &Env) -> i128 {
     env.storage()
         .instance()
@@ -604,7 +602,7 @@ impl Governance {
 mod test {
     extern crate std;
 
-    use super::{Governance, GovernanceClient, ContractError, ProposalStatus};
+    use super::{ContractError, Governance, GovernanceClient, ProposalStatus};
     use soroban_sdk::testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke};
     use soroban_sdk::{Address, Env, IntoVal, Symbol};
 

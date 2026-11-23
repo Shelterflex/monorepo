@@ -225,6 +225,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bond_collateral"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban_access_control",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -699,6 +707,14 @@ dependencies = [
  "r-efi",
  "wasip2",
  "wasip3",
+]
+
+[[package]]
+name = "governance"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban_access_control",
 ]
 
 [[package]]
@@ -1274,6 +1290,14 @@ dependencies = [
  "quick-error",
  "tempfile",
  "wait-timeout",
+]
+
+[[package]]
+name = "schema_registry"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban_access_control",
 ]
 
 [[package]]

@@ -1,8 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Env, Symbol, Vec,
-};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Symbol, Vec};
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
 pub mod access_control;
@@ -1180,7 +1178,10 @@ mod test {
                 sub_invokes: &[],
             },
         }]);
-        let err = client.try_issue_bond(&user, &10000i128).unwrap_err().unwrap();
+        let err = client
+            .try_issue_bond(&user, &10000i128)
+            .unwrap_err()
+            .unwrap();
         assert_eq!(err, ContractError::PositionUnhealthy);
     }
 

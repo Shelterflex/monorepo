@@ -192,6 +192,7 @@ import { createTenantRatingCardRouter } from "./routes/tenantRatingCard.js";
 import { createInspectionJobsRouter } from "./routes/inspectionJobs.js";
 import { createAdminInspectionJobsRouter } from "./routes/adminInspectionJobs.js";
 import { createGovernanceRouter } from "./routes/governance.js";
+import { createAdminUserSessionsRouter } from "./routes/adminUserSessions.js";
 
 import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
 import { createAdminFraudRouter } from "./routes/adminFraud.js";
@@ -759,6 +760,7 @@ export function createApp() {
   app.use("/api/v1", createTenantRatingCardRouter());
   app.use("/api/v1", createInspectionJobsRouter());
   app.use("/api/v1/admin", createAdminInspectionJobsRouter());
+  app.use("/api/v1/admin/users", createAdminUserSessionsRouter());
   app.use("/api/v1/governance", createGovernanceRouter());
   app.use("/health", createHealthRouter(sorobanAdapter));
 
