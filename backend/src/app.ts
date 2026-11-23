@@ -199,6 +199,7 @@ import { createTenantRatingCardRouter } from "./routes/tenantRatingCard.js";
 import { createInspectionJobsRouter } from "./routes/inspectionJobs.js";
 import { createAdminInspectionJobsRouter } from "./routes/adminInspectionJobs.js";
 import { createGovernanceRouter } from "./routes/governance.js";
+import { createAdminUserSessionsRouter } from "./routes/adminUserSessions.js";
 import { createTenantSavedPropertiesRouter } from "./routes/tenantSavedProperties.js";
 import { createSupportRouter, createAdminSupportRouter } from "./routes/support.js";
 import { createLandlordPayoutScheduleRouter } from "./routes/landlordPayoutSchedule.js";
@@ -778,6 +779,7 @@ export function createApp() {
   app.use("/api/v1", createTenantRatingCardRouter());
   app.use("/api/v1", createInspectionJobsRouter());
   app.use("/api/v1/admin", createAdminInspectionJobsRouter());
+  app.use("/api/v1/admin/users", createAdminUserSessionsRouter());
   app.use("/api/v1/governance", createGovernanceRouter());
   app.use("/api/v1/tenant/saved-properties", createTenantSavedPropertiesRouter());
   app.use("/api/v1/apartment-reviews", createApartmentReviewsRouter());

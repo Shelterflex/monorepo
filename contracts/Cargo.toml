@@ -21,6 +21,9 @@ members = [
   "multisig_admin",
   "oracle_price_feeds",
   "allowlist_registry",
+  "bond_collateral",
+  "governance",
+  "schema_registry",
 ]
 
 [profile.release]
