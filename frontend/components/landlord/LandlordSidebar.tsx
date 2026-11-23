@@ -62,6 +62,11 @@ export function LandlordSidebar() {
       icon: Building2,
     },
     { href: "/dashboard/landlord/tenants", label: "My Tenants", icon: Users },
+    {
+      href: "/dashboard/landlord/analytics",
+      label: "Analytics",
+      icon: BarChart3,
+    },
     { href: "/dashboard/landlord/settings", label: "Settings", icon: Settings },
   ];
 
