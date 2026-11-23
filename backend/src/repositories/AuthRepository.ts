@@ -251,6 +251,17 @@ export class PostgresUserRepository {
     return user
   }
 
+  /** Erases personal fields and deactivates the row. The placeholder email keeps the unique constraint satisfied. */
+  async anonymize(userId: string, placeholderEmail: string): Promise<void> {
+    const pool = await this.pool()
+    await pool.query(
+      `UPDATE users
+       SET email = $2, name = 'Erased user', deactivated_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [userId, placeholderEmail]
+    )
+  }
+
   async updateName(userId: string, name: string): Promise<void> {
     const pool = await this.pool()
     await pool.query(

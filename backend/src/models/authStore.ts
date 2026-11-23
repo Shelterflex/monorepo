@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { getPool } from '../db.js'
 import {
   PostgresUserRepository,
   PostgresSessionRepository,
@@ -163,6 +164,21 @@ class UserStore {
     } catch (error) {
       console.warn('Postgres user name update failed:', error)
       throw error
+    }
+  }
+
+  /**
+   * Replaces the account's email and name and marks it deactivated (account erasure, #2053).
+   * With a database, a failure is thrown so the erasure is retried. Without one, only the fallback cache changes.
+   */
+  async anonymize(userId: string, placeholderEmail: string): Promise<void> {
+    if (await getPool()) {
+      await this.postgresRepo.anonymize(userId, placeholderEmail)
+    }
+    for (const [email, user] of [...this.fallbackCache.entries()]) {
+      if (user.id !== userId) continue
+      this.fallbackCache.delete(email)
+      this.fallbackCache.set(placeholderEmail, { ...user, email: placeholderEmail, name: 'Erased user' })
     }
   }
 
