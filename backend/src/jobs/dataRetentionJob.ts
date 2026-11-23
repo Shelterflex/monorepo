@@ -1,12 +1,29 @@
 import { getPool } from '../db.js'
 import { logger } from '../utils/logger.js'
 import { observeJobRun, sumCounts } from './jobObservability.js'
+import { expireReadyExports } from '../services/tenantDataExportService.js'
+import { processDueErasures } from '../services/erasureService.js'
 
 export interface DataRetentionResult {
   onboardingDraftsDeleted: number
   kycRejectionsAnonymised: number
   supportMessagesDeleted: number
-  /** Tenant data-export archives deleted after their 7-day window (#1899). */
+  /** Tenant data-export archives deleted after their 7-day window (#2052). */
+  dataExportsExpired: number
+  /** Account erasures whose grace window ended and whose identity fields were anonymized (#2053). */
+  erasuresCompleted: number
+}
+
+/** Runs one retention step. A failure is logged and counted as zero, so the other steps still run. */
+async function runStep<T>(name: string, step: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await step()
+  } catch (error) {
+    logger.error(`DataRetentionJob step failed: ${name}`, {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return fallback
+  }
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -59,6 +76,8 @@ export class DataRetentionJob {
       onboardingDraftsDeleted: 0,
       kycRejectionsAnonymised: 0,
       supportMessagesDeleted: 0,
+      dataExportsExpired: 0,
+      erasuresCompleted: 0,
     }
 
     try {
@@ -99,6 +118,13 @@ export class DataRetentionJob {
         [threeYearsAgo],
       )
       result.supportMessagesDeleted = support.rowCount ?? 0
+
+      result.dataExportsExpired = await runStep('expire data exports', () => expireReadyExports(now), 0)
+      result.erasuresCompleted = await runStep(
+        'process erasures',
+        async () => (await processDueErasures(now)).completed,
+        0,
+      )
 
 
       logger.info('DataRetentionJob completed', { ...result, durationMs: Date.now() - started })

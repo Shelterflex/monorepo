@@ -65,6 +65,46 @@ export const updatePayoutSchedulePreferenceSchema = z.object({
   schedulePreference: payoutSchedulePreferenceSchema,
 })
 
+/** Query for the upcoming schedule (GET /landlord/payout-schedule). */
+export const payoutScheduleQuerySchema = z.object({
+  propertyId: z.string().min(1).max(128).optional(),
+  grouping: payoutGroupingSchema.optional().default('monthly'),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+})
+
+export type PayoutScheduleQuery = z.infer<typeof payoutScheduleQuerySchema>
+
+/** Statuses that have not been paid out yet. The schedule shows these. */
+export const UPCOMING_PAYOUT_STATUSES: readonly PayoutStatus[] = [
+  'scheduled',
+  'processing',
+  'delayed',
+  'on_hold',
+]
+
+/** Bank account that payouts are sent to. It is stored on the landlord profile. */
+export const payoutDestinationSchema = z.object({
+  bankName: z.string().trim().min(2, 'bankName is required').max(100),
+  /** Nigerian NUBAN account numbers are exactly 10 digits. */
+  accountNumber: z.string().trim().regex(/^\d{10}$/, 'accountNumber must be 10 digits'),
+  accountName: z.string().trim().min(2, 'accountName is required').max(100),
+})
+
+export type PayoutDestination = z.infer<typeof payoutDestinationSchema>
+
+/** Body for PUT /landlord/payout-schedule/preference: frequency, destination, or both. */
+export const updatePayoutPreferenceBodySchema = z
+  .object({
+    schedulePreference: payoutSchedulePreferenceSchema.optional(),
+    destination: payoutDestinationSchema.optional(),
+  })
+  .refine((body) => body.schedulePreference !== undefined || body.destination !== undefined, {
+    message: 'Provide schedulePreference, destination, or both',
+  })
+
+export type UpdatePayoutPreferenceBody = z.infer<typeof updatePayoutPreferenceBodySchema>
+
 export type PayoutSchedulePreference = z.infer<typeof payoutSchedulePreferenceSchema>
 export type UpdatePayoutSchedulePreferenceRequest = z.infer<
   typeof updatePayoutSchedulePreferenceSchema

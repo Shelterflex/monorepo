@@ -160,6 +160,57 @@ const STORAGE_SCHEMA_V3: u32 = 3;
 
 const DEFAULT_CIRCUIT_BREAKER_STATE: CircuitBreakerState = CircuitBreakerState::Unfrozen;
 
+// ── Storage TTL ──────────────────────────────────────────────────────────────
+//
+// Soroban archives an entry once its TTL runs out, and a contract cannot read an
+// archived entry until it is restored. Deal state has to stay readable for as long
+// as a deal can still be settled, so every entrypoint extends the instance entry and
+// every deal-scoped persistent entry it reads or writes. A write also extends the
+// entry it wrote, because a newly created entry starts with the network's default TTL.
+//
+// Policy, in ledgers (about one ledger every 5 seconds):
+// - The longest deal is the 12-month plan (`DEAL_MAX_TERM_DAYS`). `DEAL_TTL_MARGIN_DAYS`
+//   covers the challenge and dispute windows that run after the term ends.
+// - An entry is extended only when its remaining TTL is below `TTL_THRESHOLD_LEDGERS`,
+//   and then it is set to `TTL_EXTEND_TO_LEDGERS`.
+// - The host caps the new TTL at the network's maximum entry TTL. On a network with a
+//   lower cap, a deal that no one touches for longer than that cap needs a restore
+//   before it can be used again.
+const LEDGERS_PER_DAY: u32 = 17_280;
+const DEAL_MAX_TERM_DAYS: u32 = 365;
+const DEAL_TTL_MARGIN_DAYS: u32 = 90;
+const TTL_THRESHOLD_LEDGERS: u32 = 30 * LEDGERS_PER_DAY;
+const TTL_EXTEND_TO_LEDGERS: u32 = (DEAL_MAX_TERM_DAYS + DEAL_TTL_MARGIN_DAYS) * LEDGERS_PER_DAY;
+
+/// Extends the instance entry, which holds the admin, pause, circuit-breaker and schema
+/// state. Every entrypoint calls it first.
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends one persistent entry. A key that was never written is skipped, because the
+/// host rejects TTL extensions for missing entries.
+fn extend_persistent_ttl<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
+    let persistent = env.storage().persistent();
+    if persistent.has(key) {
+        persistent.extend_ttl(key, TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+    }
+}
+
+/// Extends every persistent entry that belongs to `deal_id`.
+fn extend_deal_ttl(env: &Env, deal_id: &String) {
+    extend_persistent_ttl(env, &DataKey::DealBalance(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::DealDepositor(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::DealState(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::DealLifecycle(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::PendingRentRelease(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::RentDispute(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::LegacyLockedAmountV2(deal_id.clone()));
+    extend_persistent_ttl(env, &DataKey::LegacyPendingPayoutV2(deal_id.clone()));
+}
+
 // ── Contract ─────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -279,9 +330,9 @@ fn get_deal_balance(env: &Env, deal_id: &String) -> i128 {
 }
 
 fn put_deal_balance(env: &Env, deal_id: &String, amount: i128) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::DealBalance(deal_id.clone()), &amount);
+    let key = DataKey::DealBalance(deal_id.clone());
+    env.storage().persistent().set(&key, &amount);
+    extend_persistent_ttl(env, &key);
 }
 
 fn get_deal_depositor(env: &Env, deal_id: &String) -> Option<Address> {
@@ -295,6 +346,7 @@ fn set_deal_depositor_if_missing(env: &Env, deal_id: &String, depositor: &Addres
     if !env.storage().persistent().has(&key) {
         env.storage().persistent().set(&key, depositor);
     }
+    extend_persistent_ttl(env, &key);
 }
 
 fn get_deal_state(env: &Env, deal_id: &String) -> DealState {
@@ -313,9 +365,9 @@ fn get_deal_state(env: &Env, deal_id: &String) -> DealState {
 }
 
 fn set_deal_state(env: &Env, deal_id: &String, state: &DealState) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::DealState(deal_id.clone()), state);
+    let key = DataKey::DealState(deal_id.clone());
+    env.storage().persistent().set(&key, state);
+    extend_persistent_ttl(env, &key);
 }
 
 fn assert_deal_invariants(state: &DealState) -> Result<(), ContractError> {
@@ -338,9 +390,9 @@ fn get_pending_release(env: &Env, deal_id: &String) -> Option<PendingRentRelease
 }
 
 fn set_pending_release(env: &Env, deal_id: &String, release: &PendingRentRelease) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::PendingRentRelease(deal_id.clone()), release);
+    let key = DataKey::PendingRentRelease(deal_id.clone());
+    env.storage().persistent().set(&key, release);
+    extend_persistent_ttl(env, &key);
 }
 
 fn clear_pending_release(env: &Env, deal_id: &String) {
@@ -356,9 +408,9 @@ fn get_dispute(env: &Env, deal_id: &String) -> Option<RentDispute> {
 }
 
 fn set_dispute(env: &Env, deal_id: &String, dispute: &RentDispute) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::RentDispute(deal_id.clone()), dispute);
+    let key = DataKey::RentDispute(deal_id.clone());
+    env.storage().persistent().set(&key, dispute);
+    extend_persistent_ttl(env, &key);
 }
 
 fn clear_dispute(env: &Env, deal_id: &String) {
@@ -428,6 +480,7 @@ impl DealEscrow {
         token: Address,
         receipt_contract: Address,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::AlreadyInitialized);
         }
@@ -455,6 +508,7 @@ impl DealEscrow {
 
     /// Return the current contract version (starts at 1, incremented by upgrades).
     pub fn contract_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get::<_, u32>(&DataKey::ContractVersion)
@@ -477,6 +531,8 @@ impl DealEscrow {
         deal_id: String,
         amount: i128,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_valid_amount(amount)?;
         validation::require_non_empty_string(&env, &deal_id)?;
@@ -533,6 +589,8 @@ impl DealEscrow {
         external_ref_source: Symbol,
         external_ref: String,
     ) -> Result<i128, ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         require_not_frozen(&env, false)?;
         validation::require_non_empty_string(&env, &deal_id)?;
@@ -613,11 +671,14 @@ impl DealEscrow {
 
     /// Return the current escrowed token balance for `deal_id`.
     pub fn balance(env: Env, deal_id: String) -> i128 {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         get_deal_balance(&env, &deal_id)
     }
 
     /// Return the current storage-schema version (V1 = 1, V2 = 2, V3 = 3).
     pub fn storage_schema_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         get_storage_schema_version(&env)
     }
 
@@ -635,6 +696,7 @@ impl DealEscrow {
         challenge_window_seconds: u64,
         dispute_timeout_seconds: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -667,6 +729,7 @@ impl DealEscrow {
     /// `resolve_rent_dispute`.  Emits a `deal_escrow / set_resolver` event
     /// containing the new resolver address.
     pub fn set_resolver(env: Env, admin: Address, resolver: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_resolver")?;
         env.storage().instance().set(&DataKey::Resolver, &resolver);
@@ -696,6 +759,7 @@ impl DealEscrow {
         from_version: u32,
         deal_ids: Vec<String>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -728,6 +792,7 @@ impl DealEscrow {
         );
 
         for deal_id in deal_ids.iter() {
+            extend_deal_ttl(&env, &deal_id);
             let balance = get_deal_balance(&env, &deal_id);
             let mut locked = 0i128;
             let mut pending = 0i128;
@@ -785,6 +850,8 @@ impl DealEscrow {
         external_ref_source: Symbol,
         external_ref: String,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_valid_amount(amount)?;
         validation::require_non_empty_string(&env, &deal_id)?;
@@ -846,6 +913,8 @@ impl DealEscrow {
         deal_id: String,
         challenge_evidence_ref: String,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         validation::require_non_empty_string(&env, &challenge_evidence_ref)?;
@@ -897,6 +966,8 @@ impl DealEscrow {
         outcome: SettlementOutcome,
         resolution_evidence_ref: String,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         validation::require_non_empty_string(&env, &resolution_evidence_ref)?;
@@ -921,6 +992,8 @@ impl DealEscrow {
     /// `ContractError::InvalidReleaseWindow` if the challenge window has not
     /// yet closed.  Emits a `deal_escrow / rent_release_settled` event.
     pub fn settle_rent_release_timeout(env: Env, deal_id: String) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         if get_dispute(&env, &deal_id).is_some() {
@@ -948,6 +1021,8 @@ impl DealEscrow {
     /// and `ContractError::InvalidReleaseWindow` if the timeout has not yet
     /// elapsed.  Emits a `deal_escrow / rent_release_settled` event.
     pub fn settle_dispute_timeout(env: Env, deal_id: String) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         let dispute = get_dispute(&env, &deal_id).ok_or(ContractError::NoOpenDispute)?;
@@ -1023,6 +1098,7 @@ impl DealEscrow {
 #[contractimpl]
 impl Pausable for DealEscrow {
     fn pause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         let stored: Address = env
             .storage()
             .instance()
@@ -1040,6 +1116,7 @@ impl Pausable for DealEscrow {
     }
 
     fn unpause(env: Env, _admin: Address) -> Result<(), PausableError> {
+        extend_instance_ttl(&env);
         let stored: Address = env
             .storage()
             .instance()
@@ -1061,6 +1138,7 @@ impl Pausable for DealEscrow {
     }
 
     fn is_paused(env: Env) -> bool {
+        extend_instance_ttl(&env);
         get_paused(&env)
     }
 }
@@ -1075,6 +1153,7 @@ impl DealEscrow {
     /// Emits a `deal_escrow / set_guardian` event containing the new guardian
     /// address.
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "set_guardian")?;
         env.storage().instance().set(&DataKey::Guardian, &guardian);
@@ -1099,6 +1178,7 @@ impl DealEscrow {
         admin: Address,
         delay_seconds: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -1132,6 +1212,7 @@ impl DealEscrow {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "propose_upgrade")?;
         if env.storage().instance().has(&DataKey::PendingUpgradeHash) {
@@ -1168,6 +1249,7 @@ impl DealEscrow {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "execute_upgrade")?;
         let pending: BytesN<32> = env
@@ -1226,6 +1308,7 @@ impl DealEscrow {
         admin: Address,
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -1261,6 +1344,7 @@ impl DealEscrow {
     /// proposal to cancel.  Clears the stored hash and timestamp, and emits a
     /// `deal_escrow / cancel_upgrade` event with `(admin, cancelled_hash)`.
     pub fn cancel_upgrade(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "cancel_upgrade")?;
         let hash: BytesN<32> = env
@@ -1296,6 +1380,7 @@ impl DealEscrow {
     /// contract is already frozen.  Emits a `deal_escrow / freeze` event with
     /// `(admin, timestamp)`.
     pub fn freeze(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "freeze")?;
 
@@ -1319,6 +1404,7 @@ impl DealEscrow {
 
     /// Return `true` if the contract is currently in the `Frozen` circuit-breaker state.
     pub fn is_frozen(env: Env) -> bool {
+        extend_instance_ttl(&env);
         get_circuit_breaker_state(&env) == CircuitBreakerState::Frozen
     }
 
@@ -1335,6 +1421,7 @@ impl DealEscrow {
         admin: Address,
         drain_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "propose_drain")?;
 
@@ -1374,6 +1461,7 @@ impl DealEscrow {
         admin: Address,
         drain_hash: BytesN<32>,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(&env, &current_admin, &admin, "execute_drain")?;
 
@@ -1423,6 +1511,7 @@ impl DealEscrow {
         admin: Address,
         delay_seconds: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let current_admin = get_admin(&env);
         access_control::require_admin_permission(
             &env,
@@ -1449,6 +1538,7 @@ impl DealEscrow {
     /// Maps to `CircuitBreakerState`: `0` = Unfrozen, `1` = Frozen,
     /// `2` = RecoveryAwaiting.
     pub fn get_circuit_breaker_state(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         get_circuit_breaker_state(&env) as u32
     }
 
@@ -1467,13 +1557,15 @@ impl DealEscrow {
     }
 
     fn set_deal_lifecycle(env: &Env, deal_id: &String, status: DealLifecycleStatus) {
-        env.storage()
-            .persistent()
-            .set(&DataKey::DealLifecycle(deal_id.clone()), &status);
+        let key = DataKey::DealLifecycle(deal_id.clone());
+        env.storage().persistent().set(&key, &status);
+        extend_persistent_ttl(env, &key);
     }
 
     /// Admin-only: activate a deal on-chain (draft → active).
     pub fn activate_deal(env: Env, admin: Address, deal_id: String) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         let current_admin = get_admin(&env);
@@ -1496,6 +1588,8 @@ impl DealEscrow {
 
     /// Admin-only: mark a deal completed on-chain.
     pub fn complete_deal(env: Env, admin: Address, deal_id: String) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         let current_admin = get_admin(&env);
@@ -1518,6 +1612,8 @@ impl DealEscrow {
 
     /// Admin-only: mark a deal defaulted on-chain.
     pub fn default_deal(env: Env, admin: Address, deal_id: String) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         require_not_paused(&env)?;
         validation::require_non_empty_string(&env, &deal_id)?;
         let current_admin = get_admin(&env);
@@ -1543,6 +1639,8 @@ impl DealEscrow {
     /// Returns `DealLifecycleStatus::Draft` for deals that have never been
     /// explicitly activated.  Does not revert; unknown deal IDs return `Draft`.
     pub fn deal_lifecycle_status(env: Env, deal_id: String) -> DealLifecycleStatus {
+        extend_instance_ttl(&env);
+        extend_deal_ttl(&env, &deal_id);
         Self::get_deal_lifecycle(&env, &deal_id)
     }
 }
@@ -1551,6 +1649,9 @@ impl DealEscrow {
 
 #[cfg(test)]
 mod cross_contract_integration_tests;
+
+#[cfg(test)]
+mod ttl_tests;
 
 #[cfg(test)]
 mod test {

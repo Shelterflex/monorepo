@@ -410,3 +410,68 @@ fn test_pagination_overflow_and_limit_cap() {
     let receipts_user = client.list_receipts_by_user(&user, &u32::MAX, &Some(1));
     assert_eq!(receipts_user.len(), 0);
 }
+
+/// Ledgers advanced in the TTL test. The test environment's default minimum persistent
+/// TTL is 4,096 ledgers, so this jump expires any entry that was never extended, while
+/// staying below the 500,000-ledger extension the contract applies.
+const TTL_TEST_LEDGER_JUMP: u32 = 100_000;
+
+#[test]
+fn receipts_and_instance_state_survive_ledger_jump_past_default_ttl() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(TransactionReceiptContract, ());
+    let client = TransactionReceiptContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let operator = Address::generate(&env);
+    client.init(&admin, &operator);
+
+    let payer = Address::generate(&env);
+    let token = Address::generate(&env);
+    let make_input = |env: &Env, reference: &str| ReceiptInput {
+        external_ref_source: Symbol::new(env, "stellar"),
+        external_ref: String::from_str(env, reference),
+        tx_type: Symbol::new(env, "TENANT_REPAYMENT"),
+        amount_usdc: 150_0000000i128,
+        token: token.clone(),
+        deal_id: String::from_str(env, "deal_ttl"),
+        listing_id: None,
+        from: Some(payer.clone()),
+        to: None,
+        amount_ngn: None,
+        fx_rate_ngn_per_usdc: None,
+        fx_provider: None,
+        metadata_hash: None,
+    };
+
+    let tx_id = client.record_receipt(&operator, &make_input(&env, "ref_ttl_before_jump"));
+
+    env.ledger()
+        .with_mut(|li| li.sequence_number += TTL_TEST_LEDGER_JUMP);
+
+    // The receipt, its deal index and its user index are still readable, unchanged.
+    let receipt = client.get_receipt(&tx_id).unwrap();
+    assert_eq!(receipt.tx_id, tx_id);
+    assert_eq!(receipt.amount_usdc, 150_0000000i128);
+    assert_eq!(receipt.from, Some(payer.clone()));
+    assert_eq!(
+        client
+            .list_receipts_by_deal(&String::from_str(&env, "deal_ttl"), &10, &None)
+            .len(),
+        1
+    );
+    assert_eq!(client.list_receipts_by_user(&payer, &10, &None).len(), 1);
+
+    // Instance state (version, pause flag) survives, and writes still work after the jump.
+    assert_eq!(client.contract_version(), 1);
+    assert!(!client.is_paused());
+    let second_id = client.record_receipt(&operator, &make_input(&env, "ref_ttl_after_jump"));
+    assert_ne!(second_id, tx_id);
+    assert_eq!(
+        client
+            .list_receipts_by_deal(&String::from_str(&env, "deal_ttl"), &10, &None)
+            .len(),
+        2
+    );
+}

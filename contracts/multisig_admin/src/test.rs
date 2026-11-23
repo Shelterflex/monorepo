@@ -347,3 +347,42 @@ fn test_multisig_pausable() {
     client.unpause(&s1);
     assert!(!client.is_paused());
 }
+
+/// Ledgers advanced in the TTL test. This is beyond the test environment's default
+/// 4,096-ledger minimum persistent TTL, so an entry that was never extended expires, and
+/// it is below the 500,000-ledger extension the contract applies.
+const TTL_TEST_LEDGER_JUMP: u32 = 100_000;
+
+#[test]
+fn signers_threshold_and_proposals_survive_ledger_jump_past_default_ttl() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (signers, client, _contract_id) = setup_multisig(&env, 2, 2);
+
+    let target = Address::generate(&env);
+    let function = Symbol::new(&env, "noop");
+    let proposal_id = client.propose(
+        &signers.get(0).unwrap(),
+        &target,
+        &function,
+        &Vec::new(&env),
+    );
+
+    env.ledger()
+        .with_mut(|li| li.sequence_number += TTL_TEST_LEDGER_JUMP);
+
+    // Signer set and threshold (instance storage) survive the jump unchanged.
+    assert_eq!(client.get_signers(), signers);
+    assert_eq!(client.get_threshold(), 2);
+    assert!(client.is_signer(&signers.get(1).unwrap()));
+
+    // The proposal (persistent storage) is still readable. The timestamp has not moved,
+    // so it has not expired and is still pending with its original approval.
+    let proposal = client.get_proposal(&proposal_id);
+    assert_eq!(proposal.status, ProposalStatus::Pending);
+    assert_eq!(proposal.approvals.len(), 1);
+
+    // It can still be approved to the threshold after the jump.
+    client.approve(&signers.get(1).unwrap(), &proposal_id);
+    assert_eq!(client.get_proposal(&proposal_id).approvals.len(), 2);
+}

@@ -106,8 +106,14 @@ import { metricsMiddleware } from "./middleware/metricsMiddleware.js";
 import {
   JobScheduler,
   initJobStore,
+  initScheduler,
   PostgresJobStore,
 } from "./jobs/scheduler/index.js";
+import { createApartmentReviewsRouter, createAdminApartmentReviewsRouter } from "./routes/apartmentReviews.js";
+import { createTenantDataExportRouter } from "./routes/tenantDataExport.js";
+import { createErasureRouter } from "./routes/erasure.js";
+import { TENANT_DATA_EXPORT_JOB, generateExport } from "./services/tenantDataExportService.js";
+import { setErasureBalanceProvider } from "./services/erasureGuards.js";
 import { createAdminJobsRouter } from "./routes/adminJobs.js";
 import { createAdminQuotaRouter } from "./routes/adminQuota.js";
 import { getNotificationService } from "./notifications/index.js";
@@ -193,6 +199,10 @@ import { createTenantRatingCardRouter } from "./routes/tenantRatingCard.js";
 import { createInspectionJobsRouter } from "./routes/inspectionJobs.js";
 import { createAdminInspectionJobsRouter } from "./routes/adminInspectionJobs.js";
 import { createGovernanceRouter } from "./routes/governance.js";
+import { createTenantSavedPropertiesRouter } from "./routes/tenantSavedProperties.js";
+import { createSupportRouter, createAdminSupportRouter } from "./routes/support.js";
+import { createLandlordPayoutScheduleRouter } from "./routes/landlordPayoutSchedule.js";
+import { createLandlordAnalyticsRouter } from "./routes/landlordAnalytics.js";
 
 import { initFraudStore, PostgresFraudStore } from "./fraud/index.js";
 import { createAdminFraudRouter } from "./routes/adminFraud.js";
@@ -351,6 +361,8 @@ export function createApp() {
     ? new PostgresLinkedAddressStore()
     : new InMemoryLinkedAddressStore();
   const ngnWalletService = new NgnWalletService();
+  // Account erasure refuses to run unless it can read the user's NGN balance (#2053).
+  setErasureBalanceProvider((userId) => ngnWalletService.getBalance(userId));
 
   // Initialize rewards data layer - use persistent implementation when DATABASE_URL is set
   const rewardsDataLayer = process.env.DATABASE_URL
@@ -464,6 +476,12 @@ export function createApp() {
   const jobScheduler = new JobScheduler(
     parseInt(process.env.JOB_SCHEDULER_POLL_MS ?? "5000", 10),
   );
+  // Routes enqueue through getScheduler(), so this instance has to be the shared one (#2052).
+  initScheduler(jobScheduler);
+  jobScheduler.registerHandler(TENANT_DATA_EXPORT_JOB, async (job) => {
+    const exportId = String((job.payload as { exportId?: unknown } | undefined)?.exportId ?? "");
+    await generateExport(exportId);
+  });
 
   // Fraud Detection Store — swap to Postgres when DATABASE_URL is set
   if (process.env.DATABASE_URL) {
@@ -761,6 +779,15 @@ export function createApp() {
   app.use("/api/v1", createInspectionJobsRouter());
   app.use("/api/v1/admin", createAdminInspectionJobsRouter());
   app.use("/api/v1/governance", createGovernanceRouter());
+  app.use("/api/v1/tenant/saved-properties", createTenantSavedPropertiesRouter());
+  app.use("/api/v1/apartment-reviews", createApartmentReviewsRouter());
+  app.use("/api/v1/admin/apartment-reviews", createAdminApartmentReviewsRouter());
+  app.use("/api/v1/tenant/data-export", createTenantDataExportRouter());
+  app.use("/api/v1/tenant/erasure", createErasureRouter());
+  app.use("/api/v1/support", createSupportRouter());
+  app.use("/api/v1/admin/support", createAdminSupportRouter());
+  app.use("/api/v1/landlord/payout-schedule", createLandlordPayoutScheduleRouter());
+  app.use("/api/v1/landlord/analytics", createLandlordAnalyticsRouter());
   app.use("/health", createHealthRouter(sorobanAdapter));
 
   // Global API Rate Limiting
@@ -907,8 +934,21 @@ export function createApp() {
     );
     app.use("/api/tenant/payments", createTenantPaymentsRouter());
     app.use("/api/notifications", createNotificationsRouter());
+    app.use("/api/kyc", createKycRouter());
+    app.use("/api/tenant/onboarding", createTenantOnboardingRouter());
+    app.use("/api/listings", createListingsRouter());
+    app.use("/api/onboarding", createOnboardingRouter());
     app.use("/api/admin", createSettlementAdminRouter());
     app.use("/api/admin", createAdminRolesRouter());
+    app.use("/api/tenant/saved-properties", createTenantSavedPropertiesRouter());
+    app.use("/api/apartment-reviews", createApartmentReviewsRouter());
+    app.use("/api/admin/apartment-reviews", createAdminApartmentReviewsRouter());
+    app.use("/api/tenant/data-export", createTenantDataExportRouter());
+    app.use("/api/tenant/erasure", createErasureRouter());
+    app.use("/api/support", createSupportRouter());
+    app.use("/api/admin/support", createAdminSupportRouter());
+    app.use("/api/landlord/payout-schedule", createLandlordPayoutScheduleRouter());
+    app.use("/api/landlord/analytics", createLandlordAnalyticsRouter());
   }
 
   app.use("/api/v1/wallet", createWalletRouter(walletService));
@@ -997,22 +1037,22 @@ export function createApp() {
     "/api/v1/whistleblower/applications",
     createWhistleblowerApplicationsRouter(),
   );
-  app.use("/api/tenant/payments", createTenantPaymentsRouter());
-  app.use("/api/notifications", createNotificationsRouter());
+  app.use("/api/v1/tenant/payments", createTenantPaymentsRouter());
+  app.use("/api/v1/notifications", createNotificationsRouter());
   app.use("/api/admin", createSettlementAdminRouter());
   app.use("/api/admin", createAdminRolesRouter());
   app.use("/api/admin/disputes", createDisputeAdminRouter());
-  app.use("/api/kyc", createKycRouter());
-  app.use("/api/tenant/onboarding", createTenantOnboardingRouter());
-  app.use("/api/listings", createListingsRouter());
+  app.use("/api/v1/kyc", createKycRouter());
+  app.use("/api/v1/tenant/onboarding", createTenantOnboardingRouter());
+  app.use("/api/v1/listings", createListingsRouter());
   app.use("/api/v1", createListingApplicationsRouter());
+  app.use("/api/v1/webhooks/kyc", createKycWebhookRouter());
   app.use("/api/webhooks/kyc", createKycWebhookRouter());
-  app.use("/api/onboarding", createOnboardingRouter());
+  app.use("/api/v1/onboarding", createOnboardingRouter());
   app.use("/api", createTenantRatingCardRouter());
   app.use("/api", createInspectionJobsRouter());
   app.use("/api/admin", createAdminInspectionJobsRouter());
   app.use("/api/governance", createGovernanceRouter());
-  }
 
   // Account and data retention routes
   app.use("/api/v1", createAccountRouter());

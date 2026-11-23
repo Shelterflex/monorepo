@@ -127,7 +127,11 @@ export type AuditEventType =
   | 'ADMIN_REFERRALS_VIEWED'
   // Data privacy / erasure
   | 'USER_ERASURE_REQUESTED'
+  | 'USER_ERASURE_CONFIRMED'
+  | 'USER_ERASURE_CANCELLED'
   | 'USER_ERASURE_COMPLETED'
+  // Apartment reviews
+  | 'APARTMENT_REVIEW_MODERATED'
   // Credit bureau
   | 'CREDIT_REPORT_PULLED'
   | 'CREDIT_REPORT_VIEWED'
@@ -138,6 +142,8 @@ export type AuditEventType =
   | 'AGREEMENT_FULLY_EXECUTED'
   // Landlord verification
   | 'LANDLORD_VERIFICATION_UPDATED'
+  // Landlord payout schedule and destination (#2055)
+  | 'LANDLORD_PAYOUT_PREFERENCE_UPDATED'
   // State-changing operations (auto-generated)
   | 'STATE_CHANGED'
   | 'STATE_DELETED'

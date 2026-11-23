@@ -184,7 +184,7 @@ describe("listPropertyApplications", () => {
 
     const result = await listPropertyApplications("L-001");
 
-    expect(apiGet).toHaveBeenCalledWith("/api/listings/L-001/applications");
+    expect(apiGet).toHaveBeenCalledWith("/api/v1/listings/L-001/applications");
     expect(result.applications).toEqual([]);
   });
 });

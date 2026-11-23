@@ -15,6 +15,7 @@ import {
   ParentBasedSampler,
 } from "@opentelemetry/sdk-trace-node";
 import { env } from "./schemas/env.js";
+import { logger } from "./utils/logger.js";
 
 // Simple helper to parse headers from ENV string if provided (key=value,key2=value2)
 const parseHeaders = (headerStr?: string): Record<string, string> => {
@@ -64,9 +65,9 @@ const sdk = new NodeSDK({
 // this enables the instrumentations to patch the modules
 try {
   sdk.start();
-  console.log("[backend] OpenTelemetry initialized");
+  logger.info("OpenTelemetry initialized");
 } catch (error) {
-  console.error("[backend] Error initializing OpenTelemetry", error);
+  logger.error("Error initializing OpenTelemetry", {}, error);
 }
 
 // Graceful shutdown is coordinated centrally by index.ts's SIGTERM/SIGINT
@@ -75,9 +76,9 @@ try {
 export async function shutdownTracing(): Promise<void> {
   try {
     await sdk.shutdown();
-    console.log("[backend] OpenTelemetry terminated");
+    logger.info("OpenTelemetry terminated");
   } catch (error) {
-    console.error("[backend] Error terminating OpenTelemetry", error);
+    logger.error("Error terminating OpenTelemetry", {}, error);
   }
 }
 

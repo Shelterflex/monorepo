@@ -40,6 +40,28 @@ const MAX_BULK_SIZE: u32 = 100;
 // Contract
 // ────────────────────────────────────────────────────────────────────────────
 
+// Ledger TTL policy. These match `soroban_access_control::extend_storage_ttl`, which
+// extends persistent entries: an entry below 10,000 remaining ledgers is extended to
+// 500,000 ledgers (about 29 days at a 5 second ledger close). Instance storage (admin,
+// member count) uses the same values.
+const TTL_THRESHOLD_LEDGERS: u32 = 10_000;
+const TTL_EXTEND_TO_LEDGERS: u32 = 500_000;
+
+/// Extends the TTL of the contract instance (admin and member count).
+fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD_LEDGERS, TTL_EXTEND_TO_LEDGERS);
+}
+
+/// Extends the TTL of a persistent entry when it exists. Extending a missing key is a
+/// host error, so reads of absent keys are skipped.
+fn extend_persistent_if_present(env: &Env, key: &DataKey) {
+    if env.storage().persistent().has(key) {
+        extend_storage_ttl(env, &key.into_val(env));
+    }
+}
+
 #[contract]
 pub struct AllowlistRegistry;
 
@@ -47,6 +69,7 @@ pub struct AllowlistRegistry;
 impl AllowlistRegistry {
     /// Initialize the contract with an admin.
     pub fn initialize(env: Env, admin: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(ContractError::NotAuthorized);
         }
@@ -70,6 +93,7 @@ impl AllowlistRegistry {
         label: String,
         expires_at: u64,
     ) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
 
@@ -103,6 +127,7 @@ impl AllowlistRegistry {
 
     /// Remove an address from the allowlist.
     pub fn remove(env: Env, address: Address) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
 
@@ -130,6 +155,7 @@ impl AllowlistRegistry {
 
     /// Check if an address is an active member (not expired).
     pub fn is_member(env: Env, address: Address) -> bool {
+        extend_instance_ttl(&env);
         if let Some(entry) = Self::get_entry_internal(&env, &address) {
             let now = env.ledger().timestamp();
             if entry.expires_at == 0 {
@@ -143,11 +169,13 @@ impl AllowlistRegistry {
 
     /// Get the allowlist entry for an address.
     pub fn get_entry(env: Env, address: Address) -> Result<AllowlistEntry, ContractError> {
+        extend_instance_ttl(&env);
         Self::get_entry_internal(&env, &address).ok_or(ContractError::NotFound)
     }
 
     /// Add multiple entries in bulk.
     pub fn bulk_add(env: Env, entries: Vec<(Address, String, u64)>) -> Result<(), ContractError> {
+        extend_instance_ttl(&env);
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
 
@@ -192,6 +220,7 @@ impl AllowlistRegistry {
 
     /// Get the total number of members.
     pub fn member_count(env: Env) -> u32 {
+        extend_instance_ttl(&env);
         Self::get_member_count(&env)
     }
 
@@ -208,12 +237,16 @@ impl AllowlistRegistry {
 
     fn get_entry_internal(env: &Env, address: &Address) -> Option<AllowlistEntry> {
         let key = DataKey::Entry(address.clone());
-        env.storage().persistent().get(&key)
+        let entry = env.storage().persistent().get(&key);
+        extend_persistent_if_present(env, &key);
+        entry
     }
 
     fn has_entry(env: &Env, address: &Address) -> bool {
         let key = DataKey::Entry(address.clone());
-        env.storage().persistent().has(&key)
+        let present = env.storage().persistent().has(&key);
+        extend_persistent_if_present(env, &key);
+        present
     }
 
     fn get_member_count(env: &Env) -> u32 {
@@ -498,5 +531,26 @@ mod tests {
         client.remove(&address);
 
         assert!(!env.events().all().is_empty());
+    }
+
+    /// Ledgers advanced in the TTL test: beyond the test environment's default 4,096-ledger
+    /// minimum persistent TTL, and below the 500,000-ledger extension the contract applies.
+    const TTL_TEST_LEDGER_JUMP: u32 = 100_000;
+
+    #[test]
+    fn membership_and_count_survive_ledger_jump_past_default_ttl() {
+        let env = Env::default();
+        let (_admin, client) = setup(&env);
+        let member = Address::generate(&env);
+        let label = String::from_str(&env, "tenant");
+        client.add(&member, &label, &0u64);
+
+        env.ledger()
+            .with_mut(|li| li.sequence_number += TTL_TEST_LEDGER_JUMP);
+
+        // The entry (persistent storage) and the member count (instance storage) are intact.
+        assert!(client.is_member(&member));
+        assert_eq!(client.get_entry(&member).label, label);
+        assert_eq!(client.member_count(), 1);
     }
 }
