@@ -127,7 +127,11 @@ export type AuditEventType =
   | 'ADMIN_REFERRALS_VIEWED'
   // Data privacy / erasure
   | 'USER_ERASURE_REQUESTED'
+  | 'USER_ERASURE_CONFIRMED'
+  | 'USER_ERASURE_CANCELLED'
   | 'USER_ERASURE_COMPLETED'
+  // Apartment reviews
+  | 'APARTMENT_REVIEW_MODERATED'
   // Credit bureau
   | 'CREDIT_REPORT_PULLED'
   | 'CREDIT_REPORT_VIEWED'

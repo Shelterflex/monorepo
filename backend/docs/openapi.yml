@@ -6723,6 +6723,323 @@ paths:
           $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/Error'
+  /api/apartment-reviews:
+    get:
+      summary: List visible apartment reviews
+      description: Public and paginated. Hidden reviews are left out of the list and of averageRating. Reviewer ids are not returned.
+      operationId: listApartmentReviews
+      tags:
+      - Properties
+      parameters:
+      - name: listingId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - recent
+          - rating_desc
+          - rating_asc
+          default: recent
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '200':
+          description: One page of visible reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      reviews:
+                        type: array
+                        items:
+                          type: object
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      totalPages:
+                        type: integer
+                      averageRating:
+                        type: number
+                        nullable: true
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Review a listing
+      description: Authenticated. The caller must have a deal or a live application for the listing. The rating is 1 to 5, the text is plain text up to 2000 characters, and each user may review a listing once.
+      operationId: createApartmentReview
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - listingId
+              - rating
+              - text
+              properties:
+                listingId:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                text:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '201':
+          description: Review created
+        '400':
+          description: Validation failed (for example, HTML in the text)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+        '403':
+          description: The caller has no deal or application for this listing
+        '409':
+          description: The caller has already reviewed this listing
+  /api/apartment-reviews/{id}/report:
+    post:
+      summary: Report an apartment review
+      description: Authenticated. Each user counts once per review. A review that reaches the report threshold is hidden until a moderator decides otherwise.
+      operationId: reportApartmentReview
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Report recorded (alreadyReported is true for a repeat report)
+        '401':
+          description: Authentication required
+        '403':
+          description: A user cannot report their own review
+        '404':
+          description: Review not found
+  /api/admin/apartment-reviews/{id}:
+    patch:
+      summary: Hide or unhide an apartment review
+      description: Moderator action. Requires the listings:moderate permission. The decision is audited.
+      operationId: moderateApartmentReview
+      tags:
+      - Admin
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - isHidden
+              properties:
+                isHidden:
+                  type: boolean
+      responses:
+        '200':
+          description: Moderation decision applied
+        '400':
+          description: Validation failed
+        '401':
+          description: Authentication required
+        '403':
+          description: Missing listings:moderate permission
+        '404':
+          description: Review not found
+  /api/tenant/data-export:
+    post:
+      summary: Request a personal-data export
+      description: Queues an export of the caller's profile, applications, deals and payment schedules. The archive is built by a scheduled job, stays available for 7 days, and is removed afterwards. At most one export can be active at a time, and at most 3 can be requested in 24 hours.
+      operationId: requestTenantDataExport
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          description: Export queued
+        '401':
+          description: Authentication required
+        '409':
+          description: An export is already in progress
+        '429':
+          description: Daily export limit reached
+  /api/tenant/data-export/{id}:
+    get:
+      summary: Get the status of a personal-data export
+      description: Returns the export's status. The downloadUrl is included only while the archive is ready, and it expires after 5 minutes. Another user's export id returns 404.
+      operationId: getTenantDataExport
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Export status
+        '401':
+          description: Authentication required
+        '404':
+          description: Export not found
+  /api/tenant/erasure:
+    get:
+      summary: Get the latest account erasure request
+      operationId: getAccountErasure
+      tags:
+      - Erasure
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: The latest request, or null when there has never been one
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    nullable: true
+                    allOf:
+                    - $ref: '#/components/schemas/ErasureRequest'
+        '401':
+          description: Authentication required
+    post:
+      summary: Request account erasure
+      description: Starts the erasure flow. Refused with 409 while the account has an active or at-risk deal, a pending, approved or processing withdrawal, a non-zero NGN balance, or an open dispute. The response lists the blockers.
+      operationId: requestAccountErasure
+      tags:
+      - Erasure
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: Request created and pending confirmation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErasureRequestEnvelope'
+        '401':
+          description: Authentication required
+        '409':
+          description: Blocked, or a request is already open
+    delete:
+      summary: Cancel the open account erasure request
+      description: Allowed while the request is pending, or while it is scheduled and before its grace window ends.
+      operationId: cancelAccountErasure
+      tags:
+      - Erasure
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Request cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErasureRequestEnvelope'
+        '401':
+          description: Authentication required
+        '404':
+          description: No open request
+        '409':
+          description: The grace period has ended
+  /api/tenant/erasure/{id}/confirm:
+    post:
+      summary: Confirm a pending account erasure request
+      description: Confirms the request within 30 days of creating it. Blockers are checked again. On success the request is scheduled with a 14-day grace window, after which the account is anonymized and its sessions are revoked.
+      operationId: confirmAccountErasure
+      tags:
+      - Erasure
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Request scheduled for erasure after the grace window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErasureRequestEnvelope'
+        '401':
+          description: Authentication required
+        '404':
+          description: Request not found
+        '409':
+          description: Not pending, the confirmation window has passed, or blockers apply
   /api/tenant/saved-properties:
     get:
       summary: List the caller's saved listings
@@ -7773,6 +8090,7 @@ components:
       type: string
       enum:
       - pending
+      - scheduled
       - completed
       - cancelled
       - expired
@@ -7780,18 +8098,17 @@ components:
       type: object
       required:
       - id
-      - userId
       - status
       - requestedAt
       - confirmBy
       - confirmedAt
-      - confirmedBy
+      - graceEndsAt
+      - cancelledAt
+      - canCancel
       properties:
         id:
           type: string
           format: uuid
-        userId:
-          type: string
         status:
           $ref: '#/components/schemas/ErasureRequestStatus'
         requestedAt:
@@ -7800,16 +8117,23 @@ components:
         confirmBy:
           type: string
           format: date-time
-          description: Deadline for admin confirmation; pending requests past it are
-            expired.
+          description: Deadline for the user to confirm; a pending request past it expires.
         confirmedAt:
           type: string
           format: date-time
           nullable: true
-        confirmedBy:
+        graceEndsAt:
           type: string
+          format: date-time
           nullable: true
-          description: Admin user id that confirmed the erasure.
+          description: End of the 14-day grace window that starts on confirmation. Cancelling is allowed until then.
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        canCancel:
+          type: boolean
+          description: True while the request is pending, or scheduled inside its grace window.
     ErasureRequestEnvelope:
       type: object
       required:
