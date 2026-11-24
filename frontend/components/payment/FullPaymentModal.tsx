@@ -101,7 +101,7 @@ export function FullPaymentModal({
       >
         {/* Loading */}
         {step === "loading" && (
-          <div className="flex flex-col items-center gap-4 py-10">
+          <div role="status" className="flex flex-col items-center gap-4 py-10">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">{t("loadingDetails")}</p>
           </div>
@@ -188,7 +188,7 @@ export function FullPaymentModal({
             </DialogHeader>
             <div className="flex items-start gap-3 border-2 border-destructive/30 bg-destructive/10 p-4">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <p className="text-sm text-destructive">{errorMsg}</p>
+              <p role="alert" className="text-sm text-destructive">{errorMsg}</p>
             </div>
             <div className="mt-4 flex gap-3">
               <Button
