@@ -198,7 +198,7 @@ export default function JobHealthPanel() {
           </p>
         )}
         {!error && !report && (
-          <div className="space-y-2">
+          <div className="space-y-2" role="status" aria-label="Loading background jobs">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />
           </div>
