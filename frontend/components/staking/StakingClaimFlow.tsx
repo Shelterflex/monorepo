@@ -216,7 +216,7 @@ export function StakingClaimFlow({
 
           {step === "processing" && (
             <>
-              <div className="flex flex-col items-center justify-center py-8">
+              <div role="status" className="flex flex-col items-center justify-center py-8">
                 <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
                 <h3 className="font-mono font-bold mb-2">Processing</h3>
                 <p className="text-sm text-muted-foreground text-center">

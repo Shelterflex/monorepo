@@ -70,3 +70,52 @@ describe("PayoutBreakdown", () => {
     expect(screen.getByText(/500,000\.00/)).toBeInTheDocument();
   });
 });
+
+describe("PayoutBreakdown totals", () => {
+  // Parse a formatted line amount ("₦25,000.00" / "25.00 USDC") back to a number.
+  const parse = (text: string) => Number(text.replace(/[^\d.-]/g, ""));
+  const amountFor = (label: string) =>
+    parse(screen.getByText(label).parentElement!.nextElementSibling!.textContent!);
+
+  it.each([
+    ["with a reporter", baseBreakdown],
+    ["without a reporter", { ...baseBreakdown, reporterShare: null, landlordAmount: 475_000 }],
+    [
+      "with large amounts",
+      {
+        totalAmount: 987_654_321.75,
+        platformShare: 49_382_716.09,
+        reporterShare: 9_876_543.22,
+        landlordAmount: 928_395_062.44,
+        currency: "NGN",
+      },
+    ],
+  ])("line items sum to the total charged %s", (_label, breakdown) => {
+    render(<PayoutBreakdown breakdown={breakdown} />);
+
+    const reporter = breakdown.reporterShare === null ? 0 : amountFor("Reporter reward");
+    const parts = amountFor("Platform fee") + reporter + amountFor("Landlord payout");
+    expect(parts).toBeCloseTo(amountFor("Total charged"), 2);
+    expect(amountFor("Total charged")).toBeCloseTo(breakdown.totalAmount, 2);
+  });
+
+  it("formats USDC breakdowns with the USDC suffix", () => {
+    render(
+      <PayoutBreakdown
+        breakdown={{ totalAmount: 100, platformShare: 5, reporterShare: 1, landlordAmount: 94, currency: "USDC" }}
+      />,
+    );
+
+    expect(screen.getByText("Total charged").parentElement!.nextElementSibling).toHaveTextContent(/100\.00 USDC/);
+  });
+
+  it("formats an all-zero breakdown", () => {
+    render(
+      <PayoutBreakdown
+        breakdown={{ totalAmount: 0, platformShare: 0, reporterShare: 0, landlordAmount: 0, currency: "NGN" }}
+      />,
+    );
+
+    expect(screen.getAllByText("₦0.00")).toHaveLength(4);
+  });
+});

@@ -48,7 +48,11 @@ const CustomTooltip = ({ active, payload }: any) => {
 export function DealFunnelChart({ data, isLoading = false }: DealFunnelChartProps) {
   if (isLoading) {
     return (
-      <div className="border-3 border-foreground bg-card p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] animate-pulse flex flex-col justify-between h-[360px]">
+      <div
+        role="status"
+        aria-label="Loading deal funnel"
+        className="border-3 border-foreground bg-card p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] animate-pulse flex flex-col justify-between h-[360px]"
+      >
         <div className="h-6 w-48 bg-muted border-2 border-foreground/10 mb-4"></div>
         <div className="flex-1 w-full bg-muted border-2 border-foreground/10"></div>
       </div>
@@ -76,7 +80,17 @@ export function DealFunnelChart({ data, isLoading = false }: DealFunnelChartProp
         </p>
       </div>
 
-      <div className="flex-1 w-full min-h-0">
+      <div
+        className="flex-1 w-full min-h-0"
+        {...(totalDeals > 0
+          ? {
+              role: "img",
+              "aria-label": `Deal funnel: ${chartData
+                .map((d) => `${d.name} ${d.count}`)
+                .join(", ")} (${totalDeals} total)`,
+            }
+          : {})}
+      >
         {totalDeals === 0 ? (
           <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-foreground/30 font-mono text-sm text-muted-foreground p-4">
             No deal data available

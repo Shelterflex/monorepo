@@ -104,7 +104,15 @@ export function KPICard({
         </div>
 
         {/* Mini Sparkline Chart */}
-        <div className="absolute right-2 bottom-2 w-28 h-12 opacity-60 group-hover:opacity-90 transition-opacity">
+        <div
+          role="img"
+          aria-label={
+            sparklineData.length > 0
+              ? `${title} trend: ${sparklineData.join(", ")}`
+              : `${title} trend: no data`
+          }
+          className="absolute right-2 bottom-2 w-28 h-12 opacity-60 group-hover:opacity-90 transition-opacity"
+        >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
               <defs>

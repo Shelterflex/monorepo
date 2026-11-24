@@ -154,9 +154,12 @@ export function DisputeDialog({
               }}
               placeholder="Describe what went wrong with this charge..."
               aria-invalid={descriptionError ? true : undefined}
+              aria-describedby={descriptionError ? "dispute-description-error" : undefined}
             />
             {descriptionError ? (
-              <p className="text-sm text-destructive">{descriptionError}</p>
+              <p id="dispute-description-error" role="alert" className="text-sm text-destructive">
+                {descriptionError}
+              </p>
             ) : null}
           </div>
 
@@ -173,6 +176,7 @@ export function DisputeDialog({
                 multiple
                 className="sr-only"
                 accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
+                aria-describedby={evidenceError ? "dispute-evidence-error" : undefined}
                 onChange={(event) => handleFileChange(event.target.files)}
               />
             </label>
@@ -184,7 +188,9 @@ export function DisputeDialog({
               </ul>
             ) : null}
             {evidenceError ? (
-              <p className="text-sm text-destructive">{evidenceError}</p>
+              <p id="dispute-evidence-error" role="alert" className="text-sm text-destructive">
+                {evidenceError}
+              </p>
             ) : null}
           </div>
         </div>

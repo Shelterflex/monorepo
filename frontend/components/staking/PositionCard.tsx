@@ -157,7 +157,11 @@ export function PositionCard({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-foreground/10 font-mono text-sm font-bold">
+              <div
+                role="img"
+                aria-label={`Stake composition: active ${formatUsdc(position.staked)} USDC, warming ${formatUsdc(position.warming)} USDC, cooling ${formatUsdc(position.cooling)} USDC`}
+                className="flex h-3.5 w-full overflow-hidden rounded-full bg-foreground/10 font-mono text-sm font-bold"
+              >
                 <div
                   style={{
                     width: `${

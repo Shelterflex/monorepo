@@ -139,7 +139,11 @@ export function RevenueChart({
 
   if (isLoading) {
     return (
-      <div className="border-3 border-foreground bg-card p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] animate-pulse flex flex-col justify-between h-[360px]">
+      <div
+        role="status"
+        aria-label="Loading platform revenue"
+        className="border-3 border-foreground bg-card p-6 shadow-[6px_6px_0px_0px_rgba(26,26,26,1)] animate-pulse flex flex-col justify-between h-[360px]"
+      >
         <div className="flex justify-between items-center mb-4">
           <div className="h-6 w-48 bg-muted border-2 border-foreground/10"></div>
           <div className="flex gap-1.5">
@@ -162,10 +166,16 @@ export function RevenueChart({
           </p>
         </div>
         {/* Segmented Timeframe Selectors */}
-        <div className="flex border-2 border-foreground shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] overflow-hidden">
+        <div
+          role="group"
+          aria-label="Revenue timeframe"
+          className="flex border-2 border-foreground shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] overflow-hidden"
+        >
           {(["7d", "30d", "90d"] as const).map((r) => (
             <button
               key={r}
+              type="button"
+              aria-pressed={activeRange === r}
               onClick={() => handleRangeChange(r)}
               className={`font-mono text-[10px] font-bold uppercase py-1 px-3 transition-colors border-r-2 last:border-r-0 border-foreground ${
                 activeRange === r
@@ -179,7 +189,21 @@ export function RevenueChart({
         </div>
       </div>
 
-      <div className="flex-1 w-full min-h-0">
+      <div
+        className="flex-1 w-full min-h-0"
+        {...(pivotedData.length > 0
+          ? {
+              role: "img",
+              "aria-label": `Platform revenue across ${pivotedData.length} day${
+                pivotedData.length === 1 ? "" : "s"
+              }: ${formatFullCurrency(
+                pivotedData.reduce((sum, d) => sum + d["Platform Fee"], 0),
+              )} platform fees, ${formatFullCurrency(
+                pivotedData.reduce((sum, d) => sum + d["Underwriting Fee"], 0),
+              )} underwriting fees`,
+            }
+          : {})}
+      >
         {pivotedData.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-foreground/30 font-mono text-sm text-muted-foreground p-4">
             No revenue recorded in this timeframe
