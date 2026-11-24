@@ -11450,6 +11450,2084 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  # ---------------------------------------------------------------------------
+  # Landlord routes (#2162)
+  # ---------------------------------------------------------------------------
+  /api/landlord/tenants:
+    get:
+      summary: List tenants of the signed-in landlord
+      description: Lists the leases (tenant deals) where the caller is the landlord. Requires a database; returns 500 when none is configured.
+      operationId: listLandlordTenants
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Tenants on the landlord's leases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LandlordTenant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/settings:
+    get:
+      summary: Get landlord settings
+      description: Returns the landlord's profile, notification preferences and payout details.
+      operationId: getLandlordSettings
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Landlord settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: Update landlord settings
+      description: Updates any subset of the landlord's profile, notification preferences and payout details. Sections that are omitted are left unchanged. The body is not validated by a schema.
+      operationId: updateLandlordSettings
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LandlordSettingsUpdate'
+      responses:
+        '200':
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                    - true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/kyc-status:
+    get:
+      summary: Get the landlord's KYC status
+      description: Returns the caller's current KYC status, rejection reason and remaining attempts. Used by the frontend to gate listing creation.
+      operationId: getLandlordKycStatus
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: KYC status. When no submission exists, only status, attemptsRemaining and rejectionReason are returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordKycStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/payout/verify-account:
+    post:
+      summary: Verify a bank account for payouts
+      description: Resolves the account holder name for a bank account through the Paystack payment provider.
+      operationId: verifyLandlordPayoutAccount
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - accountNumber
+              properties:
+                bankName:
+                  type: string
+                  description: Bank name. Send either bankName or bankCode.
+                bankCode:
+                  type: string
+                  description: Bank code. Send either bankName or bankCode.
+                accountNumber:
+                  type: string
+                  minLength: 10
+                  description: Account number (at least 10 characters after trimming).
+      responses:
+        '200':
+          description: Account resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - accountName
+                - accountNumber
+                properties:
+                  success:
+                    type: boolean
+                  accountName:
+                    type: string
+                  accountNumber:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          description: Payment provider error, or bank account resolution is not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlords/{id}/verification-status:
+    get:
+      summary: Get a landlord's public verification status
+      description: Public lookup of a landlord's verification level. Only landlord accounts are found.
+      operationId: getLandlordVerificationStatus
+      tags:
+      - Landlord
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Landlord user ID
+        schema:
+          type: string
+      security: []
+      responses:
+        '200':
+          description: Verification status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - level
+                - verifiedAt
+                properties:
+                  level:
+                    type: string
+                    enum:
+                    - unverified
+                    - id_verified
+                    - id_and_property_verified
+                    - premium
+                  verifiedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/properties:
+    get:
+      summary: List the signed-in landlord's properties
+      description: Paginated list of the caller's properties, newest first. Available to landlords and admins.
+      operationId: listLandlordProperties
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/LandlordPropertyStatus'
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Page of properties
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordPropertyList'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      summary: Create a property
+      description: Creates a property for the signed-in landlord. The landlord must have completed verification. A listing is synced for the property.
+      operationId: createLandlordProperty
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LandlordPropertyInput'
+      responses:
+        '201':
+          description: Property created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordProperty'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/properties/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    get:
+      summary: Get a landlord property
+      description: Returns one property. Only its owner or an admin may read it.
+      operationId: getLandlordProperty
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordProperty'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: Update a landlord property
+      description: Partially updates a property owned by the caller. Only fields present in the body change.
+      operationId: updateLandlordProperty
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LandlordPropertyUpdateInput'
+      responses:
+        '200':
+          description: Updated property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordProperty'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete a landlord property
+      description: "Deletes a property owned by the caller. Returns 204 with no body."
+      operationId: deleteLandlordProperty
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: Property deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/properties/{id}/deactivate:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    patch:
+      summary: Deactivate a landlord property
+      description: Sets the property status to deactivated and syncs its listing.
+      operationId: deactivateLandlordProperty
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Deactivated property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordProperty'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/properties/{id}/relist:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    patch:
+      summary: Relist a deactivated property
+      description: Moves a deactivated property back to pending review. Any other status is rejected.
+      operationId: relistLandlordProperty
+      tags:
+      - Landlord
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Property returned to pending review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandlordProperty'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/landlord/partner-applications:
+    post:
+      summary: Submit a partner landlord application
+      description: Public intake form for prospective partner landlords. Rate limited. A second submission from the same email within 24 hours is rejected.
+      operationId: submitPartnerLandlordApplication
+      tags:
+      - Landlord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerLandlordApplicationInput'
+      security: []
+      responses:
+        '201':
+          description: Application received
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    type: object
+                    required:
+                    - id
+                    - status
+                    - createdAt
+                    properties:
+                      id:
+                        type: string
+                      status:
+                        $ref: '#/components/schemas/PartnerApplicationStatus'
+                      createdAt:
+                        type: string
+                        format: date-time
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ---------------------------------------------------------------------------
+  # Tenant, applications and onboarding routes (#2163)
+  # ---------------------------------------------------------------------------
+  /api/applications/my:
+    get:
+      summary: List my listing applications
+      description: Returns the caller's applications as a tenant, newest first.
+      operationId: listMyListingApplications
+      tags:
+      - Applications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Applications
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - applications
+                - total
+                properties:
+                  success:
+                    type: boolean
+                  applications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ListingApplication'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/applications/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Listing application ID
+      schema:
+        type: string
+    delete:
+      summary: Withdraw a listing application
+      description: The tenant who submitted the application withdraws it.
+      operationId: withdrawListingApplication
+      tags:
+      - Applications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Application withdrawn
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    $ref: '#/components/schemas/ListingApplication'
+                  message:
+                    type: string
+                    example: Application withdrawn successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/applications/{id}/review:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Listing application ID
+      schema:
+        type: string
+    post:
+      summary: Approve or reject a listing application
+      description: The landlord who owns the listing reviews an application.
+      operationId: reviewListingApplication
+      tags:
+      - Applications
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - decision
+              properties:
+                decision:
+                  type: string
+                  enum:
+                  - approve
+                  - reject
+                notes:
+                  type: string
+                  description: Reviewer notes
+      responses:
+        '200':
+          description: Application reviewed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    $ref: '#/components/schemas/ListingApplication'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/applications:
+    get:
+      summary: List my tenant applications
+      description: Cursor-paginated list of the caller's tenant financing applications.
+      operationId: listTenantApplications
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Page of applications
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - nextCursor
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantApplication'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      summary: Create a tenant application
+      description: Submits a tenant financing application. The deposit must be at least 20% of annual rent and less than annual rent. New applications are blocked for accounts with a defaulted payment.
+      operationId: createTenantApplication
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantApplicationRequest'
+      responses:
+        '201':
+          description: Application created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TenantApplication'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/applications/{applicationId}:
+    get:
+      summary: Get one of my tenant applications
+      description: "Returns one tenant application. Only the applicant may read it."
+      operationId: getTenantApplication
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Application
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TenantApplication'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments:
+    get:
+      summary: List tenant payments
+      description: Returns a page of payments for a deal. Currently backed by sample data.
+      operationId: listTenantPayments
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/TenantPaymentDealId'
+      - $ref: '#/components/parameters/TenantPaymentPage'
+      - $ref: '#/components/parameters/TenantPaymentLimit'
+      responses:
+        '200':
+          description: Payments page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantPaymentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments/history:
+    get:
+      summary: Get tenant payment history
+      description: Same payload as GET /api/tenant/payments.
+      operationId: getTenantPaymentHistory
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/TenantPaymentDealId'
+      - $ref: '#/components/parameters/TenantPaymentPage'
+      - $ref: '#/components/parameters/TenantPaymentLimit'
+      responses:
+        '200':
+          description: Payments page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantPaymentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments/receipt/{reference}:
+    get:
+      summary: Download a payment receipt
+      description: Returns a single-page PDF receipt for a payment reference.
+      operationId: getTenantPaymentReceipt
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: PDF receipt, served inline
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments/schedule:
+    get:
+      summary: Get tenant instalment schedule
+      description: Returns the instalment schedule for a deal and the next due payment. Currently backed by sample data.
+      operationId: getTenantPaymentSchedule
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/TenantPaymentDealId'
+      responses:
+        '200':
+          description: Instalment schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - schedule
+                    - nextPayment
+                    - dealId
+                    - deals
+                    properties:
+                      schedule:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TenantPaymentScheduleItem'
+                      nextPayment:
+                        nullable: true
+                        allOf:
+                        - $ref: '#/components/schemas/TenantPaymentScheduleItem'
+                      dealId:
+                        type: string
+                      deals:
+                        $ref: '#/components/schemas/TenantDealSummaries'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments/wallet:
+    get:
+      summary: Get tenant wallet balance
+      description: "Returns the tenant NGN wallet balances and auto-pay setting."
+      operationId: getTenantPaymentWallet
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet balances
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TenantWallet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments/quick-pay:
+    post:
+      summary: Start a quick payment on a deal
+      description: Initiates a payment for a deal from the tenant's wallet or card. Requires an x-idempotency-key header.
+      operationId: quickPayTenantDeal
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/XIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - dealId
+              - amount
+              - paymentMethod
+              properties:
+                dealId:
+                  type: string
+                amount:
+                  type: number
+                  exclusiveMinimum: 0
+                  description: Amount in NGN
+                paymentMethod:
+                  type: string
+                  enum:
+                  - wallet
+                  - card
+      responses:
+        '200':
+          description: Payment initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - paymentId
+                    - status
+                    - amount
+                    - method
+                    - dealId
+                    - message
+                    properties:
+                      paymentId:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                        - pending
+                      amount:
+                        type: number
+                      method:
+                        type: string
+                        enum:
+                        - wallet
+                        - card
+                      dealId:
+                        type: string
+                      message:
+                        type: string
+                        example: Payment initiated
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/payments/wallet/topup:
+    post:
+      summary: Top up the tenant NGN wallet
+      description: Starts a wallet top-up through Paystack or bank transfer. Requires an x-idempotency-key header. Returns 200 when an earlier request with the same key is replayed, and 201 when a new top-up is created.
+      operationId: topUpTenantWallet
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/XIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - amount
+              properties:
+                amount:
+                  type: number
+                  minimum: 1000
+                  description: Amount in NGN
+                paymentMethod:
+                  type: string
+                  enum:
+                  - card
+                  - bank_transfer
+                  default: card
+      responses:
+        '200':
+          description: Replayed top-up for an existing idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NgnTopupInitiateResult'
+        '201':
+          description: Top-up created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NgnTopupInitiateResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/tenant/onboarding/submit:
+    post:
+      summary: Submit tenant onboarding data for scoring
+      description: Stores the tenant's income and banking data for an application, computes a credit score and runs underwriting.
+      operationId: submitTenantOnboarding
+      tags:
+      - Tenant
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantOnboardingSubmitRequest'
+      responses:
+        '201':
+          description: Credit score and underwriting decision
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TenantOnboardingResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/onboarding/status:
+    get:
+      summary: Get my onboarding progress
+      description: "Returns the signed-in user's onboarding progress."
+      operationId: getOnboardingStatus
+      tags:
+      - Onboarding
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Onboarding progress. With no draft, returns no completed steps and submitted false.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/onboarding/draft:
+    post:
+      summary: Save an onboarding draft
+      description: Upserts the caller's onboarding draft. Any subset of sections can be sent. Completed steps are derived from the sections present.
+      operationId: saveOnboardingDraft
+      tags:
+      - Onboarding
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingDraftRequest'
+      responses:
+        '200':
+          description: Draft saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - completedSteps
+                - currentStep
+                properties:
+                  success:
+                    type: boolean
+                  completedSteps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OnboardingStep'
+                  currentStep:
+                    $ref: '#/components/schemas/OnboardingStep'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/onboarding/submit:
+    post:
+      summary: Submit my onboarding draft
+      description: Marks the draft as submitted and queues the profile review job. Personal and employment information must be present.
+      operationId: submitOnboarding
+      tags:
+      - Onboarding
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Assessment in progress
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ---------------------------------------------------------------------------
+  # Notification, photo, property and listing routes (#2164)
+  # ---------------------------------------------------------------------------
+  /api/notifications:
+    get:
+      summary: List my notifications
+      description: Keyset-paginated notifications, newest first. Pass the nextCursor from one page as `cursor` to fetch the next page.
+      operationId: listNotifications
+      tags:
+      - Notifications
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: cursor
+        in: query
+        required: false
+        description: Opaque cursor, base64url-encoded JSON of { t, id }, taken from nextCursor
+        schema:
+          type: string
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: read
+        in: query
+        required: false
+        description: Filter by read state. Use true or false.
+        schema:
+          type: string
+          enum:
+          - 'true'
+          - 'false'
+      responses:
+        '200':
+          description: Page of notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - items
+                    - nextCursor
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NotificationItem'
+                      nextCursor:
+                        type: string
+                        nullable: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/notifications/unread-count:
+    get:
+      summary: Get my unread notification count
+      description: "Returns how many of the caller's notifications are unread."
+      operationId: getUnreadNotificationCount
+      tags:
+      - Notifications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - unread
+                    properties:
+                      unread:
+                        type: integer
+                        minimum: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/notifications/stream:
+    get:
+      summary: Stream notification counts (Server-Sent Events)
+      description: 'Opens an event stream. A `snapshot` event with `{ "unread": number, "ts": string }` is sent immediately and then every 5 seconds.'
+      operationId: streamNotifications
+      tags:
+      - Notifications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "event: snapshot\ndata: {\"unread\":3,\"ts\":\"2026-01-01T00:00:00.000Z\"}\n\n"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/notifications/read-all:
+    post:
+      summary: Mark all my notifications as read
+      description: "Marks every unread notification of the caller as read."
+      operationId: markAllNotificationsRead
+      tags:
+      - Notifications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: All unread notifications marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+                  marked:
+                    type: boolean
+                    description: Returned only when no database is configured
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/notifications/{id}/read:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Notification ID
+      schema:
+        type: string
+    post:
+      summary: Mark one of my notifications as read
+      description: Idempotent. Notifications that belong to another user are not changed.
+      operationId: markNotificationRead
+      tags:
+      - Notifications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                properties:
+                  success:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/notifications/test-seed:
+    post:
+      summary: Seed a test notification (non-production)
+      description: Creates a notification for a user. Requires the admin secret. Disabled in production unless ALLOW_NOTIFICATION_TEST_SEED is set.
+      operationId: seedTestNotification
+      tags:
+      - Notifications
+      security:
+      - adminSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - userId
+              - title
+              - body
+              properties:
+                userId:
+                  type: string
+                title:
+                  type: string
+                body:
+                  type: string
+                category:
+                  type: string
+                  default: general
+      responses:
+        '200':
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - id
+                properties:
+                  success:
+                    type: boolean
+                  id:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/properties/{propertyId}/photos:
+    parameters:
+    - name: propertyId
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    get:
+      summary: List photos for a property
+      description: Returns the photos of a property, optionally only the featured one. Only the owning landlord or an admin may read them.
+      operationId: listPropertyPhotos
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: isFeatured
+        in: query
+        required: false
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: Photos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyPhoto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      summary: Upload photos for a property
+      description: Uploads up to 15 image files (jpeg, jpg, png or webp, 10 MB each) in one request. Only the owning landlord may upload.
+      operationId: uploadPropertyPhotos
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - photos
+              properties:
+                photos:
+                  type: array
+                  maxItems: 15
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Photos uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - photos
+                properties:
+                  photos:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PropertyPhoto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/properties/{propertyId}/photos/order:
+    parameters:
+    - name: propertyId
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    patch:
+      summary: Move a photo to a new position
+      description: "Moves one photo to a new position within a property."
+      operationId: reorderPropertyPhotos
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPhotosRequest'
+      responses:
+        '200':
+          description: Photos in their new order
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - photos
+                properties:
+                  photos:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PropertyPhoto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/properties/{propertyId}/photos/{photoId}:
+    parameters:
+    - name: propertyId
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    - name: photoId
+      in: path
+      required: true
+      description: Photo ID
+      schema:
+        type: string
+    delete:
+      summary: Delete a property photo
+      description: "Deletes a photo from a property."
+      operationId: deletePropertyPhoto
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: Photo deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/properties/{propertyId}/photos/{photoId}/primary:
+    parameters:
+    - name: propertyId
+      in: path
+      required: true
+      description: Property ID
+      schema:
+        type: string
+    - name: photoId
+      in: path
+      required: true
+      description: Photo ID
+      schema:
+        type: string
+    patch:
+      summary: Set the primary photo of a property
+      description: "Makes one photo the primary photo of a property."
+      operationId: setPrimaryPropertyPhoto
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: The new primary photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyPhoto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/photos/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Photo ID
+      schema:
+        type: string
+    get:
+      summary: Get a property photo
+      description: "Returns one property photo."
+      operationId: getPropertyPhoto
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyPhoto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: Update a property photo
+      description: Updates photo metadata. Only the owning landlord may update.
+      operationId: updatePropertyPhoto
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhotoRequest'
+      responses:
+        '200':
+          description: Updated photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyPhoto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete a property photo by ID
+      description: "Deletes a property photo by its ID, checking that the caller owns the property."
+      operationId: deletePropertyPhotoById
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: Photo deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/photos/reorder:
+    post:
+      summary: Reorder a property photo
+      description: "Moves one photo to a new position, identified by photo ID."
+      operationId: reorderPhotos
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPhotosRequest'
+      responses:
+        '200':
+          description: Photos in their new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyPhoto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/photos/set-featured:
+    post:
+      summary: Set the featured photo of a property
+      description: "Marks one photo as the featured photo of its property."
+      operationId: setFeaturedPhoto
+      tags:
+      - Properties
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - photoId
+              - propertyId
+              properties:
+                photoId:
+                  type: string
+                  format: uuid
+                propertyId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: The featured photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyPhoto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/listings/search:
+    get:
+      summary: Search approved listings
+      description: Searches approved listings. The status filter is ignored; only approved listings are returned.
+      operationId: searchListings
+      tags:
+      - Properties
+      parameters:
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        required: false
+        description: Alias of query
+        schema:
+          type: string
+      - name: minPrice
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: maxPrice
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: bedrooms
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: lga
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: paymentPlan
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      security: []
+      responses:
+        '200':
+          description: Page of approved listings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                - total
+                - page
+                - pageSize
+                - totalPages
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Listing'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+                  totalPages:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/listings/search/suggest:
+    get:
+      summary: Autocomplete listing titles, addresses and LGAs
+      description: "Returns matching listing titles, addresses and LGAs for search autocomplete."
+      operationId: suggestListings
+      tags:
+      - Properties
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 100
+      security: []
+      responses:
+        '200':
+          description: Suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/listings/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Listing ID
+      schema:
+        type: string
+    get:
+      summary: Get an approved listing
+      description: "Returns one approved listing. Listings that are not approved return 404."
+      operationId: getListing
+      tags:
+      - Properties
+      security: []
+      responses:
+        '200':
+          description: Listing
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Listing'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/listings/{listingId}/applications:
+    parameters:
+    - name: listingId
+      in: path
+      required: true
+      description: Listing ID
+      schema:
+        type: string
+    get:
+      summary: List applications for a listing
+      description: Available to the listing's landlord, and to admins with the applications:view permission.
+      operationId: listListingApplications
+      tags:
+      - Applications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Applications for the listing
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - applications
+                - total
+                properties:
+                  success:
+                    type: boolean
+                  applications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ListingApplication'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/listings/{listingId}/apply:
+    parameters:
+    - name: listingId
+      in: path
+      required: true
+      description: Listing ID
+      schema:
+        type: string
+    post:
+      summary: Apply for a listing
+      description: Submits a tenant application for a listing. A tenant may not have two active applications for the same listing. Supports the Idempotency-Key header.
+      operationId: applyForListing
+      tags:
+      - Applications
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: Optional key that makes retries safe. X-Idempotency-Key is also accepted.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - preferredStartDate
+              - paymentPlan
+              properties:
+                coverNote:
+                  type: string
+                preferredStartDate:
+                  type: string
+                  format: date
+                paymentPlan:
+                  type: string
+                  enum:
+                  - 3m
+                  - 6m
+                  - 12m
+                  - outright
+      responses:
+        '201':
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    $ref: '#/components/schemas/ListingApplication'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   parameters:
     SavedPropertyListingId:
@@ -11490,6 +13568,39 @@ components:
         type: integer
         minimum: 1
       description: Governance proposal id (1-based, contracts/governance/src/lib.rs:188)
+    TenantPaymentDealId:
+      name: dealId
+      in: query
+      required: false
+      description: Deal to list payments for. Defaults to the first deal.
+      schema:
+        type: string
+    TenantPaymentPage:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    TenantPaymentLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 10
+    XIdempotencyKey:
+      name: x-idempotency-key
+      in: header
+      required: true
+      description: Unique key for this request. Retries with the same key return the original result.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+
   schemas:
     UserRiskState:
       type: object
@@ -16405,6 +18516,1025 @@ components:
         createdAt:
           type: string
           format: date-time
+    LandlordPropertyStatus:
+      type: string
+      description: Property status. pending, active and inactive are deprecated aliases of pending_review, approved and deactivated.
+      enum:
+      - pending_review
+      - approved
+      - rented
+      - deactivated
+      - pending
+      - active
+      - inactive
+    LandlordProperty:
+      type: object
+      required:
+      - id
+      - landlordId
+      - title
+      - address
+      - bedrooms
+      - bathrooms
+      - annualRentNgn
+      - amenities
+      - photos
+      - primaryPhotoIndex
+      - status
+      - views
+      - inquiries
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        landlordId:
+          type: string
+        title:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        area:
+          type: string
+        propertyType:
+          type: string
+          enum:
+          - flat
+          - duplex
+          - studio
+          - room
+        bedrooms:
+          type: integer
+          minimum: 0
+        bathrooms:
+          type: integer
+          minimum: 0
+        sqm:
+          type: number
+        annualRentNgn:
+          type: number
+        negotiatedLandlordRateNgn:
+          type: number
+        outrightPriceNgn:
+          type: number
+        installmentBasePriceNgn:
+          type: number
+        description:
+          type: string
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyAmenity'
+        photos:
+          type: array
+          items:
+            type: string
+        primaryPhotoIndex:
+          type: integer
+          minimum: 0
+        videoUrl:
+          type: string
+        listingId:
+          type: string
+        status:
+          $ref: '#/components/schemas/LandlordPropertyStatus'
+        views:
+          type: integer
+        inquiries:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PropertyAmenity:
+      type: string
+      enum:
+      - parking
+      - generator
+      - water_heater
+      - security
+      - gym
+      - swimming_pool
+      - cctv
+      - elevator
+      - furnished
+      - serviced
+    LandlordPropertyList:
+      type: object
+      required:
+      - properties
+      - total
+      - page
+      - pageSize
+      - totalPages
+      properties:
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandlordProperty'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+    LandlordPropertyInput:
+      type: object
+      description: Required fields are title, address, bedrooms, bathrooms and photos. Bedrooms and bathrooms may instead be sent as beds and baths. photos must hold 3 to 20 URLs. Pricing must satisfy the pricing rules, or the request fails with 400.
+      required:
+      - title
+      - address
+      - bedrooms
+      - bathrooms
+      - photos
+      properties:
+        title:
+          type: string
+          minLength: 1
+        address:
+          type: string
+          minLength: 1
+        city:
+          type: string
+        area:
+          type: string
+        propertyType:
+          type: string
+          description: flat, duplex, studio or room. The aliases apartment, bungalow, terrace and penthouse are also accepted.
+        bedrooms:
+          type: integer
+          minimum: 0
+        bathrooms:
+          type: integer
+          minimum: 0
+        sqm:
+          oneOf:
+          - type: number
+          - type: string
+        annualRentNgn:
+          type: number
+          exclusiveMinimum: 0
+        negotiatedLandlordRateNgn:
+          type: number
+          exclusiveMinimum: 0
+        outrightPriceNgn:
+          type: number
+          exclusiveMinimum: 0
+        installmentBasePriceNgn:
+          type: number
+          exclusiveMinimum: 0
+        description:
+          type: string
+        photos:
+          type: array
+          minItems: 3
+          maxItems: 20
+          items:
+            type: string
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyAmenity'
+        primaryPhotoIndex:
+          type: integer
+          minimum: 0
+        videoUrl:
+          type: string
+          description: A URL, or an empty string to clear it
+    LandlordPropertyUpdateInput:
+      type: object
+      description: Every field is optional. photos, when sent, must hold 3 to 20 URLs.
+      properties:
+        title:
+          type: string
+          minLength: 1
+        address:
+          type: string
+          minLength: 1
+        city:
+          type: string
+        area:
+          type: string
+        propertyType:
+          type: string
+        bedrooms:
+          type: integer
+          minimum: 0
+        bathrooms:
+          type: integer
+          minimum: 0
+        sqm:
+          type: number
+        description:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyAmenity'
+        primaryPhotoIndex:
+          type: integer
+          minimum: 0
+        videoUrl:
+          type: string
+        negotiatedLandlordRateNgn:
+          type: number
+          exclusiveMinimum: 0
+        outrightPriceNgn:
+          type: number
+          exclusiveMinimum: 0
+        installmentBasePriceNgn:
+          type: number
+          exclusiveMinimum: 0
+        annualRentNgn:
+          type: number
+          exclusiveMinimum: 0
+        status:
+          $ref: '#/components/schemas/LandlordPropertyStatus'
+    LandlordTenant:
+      type: object
+      required:
+      - id
+      - name
+      - property
+      - status
+      - leaseStart
+      - leaseEnd
+      - monthlyPayment
+      - totalPaid
+      - verified
+      properties:
+        id:
+          type: string
+          description: Deal ID
+        name:
+          type: string
+          description: Tenant name
+        property:
+          type: string
+          description: Listing address
+        status:
+          type: string
+          description: The deal status, with active reported as current
+        leaseStart:
+          type: string
+          format: date-time
+        leaseEnd:
+          type: string
+          format: date-time
+        monthlyPayment:
+          type: number
+        totalPaid:
+          type: number
+          description: Sum of paid instalments
+        verified:
+          type: boolean
+          description: Always true for now
+    LandlordSettings:
+      type: object
+      required:
+      - profile
+      - notifications
+      - payout
+      properties:
+        profile:
+          type: object
+          properties:
+            fullName:
+              type: string
+            email:
+              type: string
+              format: email
+            companyName:
+              type: string
+            phone:
+              type: string
+            address:
+              type: string
+        notifications:
+          $ref: '#/components/schemas/LandlordNotificationPreferences'
+        payout:
+          $ref: '#/components/schemas/LandlordPayoutDetails'
+    LandlordSettingsUpdate:
+      type: object
+      description: Send only the sections and fields to change. The body is not validated by a schema.
+      properties:
+        profile:
+          type: object
+          properties:
+            fullName:
+              type: string
+            companyName:
+              type: string
+            phone:
+              type: string
+            address:
+              type: string
+        notifications:
+          $ref: '#/components/schemas/LandlordNotificationPreferences'
+        payout:
+          $ref: '#/components/schemas/LandlordPayoutDetails'
+    LandlordNotificationPreferences:
+      type: object
+      properties:
+        newInquiries:
+          type: boolean
+        paymentUpdates:
+          type: boolean
+        propertyViews:
+          type: boolean
+        marketingTips:
+          type: boolean
+    LandlordPayoutDetails:
+      type: object
+      properties:
+        bankName:
+          type: string
+        accountNumber:
+          type: string
+        accountName:
+          type: string
+    LandlordKycStatus:
+      type: object
+      required:
+      - status
+      - attemptsRemaining
+      - rejectionReason
+      properties:
+        status:
+          type: string
+          enum:
+          - not_submitted
+          - pending
+          - in_review
+          - approved
+          - rejected
+          - expired
+        attemptsRemaining:
+          type: integer
+          minimum: 0
+        rejectionReason:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    ListingApplication:
+      type: object
+      required:
+      - id
+      - listingId
+      - tenantId
+      - landlordId
+      - status
+      - preferredStartDate
+      - paymentPlan
+      - appliedAt
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        listingId:
+          type: string
+        tenantId:
+          type: string
+        landlordId:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - under_review
+          - approved
+          - rejected
+          - withdrawn
+        coverNote:
+          type: string
+        preferredStartDate:
+          type: string
+          format: date-time
+        paymentPlan:
+          type: string
+          enum:
+          - 3m
+          - 6m
+          - 12m
+          - outright
+        appliedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type: string
+        reviewerNotes:
+          type: string
+        rtiAssessment:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Repayment-to-income assessment, when one has been run
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateTenantApplicationRequest:
+      type: object
+      required:
+      - propertyId
+      - annualRent
+      - deposit
+      - duration
+      - hasAgreedToTerms
+      properties:
+        propertyId:
+          type: integer
+          minimum: 1
+          description: Property ID from the listing
+        annualRent:
+          type: number
+          exclusiveMinimum: 0
+          description: Annual rent in NGN
+        deposit:
+          type: number
+          exclusiveMinimum: 0
+          description: Deposit in NGN. Must be at least 20% of annualRent and less than annualRent.
+        duration:
+          type: integer
+          minimum: 1
+          maximum: 24
+          description: Financing duration in months
+        hasAgreedToTerms:
+          type: boolean
+          enum:
+          - true
+          description: Must be true
+        propertyTitle:
+          type: string
+        propertyLocation:
+          type: string
+    TenantApplication:
+      type: object
+      required:
+      - applicationId
+      - userId
+      - propertyId
+      - annualRent
+      - deposit
+      - duration
+      - totalAmount
+      - monthlyPayment
+      - status
+      - hasAgreedToTerms
+      - createdAt
+      - updatedAt
+      properties:
+        applicationId:
+          type: string
+        userId:
+          type: string
+        propertyId:
+          type: integer
+        propertyTitle:
+          type: string
+        propertyLocation:
+          type: string
+        annualRent:
+          type: number
+        deposit:
+          type: number
+        duration:
+          type: integer
+        totalAmount:
+          type: number
+        monthlyPayment:
+          type: number
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
+        hasAgreedToTerms:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type: string
+        rejectionReason:
+          type: string
+    TenantDealSummaries:
+      type: array
+      items:
+        type: object
+        required:
+        - dealId
+        - leaseName
+        properties:
+          dealId:
+            type: string
+          leaseName:
+            type: string
+    TenantPayment:
+      type: object
+      required:
+      - id
+      - dealId
+      - reference
+      - amount
+      - status
+      - transactionDate
+      - method
+      - isOverdue
+      - daysOverdue
+      properties:
+        id:
+          type: string
+        dealId:
+          type: string
+        reference:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+          enum:
+          - paid
+          - overdue
+        transactionDate:
+          type: string
+          format: date
+        paidDate:
+          type: string
+          format: date
+        method:
+          type: string
+          enum:
+          - card
+          - wallet
+        isOverdue:
+          type: boolean
+        daysOverdue:
+          type: integer
+    TenantPaymentsResponse:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+          - payments
+          - page
+          - limit
+          - total
+          - deals
+          properties:
+            payments:
+              type: array
+              items:
+                $ref: '#/components/schemas/TenantPayment'
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            nextPage:
+              type: integer
+              description: Present only when another page exists
+            deals:
+              $ref: '#/components/schemas/TenantDealSummaries'
+    TenantPaymentScheduleItem:
+      type: object
+      required:
+      - period
+      - month
+      - amount
+      - dueDate
+      - status
+      - isNextDue
+      properties:
+        period:
+          type: integer
+        month:
+          type: string
+          example: Mar 2026
+        amount:
+          type: number
+        dueDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - paid
+          - due
+          - overdue
+          - upcoming
+        paidDate:
+          type: string
+          format: date
+        isNextDue:
+          type: boolean
+    TenantWallet:
+      type: object
+      required:
+      - balance
+      - availableNgn
+      - heldNgn
+      - totalNgn
+      - lastTopUp
+      - autoPayEnabled
+      properties:
+        balance:
+          type: number
+          description: Same value as availableNgn
+        availableNgn:
+          type: number
+        heldNgn:
+          type: number
+        totalNgn:
+          type: number
+        lastTopUp:
+          type: string
+          format: date-time
+        autoPayEnabled:
+          type: boolean
+    NgnTopupInitiateResult:
+      type: object
+      required:
+      - depositId
+      - externalRefSource
+      - externalRef
+      properties:
+        success:
+          type: boolean
+        depositId:
+          type: string
+        externalRefSource:
+          type: string
+        externalRef:
+          type: string
+        redirectUrl:
+          type: string
+          nullable: true
+        bankDetails:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+    TenantOnboardingSubmitRequest:
+      type: object
+      required:
+      - applicationId
+      - statedMonthlyIncome
+      - monthlyRent
+      - employmentStatus
+      - employerName
+      - bankStatementLines
+      properties:
+        applicationId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The tenant application to score
+        statedMonthlyIncome:
+          type: number
+          exclusiveMinimum: 0
+        monthlyRent:
+          type: number
+          exclusiveMinimum: 0
+        employmentStatus:
+          type: string
+          minLength: 1
+          maxLength: 64
+        employerName:
+          type: string
+          maxLength: 256
+        employmentProofText:
+          type: string
+          maxLength: 10000
+        bankStatementLines:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            required:
+            - date
+            - description
+            - amount
+            properties:
+              date:
+                type: string
+                minLength: 1
+              description:
+                type: string
+                minLength: 1
+                maxLength: 500
+              amount:
+                type: number
+        mobileMoneyTransactions:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required:
+            - date
+            - amount
+            - type
+            properties:
+              date:
+                type: string
+                minLength: 1
+              amount:
+                type: number
+                exclusiveMinimum: 0
+              type:
+                type: string
+                enum:
+                - credit
+                - debit
+    TenantOnboardingResult:
+      type: object
+      required:
+      - creditScore
+      - underwriting
+      properties:
+        creditScore:
+          type: object
+          required:
+          - id
+          - tenantId
+          - score
+          - band
+          - computedAt
+          - version
+          properties:
+            id:
+              type: string
+            tenantId:
+              type: string
+            score:
+              type: number
+            band:
+              type: string
+            incomeScore:
+              type: number
+            employmentScore:
+              type: number
+            bankStatementScore:
+              type: number
+            alternativeDataScore:
+              type: number
+            computedAt:
+              type: string
+              format: date-time
+            version:
+              type: string
+        underwriting:
+          type: object
+          required:
+          - decision
+          - creditBandDecision
+          properties:
+            decision:
+              type: string
+            creditBandDecision:
+              type: string
+    OnboardingStep:
+      type: string
+      enum:
+      - personal_info
+      - employment_info
+      - documents
+      - wallet
+      - summary
+    OnboardingStatus:
+      type: object
+      required:
+      - completedSteps
+      - currentStep
+      - submitted
+      properties:
+        completedSteps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingStep'
+        currentStep:
+          $ref: '#/components/schemas/OnboardingStep'
+        submitted:
+          type: boolean
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Present only when a draft exists
+    OnboardingDraftRequest:
+      type: object
+      description: Any subset of the sections can be sent.
+      properties:
+        personalInfo:
+          type: object
+          required:
+          - fullName
+          - dateOfBirth
+          - phone
+          - residentialAddress
+          properties:
+            fullName:
+              type: string
+              minLength: 2
+            dateOfBirth:
+              type: string
+              pattern: ^\d{4}-\d{2}-\d{2}$
+              example: '1990-01-31'
+            phone:
+              type: string
+              minLength: 7
+            residentialAddress:
+              type: string
+              minLength: 5
+            nin:
+              type: string
+            bvn:
+              type: string
+        employmentInfo:
+          type: object
+          required:
+          - employmentStatus
+          properties:
+            employmentStatus:
+              type: string
+              enum:
+              - employed
+              - self_employed
+              - unemployed
+            employerName:
+              type: string
+            monthlyIncome:
+              type: number
+              minimum: 0
+            proofOfEmploymentType:
+              type: string
+        documents:
+          type: object
+          properties:
+            bankStatementKey:
+              type: string
+            proofOfIncomeKey:
+              type: string
+            governmentIdKey:
+              type: string
+        walletInfo:
+          type: object
+          properties:
+            walletAddress:
+              type: string
+            walletType:
+              type: string
+              enum:
+              - stellar
+              - freighter
+            skipped:
+              type: boolean
+              default: false
+    NotificationItem:
+      type: object
+      required:
+      - id
+      - category
+      - title
+      - body
+      - read
+      - createdAt
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    PropertyPhoto:
+      type: object
+      required:
+      - id
+      - propertyId
+      - url
+      - orderIndex
+      - isFeatured
+      - uploadedAt
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        propertyId:
+          type: string
+        url:
+          type: string
+        orderIndex:
+          type: integer
+          minimum: 0
+        isFeatured:
+          type: boolean
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+        width:
+          type: integer
+        height:
+          type: integer
+        mimeType:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ReorderPhotosRequest:
+      type: object
+      required:
+      - photoId
+      - newOrderIndex
+      properties:
+        photoId:
+          type: string
+          format: uuid
+        newOrderIndex:
+          type: integer
+          minimum: 0
+    UpdatePhotoRequest:
+      type: object
+      description: Every field is optional.
+      properties:
+        url:
+          type: string
+          format: uri
+        orderIndex:
+          type: integer
+          minimum: 0
+        isFeatured:
+          type: boolean
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          minimum: 1
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        mimeType:
+          type: string
+
   responses:
     NotImplemented:
       description: Operation unavailable in the current adapter or multisig configuration. Contract-access routes return NOT_IMPLEMENTED; circuit-breaker routes currently return INTERNAL_ERROR with HTTP 501.
@@ -16646,3 +19776,9 @@ tags:
     description: Public search, lookup and detail for approved properties (#1956)
   - name: Tenant
     description: Tenant-facing lease and payment operations
+  - name: Applications
+    description: Tenant listing applications, withdrawal and landlord review
+  - name: Onboarding
+    description: Tenant onboarding draft and submission
+  - name: Notifications
+    description: In-app notifications for the signed-in user
