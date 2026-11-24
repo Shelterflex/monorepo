@@ -132,7 +132,7 @@ export function StakeForm({
     );
   } else if (isLoadingBalance) {
     ngnBalanceTabContent = (
-      <div className="flex items-center justify-center py-10">
+      <div role="status" aria-label="Loading NGN balance" className="flex items-center justify-center py-10">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
@@ -177,6 +177,7 @@ export function StakeForm({
 
         {status && (
           <div
+            role={status.includes("Failed") || status.includes("Insufficient") ? "alert" : "status"}
             className={`flex items-start gap-2.5 rounded-xl border p-4 text-sm ${
               status.includes("Failed") || status.includes("Insufficient")
                 ? "border-destructive/20 bg-destructive/5 text-destructive"
@@ -253,6 +254,7 @@ export function StakeForm({
                 <button
                   key={lock.days}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => handleLockSelect(lock)}
                   className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all text-center focus:outline-none ${
                     isSelected
@@ -355,7 +357,7 @@ export function StakeForm({
                 </div>
 
                 {quoteError && (
-                  <div className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+                  <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                     <span>{quoteError}</span>
                   </div>
@@ -419,6 +421,7 @@ export function StakeForm({
 
               {status && (
                 <div
+                  role={status.includes("Failed") || status.includes("Enter a valid") ? "alert" : "status"}
                   className={`flex items-start gap-2.5 rounded-xl border p-4 text-sm ${
                     status.includes("Failed") || status.includes("Enter a valid")
                       ? "border-destructive/20 bg-destructive/5 text-destructive"

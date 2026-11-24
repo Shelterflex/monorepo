@@ -291,7 +291,7 @@ export default function StakingPage() {
           </CardHeader>
           <CardContent className="p-6 space-y-4">
             {status && (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive">
+              <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{status}</span>
               </div>
