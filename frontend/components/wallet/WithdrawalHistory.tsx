@@ -91,7 +91,7 @@ export function WithdrawalHistory({ className }: Readonly<WithdrawalHistoryProps
       <Card className="border-3 border-foreground shadow-[4px_4px_0px_0px_rgba(26,26,26,1)]">
         <CardContent className="pt-6">
           {withdrawalState.type === "loading" && (
-            <div className="space-y-3">
+            <div className="space-y-3" role="status" aria-label="Loading withdrawal history">
               <div className="flex items-center justify-between gap-4 border-b border-foreground/10 pb-3">
                 <div className="flex min-w-0 flex-col gap-2">
                   <Skeleton className="h-4 w-40" />
@@ -130,7 +130,7 @@ export function WithdrawalHistory({ className }: Readonly<WithdrawalHistoryProps
               <div className="flex h-12 w-12 items-center justify-center border-3 border-foreground bg-destructive/10">
                 <AlertCircle className="h-6 w-6 text-destructive" />
               </div>
-              <div>
+              <div role="alert">
                 <p className="font-bold">Could not load withdrawal history</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {withdrawalState.message}

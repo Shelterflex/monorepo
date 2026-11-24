@@ -202,7 +202,7 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
             </div>
 
             {errorMessage && (
-              <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm">
+              <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                 <span className="text-destructive">{errorMessage}</span>
               </div>
@@ -243,6 +243,7 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
                     variant="outline"
                     size="sm"
                     className="h-7 border-2 px-2"
+                    aria-label="Copy reference"
                     onClick={() => handleCopy(topUpResult.reference, "reference")}
                   >
                     {copiedField === "reference" ? (
@@ -299,6 +300,7 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
                         variant="outline"
                         size="sm"
                         className="h-7 border-2 px-2"
+                        aria-label="Copy account number"
                         onClick={() =>
                           handleCopy(topUpResult.bankTransfer!.accountNumber, "accountNumber")
                         }
@@ -323,6 +325,7 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
                         variant="outline"
                         size="sm"
                         className="h-7 border-2 px-2"
+                        aria-label="Copy narration reference"
                         onClick={() => handleCopy(topUpResult.reference, "narration")}
                       >
                         {copiedField === "narration" ? (
@@ -366,7 +369,7 @@ export function TopUpModal({ open, onOpenChange, onSuccess }: TopUpModalProps) {
 
         {step === "error" && (
           <div className="space-y-5 pt-2">
-            <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+            <div role="alert" className="flex flex-col items-center justify-center gap-3 py-6 text-center">
               <div className="flex h-12 w-12 items-center justify-center border-3 border-foreground bg-destructive/10">
                 <AlertCircle className="h-6 w-6 text-destructive" />
               </div>

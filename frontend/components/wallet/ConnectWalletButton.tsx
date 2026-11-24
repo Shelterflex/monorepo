@@ -79,6 +79,7 @@ export function ConnectWalletButton() {
           variant="outline"
           size="sm"
           onClick={disconnect}
+          aria-label="Disconnect wallet"
           className="border-3 border-foreground font-bold shadow-[4px_4px_0px_0px_rgba(26,26,26,1)] hover:shadow-[2px_2px_0px_0px_rgba(26,26,26,1)] hover:translate-x-0.5 hover:translate-y-0.5 transition-all min-h-[44px]"
         >
           <LogOut className="h-4 w-4" />
