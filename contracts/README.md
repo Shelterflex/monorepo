@@ -15,16 +15,17 @@ The contracts directory is a Cargo workspace. Each subdirectory is a separate co
 |---|---|
 | `rent_wallet/` | Custodial wallet for credit/debit flows (tenant rent balances) |
 | `rent_payments/` | Deal receipts and paginated payment history |
-| `deal_escrow/` | Escrow logic holding funds until deal conditions are met |
+| `deal_escrow/` | Escrow logic holding funds until deal conditions are met ([README](deal_escrow/README.md)) |
 | `staking_pool/` | Staking pool for platform liquidity providers |
 | `mvp_staking_pool/` | Minimal staking pool reference implementation |
 | `staking_rewards/` | Reward distribution for stakers |
-| `timelock/` | Time-locked governance actions |
+| `timelock/` | Time-locked governance actions ([README](timelock/README.md)) |
+| `rent_schedule/` | Repayment schedules for deal instalments, with payments, overdue marking and waivers ([README](rent_schedule/README.md)) |
 | `transaction-receipt-contract/` | On-chain transaction receipts with canonical tx_id |
 | `whistleblower_rewards/` | Reward allocation and claiming for whistleblowers who report fraudulent listings |
-| `soroban_access_control/` | Shared access-control primitives |
-| `soroban_pausable/` | Shared pausable primitive used across contracts |
-| `contract_access/` | Contract-level access helpers |
+| `soroban_access_control/` | Shared access-control primitives ([README](soroban_access_control/README.md)) |
+| `soroban_pausable/` | Shared pausable primitive used across contracts ([README](soroban_pausable/README.md)) |
+| `contract_access/` | Contract-level access control with roles and delegation ([README](contract_access/README.md)) |
 | `multisig_admin/` | M-of-N approval gate for privileged admin actions ([README](multisig_admin/README.md)) |
 
 ## Formal Verification
