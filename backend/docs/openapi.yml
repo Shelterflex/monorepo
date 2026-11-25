@@ -13528,6 +13528,1641 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  # ---------------------------------------------------------------------------
+  # KYC routes (#2001)
+  # ---------------------------------------------------------------------------
+  /api/kyc:
+    post:
+      summary: Submit KYC document
+      description: >-
+        Submit identity verification documents for the authenticated user. At most
+        one submission may be pending or in-review at a time; re-submission is
+        allowed when a previous attempt was rejected, up to `MAX_ATTEMPTS` total.
+      operationId: submitKyc
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KycSubmission'
+      responses:
+        '201':
+          description: KYC submission accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - recordId
+                - attemptsRemaining
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  recordId:
+                    type: string
+                    format: uuid
+                  attemptsRemaining:
+                    type: integer
+                    example: 2
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/status:
+    get:
+      summary: Get own KYC status
+      description: Returns the current KYC status and remaining submission attempts for the authenticated user.
+      operationId: getKycStatus
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: KYC status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - status
+                - attemptsRemaining
+                properties:
+                  status:
+                    $ref: '#/components/schemas/KycStatus'
+                  documentType:
+                    $ref: '#/components/schemas/KycDocumentType'
+                  rejectionReason:
+                    type: string
+                    nullable: true
+                  createdAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  attemptsRemaining:
+                    type: integer
+                    example: 3
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/webhook:
+    post:
+      summary: Internal KYC provider webhook
+      description: >-
+        Receives status-change callbacks from the KYC provider. Authentication is
+        performed by the provider's own payload-based mechanism
+        (`kycProvider.webhookAuthenticate`), not Bearer. Responds 200 immediately
+        and updates the record status plus emits a `kyc.status_changed` event.
+      operationId: kycWebhook
+      tags:
+      - KYC
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              - status
+              properties:
+                id:
+                  type: string
+                  description: KYC record ID
+                status:
+                  $ref: '#/components/schemas/KycStatus'
+                reason:
+                  type: string
+                  description: Rejection reason (present when status is rejected)
+      responses:
+        '200':
+          description: Webhook acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/admin:
+    get:
+      summary: List KYC records (admin)
+      description: Returns a paginated list of KYC submissions. Requires the `kyc:view` permission.
+      operationId: listKycRecords
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/KycStatus'
+      - name: userId
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+          minimum: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 200
+      responses:
+        '200':
+          description: Paginated KYC record list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/KycRecord'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/admin/{submissionId}:
+    get:
+      summary: Get a single KYC record (admin)
+      description: Returns the full KYC record for a submission. Requires the `kyc:view` permission.
+      operationId: getKycRecord
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: submissionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: KYC record
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/KycRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/admin/{recordId}/approve:
+    post:
+      summary: Approve a KYC submission (admin)
+      description: >-
+        Approves a pending or in-review KYC record. Requires the `kyc:verify` permission.
+        Side effect: enqueues an `ALLOWLIST_ADD` outbox operation for the user's wallet address.
+      operationId: approveKyc
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: recordId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: KYC approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/admin/{recordId}/reject:
+    post:
+      summary: Reject a KYC submission (admin)
+      description: >-
+        Rejects a pending or in-review KYC record. Requires the `kyc:verify` permission.
+        Side effect: enqueues an `ALLOWLIST_REMOVE` outbox operation for the user's wallet address.
+      operationId: rejectKyc
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: recordId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: KYC rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/kyc/admin/{recordId}/allowlist-status:
+    get:
+      summary: Get on-chain allowlist status for a KYC record (admin)
+      description: >-
+        Checks whether the KYC record's user wallet address is present on the
+        Soroban allowlist contract. Requires the `kyc:verify` permission.
+      operationId: getKycAllowlistStatus
+      tags:
+      - KYC
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: recordId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Allowlist status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - isAllowlisted
+                    - hasWalletAddress
+                    properties:
+                      isAllowlisted:
+                        type: boolean
+                      hasWalletAddress:
+                        type: boolean
+                      walletAddress:
+                        type: string
+                        nullable: true
+                      entry:
+                        nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ---------------------------------------------------------------------------
+  # Webhook subscription management and inbound provider webhooks (#2001)
+  # ---------------------------------------------------------------------------
+  /api/webhooks/subscriptions:
+    post:
+      summary: Register a webhook subscription
+      description: >-
+        Creates a new webhook subscription for the authenticated user. The
+        response includes the **plain-text signing secret** (`whsec_…`) exactly
+        once; it is stored only as a SHA-256 hash and cannot be retrieved again.
+        Rate limited to 10 subscriptions per 15 minutes per user. The `targetUrl`
+        is validated against SSRF rules (private/internal IPs are rejected).
+
+        **Signature verification:** ShelterFlex signs every delivery with
+        `X-ShelterFlex-Signature: sha256=<hmac-sha256-hex>` computed over the
+        raw request body using the plain-text secret. Verify this header on every
+        inbound delivery before processing.
+      operationId: createWebhookSubscription
+      tags:
+      - Webhooks
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - targetUrl
+              - events
+              properties:
+                targetUrl:
+                  type: string
+                  format: uri
+                  description: >-
+                    HTTPS URL that will receive event deliveries. Must not resolve
+                    to a private or link-local IP address (SSRF protection).
+                  example: https://partner.example.com/hooks/shelterflex
+                events:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/WebhookEventType'
+                  description: Event types to subscribe to
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - subscription
+                properties:
+                  success:
+                    type: boolean
+                  subscription:
+                    $ref: '#/components/schemas/WebhookSubscriptionWithSecret'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    get:
+      summary: List webhook subscriptions
+      description: Returns the authenticated user's webhook subscriptions. The signing secret is not included.
+      operationId: listWebhookSubscriptions
+      tags:
+      - Webhooks
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Subscription list
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - subscriptions
+                properties:
+                  success:
+                    type: boolean
+                  subscriptions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookSubscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/subscriptions/{id}:
+    delete:
+      summary: Delete a webhook subscription
+      description: Removes the subscription. Only the owner may delete their own subscriptions.
+      operationId: deleteWebhookSubscription
+      tags:
+      - Webhooks
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Subscription removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Subscription removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/subscriptions/{id}/deliveries:
+    get:
+      summary: List delivery history for a subscription
+      description: Returns the delivery log for a subscription. Only the owner may query their own subscriptions.
+      operationId: listWebhookDeliveries
+      tags:
+      - Webhooks
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Delivery history
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - deliveries
+                properties:
+                  success:
+                    type: boolean
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/reversals/{provider}:
+    post:
+      summary: Deposit reversal webhook
+      description: >-
+        Receives deposit reversal / chargeback notifications from payment providers.
+        Authentication uses an HMAC-SHA256 signature in the
+        `X-ShelterFlex-Signature` header (computed over the raw JSON body with the
+        provider-specific secret from `WEBHOOK_SECRET_<PROVIDER>`). Always
+        returns 200 — including when the referenced deposit is not found — to
+        prevent the PSP from retrying. Idempotent by `(provider, reversalRef)`.
+      operationId: depositReversalWebhook
+      tags:
+      - Webhooks
+      security:
+      - webhookSignature: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          example: paystack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - provider
+              - providerRef
+              - reversalRef
+              - eventType
+              properties:
+                provider:
+                  type: string
+                  description: Payment provider identifier (must match path param)
+                providerRef:
+                  type: string
+                  description: Provider's original deposit reference
+                reversalRef:
+                  type: string
+                  description: Provider's reversal / chargeback reference
+                eventType:
+                  type: string
+                  enum:
+                  - deposit.reversed
+      responses:
+        '200':
+          description: Webhook acknowledged (always, including deposit-not-found)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  deduped:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Deposit not found
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/kyc/{provider}:
+    post:
+      summary: KYC provider webhook
+      description: >-
+        Receives identity-verification status updates from a named KYC provider.
+        When `KYC_WEBHOOK_SECRET_<PROVIDER>` (or `KYC_WEBHOOK_SECRET`) is set,
+        the request must carry an `X-Signature` or `X-Webhook-Signature` header
+        containing the HMAC-SHA256 hex digest of the raw body signed with that
+        secret. The endpoint responds **200 immediately** and processes the update
+        asynchronously to avoid PSP timeouts.
+      operationId: kycProviderWebhook
+      tags:
+      - Webhooks
+      security:
+      - webhookSignature: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          example: smile_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: KYC record ID (also accepted as `external_id` or `reference`)
+                external_id:
+                  type: string
+                reference:
+                  type: string
+                status:
+                  $ref: '#/components/schemas/KycStatus'
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Webhook acknowledged (processing is asynchronous)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/esignature:
+    post:
+      summary: E-signature provider webhook
+      description: >-
+        Receives signature-event callbacks from the e-signature provider. The
+        endpoint validates the signature request and updates the lease agreement
+        status. No Bearer authentication — validation is performed by the provider
+        payload.
+      operationId: esignatureWebhook
+      tags:
+      - Webhooks
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Provider-specific event payload
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/webhooks/esignature/stub:
+    post:
+      summary: Stub e-signature webhook (development only)
+      description: >-
+        Simulates a signing event from the stub e-signature provider. Used in
+        local development and test environments. Accepts `token`, `signer`, and
+        `requestId` as query parameters.
+      operationId: esignatureWebhookStub
+      tags:
+      - Webhooks
+      security: []
+      parameters:
+      - name: token
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: signer
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: requestId
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Stub signature recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ---------------------------------------------------------------------------
+  # Deals — lease management and additional operations (#2001)
+  # ---------------------------------------------------------------------------
+  /api/deals/{dealId}/schedule:
+    get:
+      summary: Get repayment schedule for a deal
+      description: >-
+        Returns the full repayment schedule generated when the deal was activated.
+        The caller must be the deal's tenant, landlord, or an admin.
+      operationId: getDealSchedule
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Repayment schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    description: Repayment schedule object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/repayment:
+    patch:
+      summary: Update deal repayment method
+      description: >-
+        Updates the repayment method (self_pay or salary_deduction) and associated
+        salary-deduction linkage for a deal. The caller must be a party to the deal.
+        When switching to `salary_deduction`, `employerId`, `employeeId`, and
+        `deductionDay` are required.
+      operationId: updateDealRepayment
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDealRepayment'
+      responses:
+        '200':
+          description: Repayment method updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Deal'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/lease:
+    get:
+      summary: Get the lease agreement for a deal
+      description: >-
+        Returns the current lease agreement and its status for the given deal.
+        The caller must be a party to the deal (tenant, landlord, or admin).
+      operationId: getLease
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Lease agreement
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    description: Lease agreement object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/lease/sign-url:
+    get:
+      summary: Get a signing URL for the lease
+      description: >-
+        Returns a provider signing URL for the authenticated user (tenant or landlord).
+        The caller must be a party to the deal.
+      operationId: getLeaseSignUrl
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Signing URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - url
+                    - signerRole
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+                      expiresAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      signerRole:
+                        type: string
+                        enum:
+                        - tenant
+                        - landlord
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/lease/generate:
+    post:
+      summary: Generate a lease draft
+      description: >-
+        Generates a lease agreement draft for the deal. Only admins and landlords
+        may call this. The deal must have a listing with a property address.
+      operationId: generateLease
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '201':
+          description: Lease draft generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - leaseId
+                    - documentKey
+                    - documentHash
+                    - templateVersion
+                    - status
+                    properties:
+                      leaseId:
+                        type: string
+                        format: uuid
+                      documentKey:
+                        type: string
+                      documentHash:
+                        type: string
+                      templateVersion:
+                        type: string
+                      status:
+                        type: string
+                        example: draft
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Deal has no listing or the listing has no property address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/lease/send:
+    post:
+      summary: Send signing requests for a lease
+      description: >-
+        Sends signing requests to both the tenant and landlord for a lease in
+        draft status. The caller must be authenticated. After this call the lease
+        status becomes `pending_tenant_signature`.
+      operationId: sendLease
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Signing requests sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Signing requests sent to tenant and landlord
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/lease/void:
+    post:
+      summary: Void a lease agreement
+      description: >-
+        Voids a lease agreement that has not yet been fully signed. A fully-signed
+        lease cannot be voided.
+      operationId: voidLease
+      tags:
+      - Deals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Lease voided
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Lease agreement voided
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/deals/{dealId}/on-chain-events:
+    get:
+      summary: Get on-chain events for a deal
+      description: >-
+        Returns indexed Soroban contract events associated with the given deal
+        (matched by `topic_1` or `data_json.dealId`). Requires an admin secret
+        (`X-Admin-Secret` header).
+      operationId: getDealOnChainEvents
+      tags:
+      - Deals
+      security:
+      - adminSecret: []
+      parameters:
+      - name: dealId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: On-chain events for the deal
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required:
+                    - dealId
+                    - events
+                    properties:
+                      dealId:
+                        type: string
+                      events:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            contractId:
+                              type: string
+                            ledgerSequence:
+                              type: integer
+                            transactionHash:
+                              type: string
+                            eventType:
+                              type: string
+                            topic1:
+                              type: string
+                            topic2:
+                              type: string
+                            dataJson:
+                              type: object
+                            indexedAt:
+                              type: string
+                              format: date-time
+                            createdAt:
+                              type: string
+                              format: date-time
+        '401':
+          description: Missing or invalid admin secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ---------------------------------------------------------------------------
+  # Whistleblower dashboard and tenant rateable (#2001)
+  # ---------------------------------------------------------------------------
+  /api/whistleblower/dashboard:
+    get:
+      summary: Whistleblower dashboard
+      description: >-
+        Returns aggregated stats, listings, and earnings for the authenticated
+        whistleblower. Listings with status `rejected` are omitted. Views are not
+        yet tracked and always return 0.
+      operationId: getWhistleblowerDashboard
+      tags:
+      - Whistleblower
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - stats
+                - listings
+                - earnings
+                properties:
+                  stats:
+                    type: object
+                    required:
+                    - totalEarnings
+                    - reportsThisMonth
+                    - maxReportsPerMonth
+                    - activeListings
+                    - rating
+                    - reviews
+                    properties:
+                      totalEarnings:
+                        type: number
+                        description: Total NGN earned
+                      reportsThisMonth:
+                        type: integer
+                      maxReportsPerMonth:
+                        type: integer
+                      activeListings:
+                        type: integer
+                      rating:
+                        type: number
+                        format: float
+                      reviews:
+                        type: integer
+                  listings:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - id
+                      - address
+                      - price
+                      - beds
+                      - baths
+                      - status
+                      - views
+                      - earnings
+                      - postedDate
+                      properties:
+                        id:
+                          type: string
+                        address:
+                          type: string
+                        price:
+                          type: number
+                        beds:
+                          type: integer
+                        baths:
+                          type: integer
+                        status:
+                          type: string
+                          enum:
+                          - active
+                          - rented
+                          - pending
+                        views:
+                          type: integer
+                        earnings:
+                          type: number
+                        postedDate:
+                          type: string
+                          format: date
+                  earnings:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - date
+                      - listing
+                      - amount
+                      - status
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        listing:
+                          type: string
+                        amount:
+                          type: number
+                        status:
+                          type: string
+                          enum:
+                          - completed
+                          - pending
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/whistleblower/tenant/rateable:
+    get:
+      summary: List rateable whistleblowers for a tenant
+      description: >-
+        Returns whistleblowers that the authenticated tenant can rate, based on
+        completed deals. Currently returns stub data while live deal-linkage is
+        being wired up.
+      operationId: listRateableWhistleblowers
+      tags:
+      - Whistleblower
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Rateable whistleblowers
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - rateable
+                properties:
+                  success:
+                    type: boolean
+                  rateable:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - id
+                      - dealId
+                      - name
+                      - apartment
+                      - rentDate
+                      - rating
+                      - reviews
+                      - hasRated
+                      properties:
+                        id:
+                          type: string
+                        dealId:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        apartment:
+                          type: string
+                        rentDate:
+                          type: string
+                        rating:
+                          type: number
+                        reviews:
+                          type: integer
+                        hasRated:
+                          type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ---------------------------------------------------------------------------
+  # Whistleblower applications (public) (#2001)
+  # ---------------------------------------------------------------------------
+  /api/whistleblower-applications:
+    post:
+      summary: Submit a whistleblower signup application
+      description: >-
+        Public endpoint for prospective whistleblowers to apply. Validates required
+        fields and prevents duplicate submissions by email (409 if already applied).
+        No authentication required.
+      operationId: submitWhistleblowerApplication
+      tags:
+      - Whistleblower
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhistleblowerApplicationInput'
+      responses:
+        '201':
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    type: object
+                    required:
+                    - applicationId
+                    - fullName
+                    - email
+                    - phone
+                    - address
+                    - linkedinProfile
+                    - facebookProfile
+                    - instagramProfile
+                    - status
+                    - createdAt
+                    - updatedAt
+                    properties:
+                      applicationId:
+                        type: string
+                        format: uuid
+                      fullName:
+                        type: string
+                      email:
+                        type: string
+                        format: email
+                      phone:
+                        type: string
+                      address:
+                        type: string
+                      linkedinProfile:
+                        type: string
+                        format: uri
+                      facebookProfile:
+                        type: string
+                        format: uri
+                      instagramProfile:
+                        type: string
+                        format: uri
+                      status:
+                        type: string
+                        enum:
+                        - pending
+                        - approved
+                        - rejected
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+                  message:
+                    type: string
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/whistleblower-applications/{applicationId}/status:
+    get:
+      summary: Check whistleblower application status
+      description: >-
+        Returns the status of a whistleblower signup application by ID. No
+        authentication required. Returns limited information (no personal data).
+      operationId: getWhistleblowerApplicationStatus
+      tags:
+      - Whistleblower
+      security: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Application status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - status
+                - submittedAt
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: string
+                    enum:
+                    - pending
+                    - approved
+                    - rejected
+                  submittedAt:
+                    type: string
+                    format: date-time
+                  reviewedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  message:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/whistleblower/applications:
+    post:
+      summary: Submit a whistleblower signup application (alternate path)
+      description: >-
+        Identical to `POST /api/whistleblower-applications`. Both paths are mounted
+        to the same router for backwards compatibility.
+      operationId: submitWhistleblowerApplicationV2
+      tags:
+      - Whistleblower
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhistleblowerApplicationInput'
+      responses:
+        '201':
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - application
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  application:
+                    type: object
+                    properties:
+                      applicationId:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                        - pending
+                        - approved
+                        - rejected
+                      createdAt:
+                        type: string
+                        format: date-time
+                  message:
+                    type: string
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/whistleblower/applications/{applicationId}/status:
+    get:
+      summary: Check whistleblower application status (alternate path)
+      description: >-
+        Identical to `GET /api/whistleblower-applications/{applicationId}/status`.
+        Both paths are mounted to the same router for backwards compatibility.
+      operationId: getWhistleblowerApplicationStatusV2
+      tags:
+      - Whistleblower
+      security: []
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Application status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - status
+                - submittedAt
+                - message
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: string
+                    enum:
+                    - pending
+                    - approved
+                    - rejected
+                  submittedAt:
+                    type: string
+                    format: date-time
+                  reviewedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  message:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   parameters:
     SavedPropertyListingId:
@@ -19534,6 +21169,262 @@ components:
           minimum: 1
         mimeType:
           type: string
+
+    # -------------------------------------------------------------------------
+    # KYC schemas (#2001)
+    # -------------------------------------------------------------------------
+    KycDocumentType:
+      type: string
+      enum:
+      - drivers_license
+      - passport
+      - national_id
+      - voters_card
+
+    KycStatus:
+      type: string
+      enum:
+      - pending
+      - in_review
+      - approved
+      - rejected
+      - expired
+
+    KycSubmission:
+      type: object
+      required:
+      - documentType
+      - frontImageKey
+      properties:
+        documentType:
+          $ref: '#/components/schemas/KycDocumentType'
+        frontImageKey:
+          type: string
+          minLength: 1
+        backImageKey:
+          type: string
+          description: Required for document types with a back side
+        livenessSignal:
+          type: string
+          description: Liveness check signal from the client SDK
+
+    KycRecord:
+      type: object
+      required:
+      - id
+      - userId
+      - documentType
+      - frontImageKey
+      - status
+      - createdAt
+      - updatedAt
+      - attemptCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        documentType:
+          $ref: '#/components/schemas/KycDocumentType'
+        frontImageKey:
+          type: string
+        backImageKey:
+          type: string
+          nullable: true
+        livenessSignal:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/KycStatus'
+        providerId:
+          type: string
+          nullable: true
+        externalId:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        reviewedBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        attemptCount:
+          type: integer
+
+    # -------------------------------------------------------------------------
+    # Webhook subscription schemas (#2001)
+    # -------------------------------------------------------------------------
+    WebhookEventType:
+      type: string
+      enum:
+      - deal.activated
+      - deal.completed
+      - deal.defaulted
+      - payment.received
+      - payment.overdue
+      - payout.disbursed
+      - kyc.approved
+      - kyc.rejected
+      description: >-
+        Event type for webhook subscriptions. ShelterFlex signs every delivery
+        with `X-ShelterFlex-Signature: sha256=<hmac-sha256-hex>` computed over
+        the raw request body. Verify this header before processing.
+
+    WebhookSubscription:
+      type: object
+      required:
+      - id
+      - ownerId
+      - targetUrl
+      - events
+      - active
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        targetUrl:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookSubscriptionWithSecret:
+      allOf:
+      - $ref: '#/components/schemas/WebhookSubscription'
+      - type: object
+        required:
+        - secret
+        properties:
+          secret:
+            type: string
+            description: >-
+              Plain-text signing secret (`whsec_…`). Returned only on creation;
+              stored as a SHA-256 hash and cannot be retrieved again. Use this
+              to verify the `X-ShelterFlex-Signature` header on inbound deliveries.
+            example: whsec_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4
+
+    WebhookDelivery:
+      type: object
+      required:
+      - id
+      - subscriptionId
+      - event
+      - status
+      - attemptedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscriptionId:
+          type: string
+          format: uuid
+        event:
+          $ref: '#/components/schemas/WebhookEventType'
+        payload:
+          type: object
+          description: Delivered event payload
+        status:
+          type: string
+          enum:
+          - success
+          - failed
+          - pending
+        responseCode:
+          type: integer
+          nullable: true
+        responseBody:
+          type: string
+          nullable: true
+        attemptedAt:
+          type: string
+          format: date-time
+
+    # -------------------------------------------------------------------------
+    # Deals — repayment method schema (#2001)
+    # -------------------------------------------------------------------------
+    UpdateDealRepayment:
+      type: object
+      required:
+      - repaymentMethod
+      properties:
+        repaymentMethod:
+          type: string
+          enum:
+          - self_pay
+          - salary_deduction
+        employerId:
+          type: string
+          format: uuid
+          description: Required when repaymentMethod is salary_deduction
+        employeeId:
+          type: string
+          maxLength: 128
+          description: Required when repaymentMethod is salary_deduction
+        deductionDay:
+          type: integer
+          minimum: 1
+          maximum: 28
+          description: Day of month for salary deduction; required when repaymentMethod is salary_deduction
+
+    # -------------------------------------------------------------------------
+    # Whistleblower application input schema (#2001)
+    # -------------------------------------------------------------------------
+    WhistleblowerApplicationInput:
+      type: object
+      required:
+      - fullName
+      - email
+      - phone
+      - address
+      - linkedinProfile
+      - facebookProfile
+      - instagramProfile
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          minLength: 10
+        address:
+          type: string
+          minLength: 5
+        linkedinProfile:
+          type: string
+          format: uri
+        facebookProfile:
+          type: string
+          format: uri
+        instagramProfile:
+          type: string
+          format: uri
 
   responses:
     NotImplemented:
