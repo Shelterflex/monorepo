@@ -2035,6 +2035,7 @@ dependencies = [
 name = "whistleblower_rewards"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-pausable",
  "soroban-sdk",
 ]
