@@ -739,6 +739,9 @@ impl WhistleblowerRewards {
 mod formal_properties;
 
 #[cfg(test)]
+mod property_tests;
+
+#[cfg(test)]
 mod test {
     extern crate std;
 
